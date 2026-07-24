@@ -1,0 +1,14 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notification-service
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/careerbridge_notifications
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
