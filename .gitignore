@@ -7,6 +7,8 @@
 
 # Spring Boot
 **/application-prod.yml
+# Local-only overrides: real DB passwords live here, never in application.yml
+**/application-local.yml
 
 # Node / React
 **/node_modules/
