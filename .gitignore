@@ -1,0 +1,26 @@
+# Maven
+**/target/
+**/.mvn/
+**/mvnw
+**/mvnw.cmd
+**/*.class
+
+# Spring Boot
+**/application-prod.yml
+
+# Node / React
+**/node_modules/
+**/dist/
+**/.env
+
+# IDE
+**/.idea/
+**/.settings/
+**/.classpath
+**/.project
+*.iml
+.metadata/
+
+# OS
+.DS_Store
+Thumbs.db
