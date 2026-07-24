@@ -4,7 +4,12 @@
       "PowerShell(claude plugin --help)",
       "Bash(npm create *)",
       "Bash(npm install *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(grep -iE \"node_modules|target/|\\\\.env$|\\\\.metadata\")",
+      "Bash(git commit *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
     ]
   }
 }

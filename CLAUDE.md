@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Security Constraints
+- Always verify that `.env` files, API keys, database credentials, and any sensitive secrets are explicitly in `.gitignore` before executing any git commit or git push
+- Never write sensitive API keys directly into any codebase file
+
+## Systemic Incident & Bug Logging
+Whenever you make a mistake, encounter a bug, or fix a performance issue, log it in `ai_incident_log.md` at the project root.
+
+Requirements:
+1. MANDATORY: Read and review `ai_incident_log.md` at the beginning of any new task before making changes
+2. Ensure `ai_incident_log.md` is in `.gitignore` before writing to it
+3. Log entries must be a table with these columns:
+   - Timestamp (UTC)
+   - Category (Bug / Error / Performance / Security)
+   - Severity (SEV-1 Critical / SEV-2 High / SEV-3 Medium / SEV-4 Low)
+   - Component (file, service, or feature affected)
+   - Description & Diagnostics
+   - Root Cause
+   - Fix / Action Taken
+
+## Incident Log Review
+Before starting any new task, debugging, or implementing a fix — read `ai_incident_log.md` first to avoid repeating past mistakes.
+
 ## Working Instructions
 - Always ask clarifying questions before starting any complex or multi-step task
 - Do one service at a time — never work on multiple services simultaneously unless explicitly asked
