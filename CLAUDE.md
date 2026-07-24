@@ -108,4 +108,18 @@ Cross-service event flow (via RabbitMQ, MySQL-backed services publish, notificat
 
 Configuration is `application.yml` per service (not `.properties`). Each service's `spring.application.name` matches its directory name and is used as the Eureka/service-registry identifier once discovery is wired in.
 
-At present all files beyond the skeleton (`XApplication.java`, package declarations, empty class/interface bodies) are placeholders — business logic has not yet been implemented in any service.
+Implementation status: **auth-service is complete** (JWT auth, refresh tokens with DB-backed revocation, BCrypt, RabbitMQ registration event, 10 unit tests) — see branch `feature/auth`. All other services are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
+
+Auth-service specifics worth knowing before touching it or consuming its events:
+- Event contract published on registration: exchange `careerbridge.exchange` (topic, durable), routing key `student.registered`, JSON body `{userId, email, firstName, lastName, role, organizationId, registeredAt}`. Consumers declare their own queue and binding.
+- Local credentials live in a gitignored `application-local.yml` (profile `local`, active by default via `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}`). Never put a real password in `application.yml`.
+- `/api/auth/refresh` is intentionally `permitAll` — it is called because the access token expired.
+- Boot 4 gotchas already hit here: use `JacksonJsonMessageConverter` (Jackson 3), not `Jackson2JsonMessageConverter`; `UserDetailsServiceAutoConfiguration` now lives in `org.springframework.boot.security.autoconfigure`.
+
+## Pending Tasks (Do Not Forget)
+- notification-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building notification service)
+- recommendation-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building recommendation service)
+- api-gateway: needs jwt.secret in application.yml and JwtAuthenticationFilter implemented (do after all services built)
+- api-gateway: JWT tokens are HS384 NOT HS256 — jjwt picks strongest HMAC based on key length (49-byte secret = HS384). Do not hardcode HS256 anywhere in gateway filter.
+- actuator health check: /actuator/health returns 503 when RabbitMQ is down — point AWS ALB at /actuator/health/liveness instead
+- Java PATH issue: JDK 21 must come before Java 8 on PATH for all team members — otherwise java -jar fails with UnsupportedClassVersionError
