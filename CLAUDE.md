@@ -36,7 +36,7 @@ Before starting any new task, debugging, or implementing a fix — read `ai_inci
 - Evaluator requirements: microservices proof, RabbitMQ events, MySQL + MongoDB, JWT security, unit tests, AWS deployment
 - P0 services (build first): api-gateway, auth-service, student-service, assessment-service, recommendation-service, notification-service
 - P1 services (after P0 complete): organization, roadmap, recruiter, resume, ai-coach, payment, placement
-- Frontend: careerbridge-frontend/ (React 19 + Vite) — to be created at root level alongside the 6 services
+- Frontend: `careerbridge-frontend/` (React 19 + Vite) — scaffolded at root level alongside the 6 services; folder structure and deps in place, no business logic yet
 
 ## Project overview
 
@@ -83,10 +83,33 @@ On Windows without a shell that resolves `./mvnw`, use `mvnw.cmd` instead (each 
 
 Since there's no root POM, building/testing "the whole project" means repeating the above per service directory — there's no single command that builds all six at once.
 
+**Test dependencies are Boot 4's split `*-test` starters, not `spring-boot-starter-test`.** No service declares the latter; each pulls `spring-boot-starter-{webmvc,data-jpa,validation,actuator}-test` instead, and `webmvc-test` is what transitively supplies JUnit 5 + Mockito. Do not add `spring-boot-starter-test` — it is already there indirectly.
+
+Frontend (from inside `careerbridge-frontend/`):
+
+```bash
+npm install
+npm run dev       # Vite dev server
+npm run build     # production build
+npm run lint      # oxlint (NOT eslint) -- config in .oxlintrc.json
+npm run preview   # serve the production build
+```
+
+`VITE_API_BASE_URL` in a gitignored `.env` points the frontend at the gateway (`http://localhost:8080/api`).
+
 External infra each service expects to be running locally (not containerized in this repo — no `docker-compose.yml` present):
 - MySQL on `localhost:3306` (auth/student/assessment/recommendation services), user `root` / password `root`
 - MongoDB on `localhost:27017` (recommendation/notification services)
 - RabbitMQ on `localhost:5672`, default `guest`/`guest` (recommendation/notification services)
+
+## Git workflow
+
+`feature/<name>` → `dev` → `main`. All four branches exist on `origin`.
+
+- One feature branch per service, cut from `dev` (`feature/auth`, `feature/student`).
+- Merge into `dev` with `--no-ff` so each service lands as a reviewable merge bubble rather than a flattened fast-forward.
+- Verify the build is green on `dev` after merging **before** pushing.
+- Do not commit directly to `dev` or `main` for service work.
 
 ## Architecture conventions
 
@@ -97,14 +120,21 @@ Every service follows the identical layered package structure under `src/main/ja
 - `repository/` — Spring Data repository interfaces (JPA for MySQL services, Mongo for notification-service)
 - `model/` — JPA entities / Mongo documents
 - `dto/` — request/response DTOs, kept separate from `model/`
-- `config/` — `SecurityConfig`, `JwtConfig` (auth only), `RabbitMQConfig` (recommendation/notification)
+- `config/` — `SecurityConfig`, `JwtConfig` (auth only), `RabbitMQConfig` (any service that publishes or consumes: auth, student, recommendation, notification)
 - `exception/` — `GlobalExceptionHandler` + `CustomException`
-- `event/` — event payload classes for cross-service messaging (recommendation, notification)
-- `consumer/` — RabbitMQ listener classes (notification-service only, e.g. `NotificationEventConsumer`)
+- `event/` — event payload classes for cross-service messaging (auth, student, recommendation, notification)
+- `consumer/` — RabbitMQ listener classes (`StudentEventConsumer` in student-service, `NotificationEventConsumer` in notification-service)
+- `constants/` — service-scoped constant holders, private ctor, no instantiation (`JwtConstants` in auth, `SkillConstants` in student)
 - `filter/` — servlet filters (`JwtAuthenticationFilter` in api-gateway and auth-service)
 - `util/` — service-specific helpers (e.g. `ProfileCompletionCalculator` in student-service, `ScoringEngine` in assessment-service)
 
-Cross-service event flow (via RabbitMQ, MySQL-backed services publish, notification/recommendation consume): `StudentRegisteredEvent` → notification-service; `AssessmentCompletedEvent` → recommendation-service and notification-service; `RecommendationGeneratedEvent` → notification-service.
+Cross-service event flow via RabbitMQ, all on the topic exchange `careerbridge.exchange`. Each consumer declares its own queue and binding; the publisher declares only the exchange.
+
+| Event | Routing key | Publisher | Consumers | Status |
+|---|---|---|---|---|
+| `StudentRegisteredEvent` | `student.registered` | auth-service | student-service (creates the profile), notification-service | **student-service side implemented**; notification-service not built |
+| `AssessmentCompletedEvent` | TBD | assessment-service | recommendation-service, notification-service | planned only |
+| `RecommendationGeneratedEvent` | TBD | recommendation-service | notification-service | planned only |
 
 Configuration is `application.yml` per service (not `.properties`). Each service's `spring.application.name` matches its directory name and is used as the Eureka/service-registry identifier once discovery is wired in.
 
