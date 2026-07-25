@@ -108,13 +108,27 @@ Cross-service event flow (via RabbitMQ, MySQL-backed services publish, notificat
 
 Configuration is `application.yml` per service (not `.properties`). Each service's `spring.application.name` matches its directory name and is used as the Eureka/service-registry identifier once discovery is wired in.
 
-Implementation status: **auth-service is complete** (JWT auth, refresh tokens with DB-backed revocation, BCrypt, RabbitMQ registration event, 10 unit tests) — see branch `feature/auth`. All other services are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
+Implementation status:
+- **auth-service — complete** (JWT auth, refresh tokens with DB-backed revocation, BCrypt, RabbitMQ registration event, 10 unit tests) — branch `feature/auth`.
+- **student-service — complete** (profile CRUD, education/skills/projects/certificates, profile completion scoring, RabbitMQ `student.registered` consumer that auto-creates profiles, 22 unit tests) — branch `feature/student`.
+- api-gateway, assessment-service, recommendation-service, notification-service are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
+
+**Not yet verified end-to-end:** the auth → student event flow has passing unit tests on both sides but the two services have never been run together against a live broker. Do this when docker-compose lands.
 
 Auth-service specifics worth knowing before touching it or consuming its events:
 - Event contract published on registration: exchange `careerbridge.exchange` (topic, durable), routing key `student.registered`, JSON body `{userId, email, firstName, lastName, role, organizationId, registeredAt}`. Consumers declare their own queue and binding.
 - Local credentials live in a gitignored `application-local.yml` (profile `local`, active by default via `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}`). Never put a real password in `application.yml`.
 - `/api/auth/refresh` is intentionally `permitAll` — it is called because the access token expired.
 - Boot 4 gotchas already hit here: use `JacksonJsonMessageConverter` (Jackson 3), not `Jackson2JsonMessageConverter`; `UserDetailsServiceAutoConfiguration` now lives in `org.springframework.boot.security.autoconfigure`.
+
+Student-service specifics worth knowing before touching it or copying its patterns:
+- **No Spring Security on the classpath, by design.** `userId` arrives in the `X-User-Id` header, forwarded by the gateway after it validates the JWT; this service never parses tokens. `config/SecurityConfig.java` is a deliberately empty stub. Consequence: port 8082 must not be publicly reachable — anyone who can hit it directly sets that header to any value and acts as that student. Enforce with a security group / bind address at deploy time.
+- Consumes `student.registered` on its own queue `careerbridge.student.queue`, bound to `careerbridge.exchange` with `TopicExchange(EXCHANGE, true, false)` — durable/autoDelete args must match auth-service's declaration exactly or RabbitMQ answers `406 PRECONDITION_FAILED` and the consumer silently never starts.
+- The `@RabbitListener` parameter must stay the concrete `StudentRegisteredEvent`. Spring AMQP's default `TypePrecedence.INFERRED` resolves the payload from the method signature, which is the only reason the differing package FQN between auth and student works with zero type-mapper config. Widening it to `Object`/`Message` falls back to the sender's `__TypeId__` header → `ClassNotFoundException`.
+- The consumer's copy of the event declares `role` as `String`, not an enum: wire-identical, but a duplicated enum would make Jackson hard-fail every event the day auth-service adds a seventh role.
+- Consumer is intentionally **not** `@Transactional` and swallows all exceptions. The `unique` constraint on `student_profiles.userId` is the real idempotency guarantee; rethrowing would requeue and spin the listener forever.
+- `addCertificate` deliberately skips the completion recalculation — certificates carry 0% weight, so it would be a no-op costing 4 queries. Pinned by `addCertificate_Success_DoesNotRecalculate`; give certificates a weight and that test fails.
+- Profile completion basic-info block is all-or-nothing (all five of firstName/lastName/phone/bio/city, or zero of the 20%). Blank strings count as absent, because `PUT /profile` is a full replace where null clears a field.
 
 ## Pending Tasks (Do Not Forget)
 - notification-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building notification service)
@@ -123,3 +137,6 @@ Auth-service specifics worth knowing before touching it or consuming its events:
 - api-gateway: JWT tokens are HS384 NOT HS256 — jjwt picks strongest HMAC based on key length (49-byte secret = HS384). Do not hardcode HS256 anywhere in gateway filter.
 - actuator health check: /actuator/health returns 503 when RabbitMQ is down — point AWS ALB at /actuator/health/liveness instead
 - Java PATH issue: JDK 21 must come before Java 8 on PATH for all team members — otherwise java -jar fails with UnsupportedClassVersionError
+- **Every remaining service needs two exception handlers copied from student-service's `GlobalExceptionHandler`**: `HttpMessageNotReadableException` (malformed JSON) and `MethodArgumentTypeMismatchException` (non-numeric `X-User-Id`). Neither implements Spring's `ErrorResponse`, so both return a misleading HTTP 500 without an explicit handler. Both are logged incidents; see `ai_incident_log.md`.
+- Each team member must create their own gitignored `application-local.yml` per MySQL-backed service (`auth-service`, `student-service`, and the rest as they are built) with their real DB password, or `mvnw clean install` fails on `contextLoads`. Add to team setup notes.
+- docker-compose still not present — needed for the end-to-end auth → student event verification, and for the evaluator's microservices proof.
