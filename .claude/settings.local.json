@@ -10,7 +10,20 @@
       "Bash(git branch *)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git check-ignore *)",
+      "Read(//c/Users/Atharva/.m2/repository/org/springframework/amqp/spring-amqp/4.1.0/**)",
+      "Bash(unzip -p spring-amqp-4.1.0-sources.jar org/springframework/amqp/support/converter/AbstractJacksonJavaTypeMapper.java)",
+      "Bash(unzip -p spring-amqp-4.1.0-sources.jar org/springframework/amqp/support/converter/DefaultJacksonJavaTypeMapper.java)",
+      "Read(//c/Users/Atharva/.m2/repository/org/springframework/amqp/spring-rabbit/4.1.0/**)",
+      "Bash(unzip -p spring-rabbit-4.1.0-sources.jar org/springframework/amqp/rabbit/listener/AbstractMessageListenerContainer.java)",
+      "Read(//c/Users/Atharva/.m2/repository/org/springframework/spring-web/7.0.8/**)",
+      "Bash(unzip -p spring-web-7.0.8-sources.jar org/springframework/web/method/annotation/MethodArgumentTypeMismatchException.java)",
+      "Read(//c/Users/Atharva/.m2/repository/org/springframework/boot/spring-boot-amqp/4.1.0/**)",
+      "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/SimpleRabbitListenerContainerFactoryConfigurer.java)",
+      "Bash(unzip -l spring-boot-amqp-4.1.0-sources.jar)",
+      "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/AbstractRabbitListenerContainerFactoryConfigurer.java)",
+      "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/RabbitAnnotationDrivenConfiguration.java)"
     ]
   }
 }
