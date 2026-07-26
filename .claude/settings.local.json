@@ -23,7 +23,11 @@
       "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/SimpleRabbitListenerContainerFactoryConfigurer.java)",
       "Bash(unzip -l spring-boot-amqp-4.1.0-sources.jar)",
       "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/AbstractRabbitListenerContainerFactoryConfigurer.java)",
-      "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/RabbitAnnotationDrivenConfiguration.java)"
+      "Bash(unzip -p spring-boot-amqp-4.1.0-sources.jar org/springframework/boot/amqp/autoconfigure/RabbitAnnotationDrivenConfiguration.java)",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\Software\\\\CareerBridge_2.0\\\\assessment-service\\\\src\\\\main\\\\java\",\"D:\\\\Software\\\\CareerBridge_2.0\\\\assessment-service\\\\src\\\\test\\\\java\" -Recurse -File | Select-Object @{n='Path';e={$_.FullName}}, @{n='Bytes';e={$_.Length}} | Sort-Object Path | Format-Table -AutoSize | Out-String -Width 200)",
+      "Read(//c/Users/Atharva/.m2/repository/tools/jackson/core/jackson-databind/**)",
+      "Read(//c/Users/Atharva/.m2/repository/com/fasterxml/jackson/core/jackson-databind/**)",
+      "Bash(./mvnw -o dependency:tree)"
     ]
   }
 }
