@@ -133,7 +133,7 @@ Cross-service event flow via RabbitMQ, all on the topic exchange `careerbridge.e
 | Event | Routing key | Publisher | Consumers | Status |
 |---|---|---|---|---|
 | `StudentRegisteredEvent` | `student.registered` | auth-service | student-service (creates the profile), notification-service | **student-service side implemented**; notification-service not built |
-| `AssessmentCompletedEvent` | TBD | assessment-service | recommendation-service, notification-service | planned only |
+| `AssessmentCompletedEvent` | `assessment.completed` | assessment-service | recommendation-service, notification-service | **publisher implemented**; no consumer exists yet, so messages are currently discarded by the exchange |
 | `RecommendationGeneratedEvent` | TBD | recommendation-service | notification-service | planned only |
 
 Configuration is `application.yml` per service (not `.properties`). Each service's `spring.application.name` matches its directory name and is used as the Eureka/service-registry identifier once discovery is wired in.
@@ -141,7 +141,8 @@ Configuration is `application.yml` per service (not `.properties`). Each service
 Implementation status:
 - **auth-service — complete** (JWT auth, refresh tokens with DB-backed revocation, BCrypt, RabbitMQ registration event, 10 unit tests) — branch `feature/auth`.
 - **student-service — complete** (profile CRUD, education/skills/projects/certificates, profile completion scoring, RabbitMQ `student.registered` consumer that auto-creates profiles, 22 unit tests) — branch `feature/student`.
-- api-gateway, assessment-service, recommendation-service, notification-service are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
+- **assessment-service — complete** (question bank seeded via `data.sql`, random 5-question attempts, weighted scoring, career matching, publishes `assessment.completed`, 22 unit tests) — branch `feature/assessment`.
+- api-gateway, recommendation-service, notification-service are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
 
 **Not yet verified end-to-end:** the auth → student event flow has passing unit tests on both sides but the two services have never been run together against a live broker. Do this when docker-compose lands.
 
@@ -160,9 +161,20 @@ Student-service specifics worth knowing before touching it or copying its patter
 - `addCertificate` deliberately skips the completion recalculation — certificates carry 0% weight, so it would be a no-op costing 4 queries. Pinned by `addCertificate_Success_DoesNotRecalculate`; give certificates a weight and that test fails.
 - Profile completion basic-info block is all-or-nothing (all five of firstName/lastName/phone/bio/city, or zero of the 20%). Blank strings count as absent, because `PUT /profile` is a full replace where null clears a field.
 
+Assessment-service specifics worth knowing before touching it:
+- **Option weights must never reach the client.** Enforced structurally: `OptionDto` has no `weight` field, and `submitAttempt` reads `weightEarned` from the stored `Option` row, never from the request payload.
+- **`orderIndex` in responses is the position in that response, not the stored value.** In the seed data the highest-weighted option is always `order_index = 1`, so echoing the DB value back would let a client sort by it and pick the best answer every time — defeating the option shuffle. Renumbering is a security fix, not cosmetics.
+- Each attempt draws `QUESTIONS_PER_ATTEMPT` (5) questions at random from the category, reshuffled per call, with options shuffled too. Which 5 were shown is **not persisted**, so `submitAttempt` can only verify answers are ≤5 valid questions from the category, not that they were the ones displayed. Closing that needs a `selected_question_ids` column.
+- `maxPossibleScore` = `QUESTIONS_PER_ATTEMPT × MAX_OPTION_WEIGHT` (15), a fixed server-side denominator. Not the category total (larger, so a full answer set would score under 100%) and not the answer count (client-controlled, so one perfect answer would be 100%). The answer-count cap in `validateAndScore` is what stops a client submitting every category question against that fixed denominator.
+- `data.sql` re-runs on every startup (`spring.sql.init.mode: always`). It is idempotent **only because** of the unique constraints on `questions(category_id, order_index)` and `options(question_id, order_index)` — `INSERT IGNORE` suppresses nothing without them. See `ai_incident_log.md`; this broke startup once already.
+- `spring.jpa.defer-datasource-initialization: true` is a **Boot** property. Under `spring.jpa.properties.hibernate` it is silently ignored and `data.sql` runs before the tables exist.
+- Publishes `assessment.completed` into an exchange with no bindings today. Verify publishing via the RabbitMQ console, not a downstream service.
+
 ## Pending Tasks (Do Not Forget)
 - notification-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building notification service)
 - recommendation-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building recommendation service)
+- recommendation-service + notification-service must consume `assessment.completed`; declare their own queue/binding on `careerbridge.exchange` and take the **concrete** `AssessmentCompletedEvent` type in `@RabbitListener` (see the student-service note above on `TypePrecedence.INFERRED`)
+- Any future `data.sql` needs a unique key on every table it inserts into, or `INSERT IGNORE` silently duplicates rows on each restart — logged SEV-2 in assessment-service
 - api-gateway: needs jwt.secret in application.yml and JwtAuthenticationFilter implemented (do after all services built)
 - api-gateway: JWT tokens are HS384 NOT HS256 — jjwt picks strongest HMAC based on key length (49-byte secret = HS384). Do not hardcode HS256 anywhere in gateway filter.
 - actuator health check: /actuator/health returns 503 when RabbitMQ is down — point AWS ALB at /actuator/health/liveness instead
