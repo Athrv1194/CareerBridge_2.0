@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
@@ -41,8 +40,9 @@ public class Question {
     @Column(nullable = false)
     private Long categoryId;
 
-    @Lob
-    @Column(nullable = false)
+    // TEXT, not @Lob: Hibernate's PostgreSQLDialect maps @Lob String to oid (large object), which
+    // rejects a plain string literal -- exactly what broke data.sql's INSERT INTO questions.
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String questionText;
 
     /** Display order within the category; the repository sorts on it. */
