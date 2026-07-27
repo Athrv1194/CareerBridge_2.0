@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Payload published to RabbitMQ when an attempt is submitted
@@ -37,4 +38,18 @@ public class AssessmentCompletedEvent {
     private String topCareerPath;
     private Double careerMatchPercentage;
     private LocalDateTime completedAt;
+
+    /**
+     * Match percentage for EVERY career path, keyed by career name -- not just the top N, and not
+     * the same thing as AssessmentResult.allCareerScoresJson (which stores only the top
+     * TOP_CAREERS_TO_RECOMMEND and is what the HTTP result DTO returns).
+     *
+     * Added so recommendation-service can rank the full field without maintaining its own copy of
+     * the career catalogue and re-deriving these numbers. Insertion-ordered (LinkedHashMap in
+     * career_paths findAll() order), which consumers may rely on as a tie-break -- several careers
+     * legitimately share a score, since relevance is a coarse 1.0/0.3 weight.
+     *
+     * Nullable in the same case topCareerPath is: an empty career_paths table yields an empty map.
+     */
+    private Map<String, Double> allCareerScores;
 }

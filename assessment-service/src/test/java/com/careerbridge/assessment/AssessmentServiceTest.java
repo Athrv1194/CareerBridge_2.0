@@ -8,6 +8,7 @@ import com.careerbridge.assessment.dto.AssessmentResultDto;
 import com.careerbridge.assessment.dto.OptionDto;
 import com.careerbridge.assessment.dto.QuestionDto;
 import com.careerbridge.assessment.dto.SubmitAnswerRequest;
+import com.careerbridge.assessment.event.AssessmentCompletedEvent;
 import com.careerbridge.assessment.exception.CustomException;
 import com.careerbridge.assessment.model.AssessmentAttempt;
 import com.careerbridge.assessment.model.AssessmentResult;
@@ -38,6 +39,7 @@ import org.springframework.http.HttpStatus;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -297,6 +299,53 @@ class AssessmentServiceTest {
         assertNotNull(completed.getValue().getCompletedAt());
 
         verify(rabbitTemplate).convertAndSend(anyString(), eq("assessment.completed"), any(Object.class));
+    }
+
+    @Test
+    @DisplayName("submitAttempt: the published event carries every career, not just the top N")
+    void submitAttempt_PublishedEvent_CarriesAllCareerScores() {
+        List<Question> questions = fiveQuestions();
+
+        when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
+                .thenReturn(Optional.of(inProgressAttempt()));
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
+                .thenReturn(optionsFor(questions));
+        // Five careers against TOP_CAREERS_TO_RECOMMEND = 3, so "all" and "top N" cannot coincide.
+        when(careerPathRepository.findAll()).thenReturn(List.of(
+                CareerPath.builder().id(1L).name("Data Scientist")
+                        .requiredSkills("Python, Logical Reasoning").build(),
+                CareerPath.builder().id(2L).name("Chef").requiredSkills("Cooking").build(),
+                CareerPath.builder().id(3L).name("Barista").requiredSkills("Espresso").build(),
+                CareerPath.builder().id(4L).name("Sommelier").requiredSkills("Wine").build(),
+                CareerPath.builder().id(5L).name("Florist").requiredSkills("Flowers").build()));
+        when(resultRepository.save(any(AssessmentResult.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AssessmentResultDto dto = assessmentService.submitAttempt(USER_ID, submitAll(questions, 1));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(rabbitTemplate).convertAndSend(anyString(), eq("assessment.completed"), payload.capture());
+
+        AssessmentCompletedEvent event = (AssessmentCompletedEvent) payload.getValue();
+        Map<String, Double> allScores = event.getAllCareerScores();
+
+        assertNotNull(allScores);
+        assertEquals(5, allScores.size(), "the event must not be truncated to the top N");
+        assertTrue(allScores.keySet().containsAll(
+                List.of("Data Scientist", "Chef", "Barista", "Sommelier", "Florist")));
+
+        // Relevance is unchanged: the career naming the category scores full, the rest are damped.
+        assertEquals(100.0, allScores.get("Data Scientist"));
+        assertEquals(30.0, allScores.get("Florist"));
+
+        // The HTTP DTO stays capped at the top N -- only the event carries the full field.
+        assertEquals(AssessmentConstants.TOP_CAREERS_TO_RECOMMEND, dto.getAllCareerScores().size());
+        assertTrue(allScores.size() > dto.getAllCareerScores().size());
+
+        // Scalars still agree with the winner.
+        assertEquals("Data Scientist", event.getTopCareerPath());
+        assertEquals(100.0, event.getCareerMatchPercentage());
     }
 
     @Test
