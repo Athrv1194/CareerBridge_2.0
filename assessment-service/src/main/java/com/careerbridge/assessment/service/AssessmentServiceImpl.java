@@ -195,9 +195,13 @@ public class AssessmentServiceImpl implements AssessmentService {
         double percentage = ScoringEngine.calculateCategoryScorePercentage(rawScore, maxPossibleScore);
 
         List<CareerPath> allCareers = careerPathRepository.findAll();
+        // Kept as its own variable, not inlined into getTopCareers: the full map goes out on the
+        // event so recommendation-service can rank every career, while only the top N is persisted
+        // and returned over HTTP.
+        Map<String, Double> allCareerScores =
+                ScoringEngine.calculateCareerMatches(category.getName(), percentage, allCareers);
         Map<String, Double> topCareers = ScoringEngine.getTopCareers(
-                ScoringEngine.calculateCareerMatches(category.getName(), percentage, allCareers),
-                AssessmentConstants.TOP_CAREERS_TO_RECOMMEND);
+                allCareerScores, AssessmentConstants.TOP_CAREERS_TO_RECOMMEND);
 
         // getTopCareers returns a LinkedHashMap in descending order, so the winner is the first entry.
         Map.Entry<String, Double> winner = topCareers.entrySet().stream().findFirst().orElse(null);
@@ -219,7 +223,8 @@ public class AssessmentServiceImpl implements AssessmentService {
         attempt.setCompletedAt(LocalDateTime.now());
         attemptRepository.save(attempt);
 
-        publishCompleted(result, category.getName(), winner == null ? null : winner.getKey());
+        publishCompleted(result, category.getName(), winner == null ? null : winner.getKey(),
+                allCareerScores);
 
         return toDto(result, category.getName(), winner == null ? null : winner.getKey(), topCareers);
     }
@@ -380,7 +385,8 @@ public class AssessmentServiceImpl implements AssessmentService {
      * point would leave a phantom event. Kept last in submitAttempt to shrink that window; move to
      * @TransactionalEventListener(AFTER_COMMIT) if exactly-once delivery starts mattering.
      */
-    private void publishCompleted(AssessmentResult result, String categoryName, String topCareerPath) {
+    private void publishCompleted(AssessmentResult result, String categoryName, String topCareerPath,
+                                  Map<String, Double> allCareerScores) {
         try {
             rabbitTemplate.convertAndSend(
                     AssessmentConstants.EXCHANGE_NAME,
@@ -394,6 +400,7 @@ public class AssessmentServiceImpl implements AssessmentService {
                             .topCareerPath(topCareerPath)
                             .careerMatchPercentage(result.getCareerMatchPercentage())
                             .completedAt(LocalDateTime.now())
+                            .allCareerScores(allCareerScores)
                             .build());
         } catch (Exception ex) {
             log.error("Failed to publish {} for attemptId={}: {}",
