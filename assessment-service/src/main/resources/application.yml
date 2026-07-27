@@ -8,12 +8,12 @@ spring:
     # Defaults to the gitignored application-local.yml; AWS sets SPRING_PROFILES_ACTIVE=prod.
     active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
-    # createDatabaseIfNotExist: ddl-auto builds tables but never the schema itself,
-    # so a fresh clone would otherwise fail with "Unknown database".
-    url: jdbc:mysql://localhost:3306/careerbridge_assessment?createDatabaseIfNotExist=true
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_assessment;), unlike the MySQL JDBC URL flag this replaced.
+    url: jdbc:postgresql://localhost:5432/careerbridge_assessment
     username: root
     password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
   rabbitmq:
     host: localhost
     port: 5672
@@ -21,17 +21,17 @@ spring:
     password: guest
   sql:
     init:
-      # data.sql is idempotent (INSERT IGNORE against unique keys), so re-running it every
-      # startup is safe. "embedded", the default, would skip it entirely on MySQL.
+      # data.sql is idempotent (INSERT ... ON CONFLICT DO NOTHING against unique keys), so
+      # re-running it every startup is safe. "embedded", the default, would skip it entirely.
       mode: always
   jpa:
     # Boot property, NOT a Hibernate one -- it must sit here and not under
     # jpa.properties.hibernate, where Hibernate would ignore it and data.sql would run
-    # before ddl-auto creates the tables ("Table doesn't exist").
+    # before ddl-auto creates the tables ("relation does not exist").
     defer-datasource-initialization: true
     hibernate:
       ddl-auto: update
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect

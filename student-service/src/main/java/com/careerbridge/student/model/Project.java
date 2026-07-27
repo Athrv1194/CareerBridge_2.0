@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,7 +31,9 @@ public class Project {
     @Column(nullable = false)
     private String title;
 
-    @Lob
+    // TEXT, not @Lob: Hibernate's PostgreSQLDialect maps @Lob String to oid (large object),
+    // which the ORM insert path cannot fill from a plain String.
+    @Column(columnDefinition = "TEXT")
     private String description;
 
     /** Comma-separated technologies -- a joined string, not a relation, to keep this flat. */
