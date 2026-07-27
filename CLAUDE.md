@@ -50,10 +50,10 @@ Services and their ports/datastores:
 | Auth Service | `auth-service/` | 8081 | MySQL `careerbridge_auth` | Spring Security + JWT (`jwt.secret`, `jwt.access-token-expiry`, `jwt.refresh-token-expiry` in `application.yml`) |
 | Student Service | `student-service/` | 8082 | MySQL `careerbridge_student` | Student profiles, education, skills, projects, certificates |
 | Assessment Service | `assessment-service/` | 8083 | MySQL `careerbridge_assessment` | Question bank, attempts/answers, scoring |
-| Recommendation Service | `recommendation-service/` | 8084 | MySQL `careerbridge_recommendation` | Consumes assessment events via RabbitMQ, produces career recommendations |
+| Recommendation Service | `recommendation-service/` | 8084 | MySQL `careerbridge_recommendation` | Consumes `assessment.completed` via RabbitMQ, ranks career paths, publishes `recommendation.generated` |
 | Notification Service | `notification-service/` | 8085 | MongoDB `careerbridge_notifications` | Consumes events (student registered, assessment completed, recommendation generated) via RabbitMQ, sends emails |
 
-**Known gap:** `recommendation-service` and `notification-service` declare `spring.rabbitmq.*` config in `application.yml` but their `pom.xml` files do not yet include the `spring-boot-starter-amqp` dependency — add it when implementing the consumer/producer classes in `event`/`consumer` packages.
+**Known gap:** `notification-service` declares `spring.rabbitmq.*` config in `application.yml` but its `pom.xml` does not yet include the `spring-boot-starter-amqp` dependency — add it when implementing the consumer classes in `event`/`consumer` packages. (`recommendation-service` no longer has this gap — see Implementation status below.)
 
 ## Common commands
 
@@ -99,7 +99,7 @@ npm run preview   # serve the production build
 
 External infra each service expects to be running locally (not containerized in this repo — no `docker-compose.yml` present):
 - MySQL on `localhost:3306` (auth/student/assessment/recommendation services), user `root` / password `root`
-- MongoDB on `localhost:27017` (recommendation/notification services)
+- MongoDB on `localhost:27017` (notification-service only — recommendation-service is MySQL-only, no Mongo dependency)
 - RabbitMQ on `localhost:5672`, default `guest`/`guest` (recommendation/notification services)
 
 ## Git workflow
@@ -133,8 +133,8 @@ Cross-service event flow via RabbitMQ, all on the topic exchange `careerbridge.e
 | Event | Routing key | Publisher | Consumers | Status |
 |---|---|---|---|---|
 | `StudentRegisteredEvent` | `student.registered` | auth-service | student-service (creates the profile), notification-service | **student-service side implemented**; notification-service not built |
-| `AssessmentCompletedEvent` | `assessment.completed` | assessment-service | recommendation-service, notification-service | **publisher implemented**; no consumer exists yet, so messages are currently discarded by the exchange |
-| `RecommendationGeneratedEvent` | TBD | recommendation-service | notification-service | planned only |
+| `AssessmentCompletedEvent` | `assessment.completed` | assessment-service | recommendation-service (implemented), notification-service (planned) | **recommendation-service consumer implemented**; notification-service not built, so its half of the exchange still has no binding |
+| `RecommendationGeneratedEvent` | `recommendation.generated` | recommendation-service | notification-service | **publisher implemented**; no consumer exists yet, so messages are currently discarded by the exchange |
 
 Configuration is `application.yml` per service (not `.properties`). Each service's `spring.application.name` matches its directory name and is used as the Eureka/service-registry identifier once discovery is wired in.
 
@@ -142,7 +142,8 @@ Implementation status:
 - **auth-service — complete** (JWT auth, refresh tokens with DB-backed revocation, BCrypt, RabbitMQ registration event, 10 unit tests) — branch `feature/auth`.
 - **student-service — complete** (profile CRUD, education/skills/projects/certificates, profile completion scoring, RabbitMQ `student.registered` consumer that auto-creates profiles, 22 unit tests) — branch `feature/student`.
 - **assessment-service — complete** (question bank seeded via `data.sql`, random 5-question attempts, weighted scoring, career matching, publishes `assessment.completed`, 22 unit tests) — branch `feature/assessment`.
-- api-gateway, recommendation-service, notification-service are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
+- **recommendation-service — complete** (RabbitMQ `assessment.completed` consumer, ranks all 7 careers from a local `CareerCatalog` constant against `categoryName`/`categoryScorePercentage`, generated reason text, history + active-recommendation tracking, publishes `recommendation.generated`, 26 unit tests) — branch `feature/recommendation`.
+- api-gateway, notification-service are still skeletons: `XApplication.java` plus empty class/interface bodies, no business logic.
 
 **Not yet verified end-to-end:** the auth → student event flow has passing unit tests on both sides but the two services have never been run together against a live broker. Do this when docker-compose lands.
 
@@ -170,15 +171,25 @@ Assessment-service specifics worth knowing before touching it:
 - `spring.jpa.defer-datasource-initialization: true` is a **Boot** property. Under `spring.jpa.properties.hibernate` it is silently ignored and `data.sql` runs before the tables exist.
 - Publishes `assessment.completed` into an exchange with no bindings today. Verify publishing via the RabbitMQ console, not a downstream service.
 
+Recommendation-service specifics worth knowing before touching it:
+- **No `career_paths` table.** The 7 careers live in `constants/CareerCatalog.java` as a `List<CareerPathDto>` constant, not an entity — nothing in this schema references a career by id, so a table would add ddl-auto surface and a `data.sql` idempotency risk for zero capability. It is a second copy of assessment-service's `data.sql` seed and **must be kept in the same order** — see the next point.
+- **`CareerCatalog.ALL`'s order is load-bearing.** It mirrors assessment-service's `data.sql` insert order, which is the order its `findAll()` returns and therefore what its stable sort falls back to on a tie. This service's own ranking ties the same way today (see below), so the two orderings must be edited together or rank 1 can silently diverge between the two services.
+- **The `assessment.completed` event carries no map of career scores** — 8 scalar fields only, and `topCareerPath`/`careerMatchPercentage` are nullable. The full 7-career ranking is recomputed locally via `RecommendationEngine.calculateMatchScore`, a byte-for-byte mirror of assessment-service's `ScoringEngine` relevance heuristic (`1.0` if `requiredSkills` contains the category name, else `0.3`).
+- **Only 2 of assessment-service's 5 categories have seeded questions today, and neither matches any career's `requiredSkills`.** So every real event currently scores all 7 careers at `0.3` relevance (ceiling 30.0) — a 7-way tie. Rank 1 in that case is decided by a tie-break that prefers the event's own `topCareerPath` name, falling back to `CareerCatalog.ALL` order if it's null or unrecognized. There is deliberately **no minimum-score threshold** on `topRecommendations` (`isTopRecommendation = rank <= TOP_CAREERS_COUNT` only) — a threshold above 30.0 would make it permanently empty against today's data.
+- **`CareerRanking.rank` needs a quoted column name.** `RANK` is reserved in MySQL 8.0.2+; `hibernate.auto_quote_keyword` defaults off and nothing in this project enables it, so an unquoted `rank` column fails `ddl-auto` at startup with error 1064. Fixed via `@Column(name = "\"rank\"")` — verified against live MySQL 9.0.1 in both DDL and DML (insert + `ORDER BY`).
+- **`findByUserIdAndIsActiveTrue` returns a `List`, not an `Optional`.** MySQL has no partial unique index, so two concurrent `assessment.completed` events can both observe "no active row" and both insert one. An `Optional` finder would throw `IncorrectResultSizeDataAccessException` inside `generateRecommendation`, get swallowed by the consumer's fail-soft catch, and permanently poison that user — every later event would fail identically. The `List` degrades instead: reads take the newest, writes deactivate every row found.
+- `overallMatchPercentage` and `topCareerName` on `Recommendation` are always read from this service's **own** rank 1, never copied from the event's `careerMatchPercentage`/`topCareerPath` — keeps the response internally consistent even if the two catalogs ever drift.
+- Publishes `recommendation.generated` into an exchange with no bindings today (notification-service not built). Verify publishing via the RabbitMQ console, not a downstream service — same caveat as assessment-service's publisher.
+
 ## Pending Tasks (Do Not Forget)
 - notification-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building notification service)
-- recommendation-service: add spring-boot-starter-amqp to pom.xml (known gap, do when building recommendation service)
-- recommendation-service + notification-service must consume `assessment.completed`; declare their own queue/binding on `careerbridge.exchange` and take the **concrete** `AssessmentCompletedEvent` type in `@RabbitListener` (see the student-service note above on `TypePrecedence.INFERRED`)
+- notification-service must consume both `assessment.completed` and `recommendation.generated`; declare its own queue/binding on `careerbridge.exchange` and take the **concrete** event type in `@RabbitListener` (see the student-service note above on `TypePrecedence.INFERRED`)
 - Any future `data.sql` needs a unique key on every table it inserts into, or `INSERT IGNORE` silently duplicates rows on each restart — logged SEV-2 in assessment-service
 - api-gateway: needs jwt.secret in application.yml and JwtAuthenticationFilter implemented (do after all services built)
 - api-gateway: JWT tokens are HS384 NOT HS256 — jjwt picks strongest HMAC based on key length (49-byte secret = HS384). Do not hardcode HS256 anywhere in gateway filter.
-- actuator health check: /actuator/health returns 503 when RabbitMQ is down — point AWS ALB at /actuator/health/liveness instead
+- actuator health check: /actuator/health returns 503 when RabbitMQ is down — point AWS ALB at /actuator/health/liveness instead. Reproduced on recommendation-service with the broker down: `/actuator/health` → 503, `/actuator/health/liveness` and `/readiness` → 200.
 - Java PATH issue: JDK 21 must come before Java 8 on PATH for all team members — otherwise java -jar fails with UnsupportedClassVersionError
-- **Every remaining service needs two exception handlers copied from student-service's `GlobalExceptionHandler`**: `HttpMessageNotReadableException` (malformed JSON) and `MethodArgumentTypeMismatchException` (non-numeric `X-User-Id`). Neither implements Spring's `ErrorResponse`, so both return a misleading HTTP 500 without an explicit handler. Both are logged incidents; see `ai_incident_log.md`.
-- Each team member must create their own gitignored `application-local.yml` per MySQL-backed service (`auth-service`, `student-service`, and the rest as they are built) with their real DB password, or `mvnw clean install` fails on `contextLoads`. Add to team setup notes.
-- docker-compose still not present — needed for the end-to-end auth → student event verification, and for the evaluator's microservices proof.
+- **Every remaining service needs two exception handlers copied from student-service's `GlobalExceptionHandler`**: `HttpMessageNotReadableException` (malformed JSON) and `MethodArgumentTypeMismatchException` (non-numeric `X-User-Id`). Neither implements Spring's `ErrorResponse`, so both return a misleading HTTP 500 without an explicit handler. Both are logged incidents; see `ai_incident_log.md`. (recommendation-service already has both, verified against a live server.)
+- If a future service needs a MySQL reserved word as a column name (e.g. `rank`, `order`, `group`), quote it explicitly — `@Column(name = "\"rank\"")` — and confirm with `hibernate.auto_quote_keyword` off (the project default). MySQL 8.0.2+ reserved `RANK`; ddl-auto silently fails on an unquoted reserved word. See recommendation-service's `CareerRanking.rank`.
+- Each team member must create their own gitignored `application-local.yml` per MySQL-backed service (`auth-service`, `student-service`, `assessment-service`, `recommendation-service`, and the rest as they are built) with their real DB password, or `mvnw clean install` fails on `contextLoads`. Add to team setup notes.
+- docker-compose still not present — needed for the end-to-end auth → student → assessment → recommendation event verification, and for the evaluator's microservices proof.
