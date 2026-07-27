@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -41,6 +40,9 @@ public class Education {
 
     private String grade;
 
-    @Lob
+    // TEXT, not @Lob: Hibernate's PostgreSQLDialect maps @Lob String to oid (large object),
+    // which the ORM insert path cannot fill from a plain String -- discovered while migrating
+    // assessment-service's data.sql off MySQL; the same defect was latent here too.
+    @Column(columnDefinition = "TEXT")
     private String description;
 }

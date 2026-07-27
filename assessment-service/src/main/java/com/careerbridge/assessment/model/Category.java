@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -35,7 +34,9 @@ public class Category {
     @Column(nullable = false, unique = true)
     private String name;
 
-    @Lob
+    // TEXT, not @Lob: Hibernate's PostgreSQLDialect maps @Lob String to oid (large object), which
+    // rejects a plain string literal -- exactly what broke data.sql's INSERT INTO categories.
+    @Column(columnDefinition = "TEXT")
     private String description;
 
     @CreationTimestamp
