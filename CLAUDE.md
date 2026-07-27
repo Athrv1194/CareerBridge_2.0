@@ -33,7 +33,7 @@ Before starting any new task, debugging, or implementing a fix — read `ai_inci
 
 ## Project Context
 - Team size: 5 members, 18-20 day deadline
-- Evaluator requirements: microservices proof, RabbitMQ events, MySQL + MongoDB, JWT security, unit tests, AWS deployment
+- Evaluator requirements: microservices proof, RabbitMQ events, PostgreSQL + MongoDB, JWT security, unit tests, AWS deployment
 - P0 services (build first): api-gateway, auth-service, student-service, assessment-service, recommendation-service, notification-service
 - P1 services (after P0 complete): organization, roadmap, recruiter, resume, ai-coach, payment, placement
 - Frontend: `careerbridge-frontend/` (React 19 + Vite) — scaffolded at root level alongside the 6 services; folder structure and deps in place, no business logic yet
