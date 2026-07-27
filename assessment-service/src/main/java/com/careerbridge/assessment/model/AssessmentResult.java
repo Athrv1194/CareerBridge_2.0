@@ -5,7 +5,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -62,7 +61,10 @@ public class AssessmentResult {
      * the field name over-promises. Serialised with Jackson 3 (tools.jackson), which is the only
      * Jackson on this service's classpath.
      */
-    @Lob
+    // TEXT, not @Lob: Hibernate's PostgreSQLDialect maps @Lob String to oid (large object) rather
+    // than MySQL's LONGTEXT, and Hibernate's ORM insert path for oid expects a large-object handle,
+    // not a plain String -- submitAttempt would fail the first time it saved a real result.
+    @Column(columnDefinition = "TEXT")
     private String allCareerScoresJson;
 
     @CreationTimestamp

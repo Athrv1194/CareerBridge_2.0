@@ -13,12 +13,12 @@ spring:
     exclude:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   datasource:
-    # createDatabaseIfNotExist: ddl-auto builds tables but never the schema itself,
-    # so a fresh clone would otherwise fail with "Unknown database".
-    url: jdbc:mysql://localhost:3306/careerbridge_auth?createDatabaseIfNotExist=true
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_auth;), unlike the MySQL JDBC URL flag this replaced.
+    url: jdbc:postgresql://localhost:5432/careerbridge_auth
     username: root
     password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: org.postgresql.Driver
   rabbitmq:
     host: localhost
     port: 5672
@@ -30,7 +30,7 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}
