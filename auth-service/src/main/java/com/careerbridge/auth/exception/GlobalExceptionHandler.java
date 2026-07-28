@@ -9,6 +9,7 @@ import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -44,6 +45,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
         log.warn("Malformed request body: {}", ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, "Malformed JSON request", null);
+    }
+
+    /**
+     * A non-numeric path/query value (e.g. a malformed id). Same trap as the handler above:
+     * MethodArgumentTypeMismatchException extends TypeMismatchException, which does NOT
+     * implement ErrorResponse, so it would otherwise fall through to a 500 for what is purely a
+     * malformed client request. Only the parameter name is echoed, never the offending value.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Type mismatch for '{}': {}", ex.getName(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "Invalid value for '" + ex.getName() + "'", null);
     }
 
     @ExceptionHandler(Exception.class)
