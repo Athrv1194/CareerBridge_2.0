@@ -4,26 +4,68 @@ server:
 spring:
   application:
     name: api-gateway
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   cloud:
     gateway:
-      routes:
-        - id: auth-service
-          uri: http://localhost:8081
-          predicates:
-            - Path=/api/auth/**
-        - id: student-service
-          uri: http://localhost:8082
-          predicates:
-            - Path=/api/student/**
-        - id: assessment-service
-          uri: http://localhost:8083
-          predicates:
-            - Path=/api/assessment/**
-        - id: recommendation-service
-          uri: http://localhost:8084
-          predicates:
-            - Path=/api/recommendation/**
-        - id: notification-service
-          uri: http://localhost:8085
-          predicates:
-            - Path=/api/notification/**
+      # server.webmvc, NOT the bare spring.cloud.gateway.routes. Spring Cloud Gateway 5 moved the
+      # route properties per server flavour: GatewayMvcProperties binds
+      # spring.cloud.gateway.server.webmvc, and the old flat key (correct for SCG <= 4.1, and still
+      # shown in most examples online) binds to NOTHING here -- the app starts clean, logs no
+      # warning, and every /api/** returns 404. Logged SEV-2 in ai_incident_log.md.
+      #
+      # There is deliberately no `filters:` entry on any route. Authentication is a single global
+      # servlet OncePerRequestFilter (JwtAuthenticationFilter) rather than a per-route filter, so
+      # that /actuator/** is covered too and no request can reach a downstream service carrying a
+      # client-supplied X-User-Id.
+      server:
+        webmvc:
+          routes:
+            - id: auth-service
+              uri: http://localhost:8081
+              predicates:
+                - Path=/api/auth/**
+            - id: student-service
+              uri: http://localhost:8082
+              predicates:
+                - Path=/api/student/**
+            - id: assessment-service
+              uri: http://localhost:8083
+              predicates:
+                - Path=/api/assessment/**
+            - id: recommendation-service
+              uri: http://localhost:8084
+              predicates:
+                - Path=/api/recommendation/**
+            - id: notification-service
+              uri: http://localhost:8085
+              predicates:
+                # Singular, matching notification-service's @RequestMapping("/api/notification").
+                - Path=/api/notification/**
+
+gateway:
+  # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
+  # gateway verifies. 49 bytes = 392 bits, so Keys.hmacShaKeyFor selects HS384, NOT HS256, despite
+  # what the literal says. Overriding one service's JWT_SECRET without the other breaks every
+  # request with a signature error.
+  jwt-secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}
+  public-paths:
+    # The whole auth surface: /refresh can never be JWT-validated (refresh tokens are opaque UUIDs
+    # checked against a Postgres table, not JWTs), /logout is called precisely when the 15-minute
+    # access token has expired, and auth-service is the one service with its own Spring Security
+    # enforcing its own rules.
+    - /api/auth/**
+    # Health checks must not need a token.
+    - /actuator/**
+    # The career catalogue is identical for everyone and is served without a user context.
+    # Note there is no /api/assessment/careers -- that endpoint does not exist in assessment-service.
+    - /api/recommendation/careers
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
