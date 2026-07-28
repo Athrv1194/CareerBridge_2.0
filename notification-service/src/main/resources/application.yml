@@ -4,11 +4,67 @@ server:
 spring:
   application:
     name: notification-service
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/careerbridge_notifications
+  profiles:
+    # Defaults to the gitignored application-local.yml; AWS sets SPRING_PROFILES_ACTIVE=prod.
+    # Without this block application-local.yml is never loaded at all.
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_notification;).
+    # Singular here, plural for Mongo below: deliberate. This matches careerbridge_auth/_student/
+    # _assessment/_recommendation, while the Mongo database name was already committed as plural.
+    url: jdbc:postgresql://localhost:5432/careerbridge_notification
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  mongodb:
+    # spring.mongodb.uri, NOT spring.data.mongodb.uri. Boot 4 moved the driver-level connection
+    # settings out of spring.data.mongodb.* into spring.mongodb.*; the old name is deprecated at
+    # level "error" since 4.0.0, which means Boot does not bind it AND does not warn -- the driver
+    # silently falls back to localhost:27017/test. See ai_incident_log.md (2026-07-27).
+    # spring.data.mongodb.* still exists, but only for Spring-Data-level settings such as
+    # auto-index-creation and field-naming-strategy.
+    #
+    # Local default only. The real deployment uses MongoDB Atlas, whose URI embeds credentials
+    # and therefore lives solely in the gitignored application-local.yml.
+    uri: ${MONGODB_URI:mongodb://localhost:27017/careerbridge_notifications}
   rabbitmq:
     host: localhost
     port: 5672
     username: guest
     password: guest
+  mail:
+    # spring.mail.host is what activates MailSenderAutoConfiguration -- without it there is no
+    # JavaMailSender bean at all and EmailService's constructor injection fails the context.
+    host: smtp.gmail.com
+    port: 587
+    # Empty defaults so the context always starts; the real values come from
+    # application-local.yml (or MAIL_USERNAME / MAIL_PASSWORD in a deployed environment).
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # JavaMail has NO default timeouts. SMTP runs on the @RabbitListener thread and the
+          # container defaults to concurrency 1, so a single hung Gmail connection would stall
+          # every subsequent notification indefinitely.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+management:
+  health:
+    mail:
+      # MailHealthIndicator opens a real SMTP connection to Gmail on every health poll. An ALB
+      # polling every 10s would mean ~8,600 handshakes a day and near-certain throttling.
+      enabled: false
