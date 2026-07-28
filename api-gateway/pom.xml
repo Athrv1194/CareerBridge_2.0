@@ -35,18 +35,50 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
+		<!--
+			Servlet flavour of Spring Cloud Gateway (Tomcat), NOT the reactive one. The reactive
+			variant is spring-cloud-starter-gateway-server-webflux; the old catch-all
+			spring-cloud-starter-gateway no longer exists as of Spring Cloud Gateway 5.
+			Consequence: no Mono, no ServerWebExchange, no AbstractGatewayFilterFactory and
+			no ErrorWebExceptionHandler, since those are all reactive-only APIs.
+		-->
 		<dependency>
 			<groupId>org.springframework.cloud</groupId>
 			<artifactId>spring-cloud-starter-gateway-server-webmvc</artifactId>
 		</dependency>
+
+		<!--
+			JWT validation. Versions pinned to 0.12.3 to match auth-service exactly: it signs the
+			tokens this gateway verifies, and drifting a crypto library between signer and verifier
+			buys nothing. 0.12.x is also the line carrying the Jwts.parser().verifyWith(...) API.
+		-->
 		<dependency>
-			<groupId>org.springframework.cloud</groupId>
-			<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.12.3</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.12.3</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.12.3</version>
+			<scope>runtime</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Supplies JUnit 5, Mockito and spring-test's MockHttpServletRequest/Response/FilterChain. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
