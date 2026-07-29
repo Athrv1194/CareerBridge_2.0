@@ -55,6 +55,27 @@ Services and their ports/datastores:
 
 The only dual-datastore service: PostgreSQL is the system of record (delivery audit + contact details, both needing unique constraints), MongoDB is the student-facing in-app feed. Note the database names differ by one character on purpose — Postgres `careerbridge_notification` singular, matching the other four; Mongo `careerbridge_notifications` plural, as already committed.
 
+## Swagger UI / OpenAPI docs
+
+All 6 services use `springdoc-openapi-starter-webmvc-ui:2.8.9` — **webmvc, not webflux, for every service including api-gateway**, since none of them are reactive (see api-gateway's own section below; this has already been the source of two prior incidents, do not revisit it).
+
+Direct, per-service (bypassing the gateway):
+
+| Service | Swagger UI | OpenAPI JSON |
+|---|---|---|
+| API Gateway | http://localhost:8080/swagger-ui.html | http://localhost:8080/api-docs |
+| Auth Service | http://localhost:8081/swagger-ui.html | http://localhost:8081/api-docs |
+| Student Service | http://localhost:8082/swagger-ui.html | http://localhost:8082/api-docs |
+| Assessment Service | http://localhost:8083/swagger-ui.html | http://localhost:8083/api-docs |
+| Recommendation Service | http://localhost:8084/swagger-ui.html | http://localhost:8084/api-docs |
+| Notification Service | http://localhost:8085/swagger-ui.html | http://localhost:8085/api-docs |
+
+Ports 8081–8085 are not published from the docker-compose stack (see api-gateway's section: those services have no auth of their own and must not be publicly reachable), so under Docker the per-service rows above only work via `mvnw spring-boot:run` on the host, or `docker compose exec <service> wget -qO- localhost:<port>/swagger-ui.html` from inside the container.
+
+**Aggregated view (the one evaluators should use): http://localhost:8080/swagger-ui.html.** api-gateway's `springdoc.swagger-ui.urls` lists all 5 backend services; the dropdown switches between them. This works by 5 additional gateway routes (`*-service-docs` in `application.yml`) that rewrite `/api-docs/<service>` to that service's own `/api-docs` — a plain passthrough route doesn't work here, since (unlike the `/api/**` routes) the gateway-facing path and the backend's real path differ. Each backend service's `OpenApiConfig` also hardcodes `http://localhost:8080` as its OpenAPI `servers` entry, overriding springdoc's request-derived default (which would otherwise report the container-internal hostname, e.g. `http://auth-service:8081`, breaking "Try it out" through the aggregated UI even though browsing the docs would look fine). See `ai_incident_log.md` (2026-08-03) for the full incident trail on both of these.
+
+`auth-service` is the only backend service with its own Spring Security filter chain; its `SecurityConfig` explicitly `permitAll`s `/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`, `/webjars/**` alongside its existing public auth endpoints. The other 4 backend services have no Spring Security on the classpath at all, so this only mattered for auth-service.
+
 ## Common commands
 
 Each service is built and run independently from its own directory (no root aggregator POM).

@@ -48,6 +48,20 @@
 		</dependency>
 
 		<!--
+			Swagger UI / OpenAPI docs. webmvc-ui, NOT webflux-ui: this gateway is servlet/Tomcat
+			(spring-cloud-starter-gateway-server-webmvc above), not reactive; see the class
+			comment on JwtAuthenticationFilter and the "Servlet, not reactive" note in CLAUDE.md's
+			api-gateway section. The webflux variant would pull in Spring WebFlux + Reactor Netty
+			alongside the existing Tomcat/servlet stack, which Boot's WebApplicationType detection
+			does not support running side by side.
+		-->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>2.8.9</version>
+		</dependency>
+
+		<!--
 			JWT validation. Versions pinned to 0.12.3 to match auth-service exactly: it signs the
 			tokens this gateway verifies, and drifting a crypto library between signer and verifier
 			buys nothing. 0.12.x is also the line carrying the Jwts.parser().verifyWith(...) API.
