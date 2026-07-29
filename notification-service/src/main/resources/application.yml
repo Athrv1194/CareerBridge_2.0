@@ -68,3 +68,10 @@ management:
       # MailHealthIndicator opens a real SMTP connection to Gmail on every health poll. An ALB
       # polling every 10s would mean ~8,600 handshakes a day and near-certain throttling.
       enabled: false
+    # NOT management.health.mongo.enabled -- Boot 4 renamed the module (spring-boot-mongodb,
+    # spring.mongodb.uri) and the health indicator's @ConditionalOnEnabledHealthIndicator id moved
+    # with it, from "mongo" to "mongodb". "mongo" silently matches nothing and leaves the indicator
+    # running. Verified against the id string compiled into
+    # MongoHealthContributorAutoConfiguration.class in spring-boot-mongodb-4.1.0.jar.
+    mongodb:
+      enabled: false
