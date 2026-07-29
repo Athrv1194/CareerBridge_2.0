@@ -1,0 +1,240 @@
+name: careerbridge
+
+# Every secret comes from a sibling .env file (gitignored via **/.env). Copy .env.example to .env
+# first -- the ${VAR:?...} entries below abort `docker compose up` with a named error rather than
+# starting a service with an empty password.
+#
+# Host port choices: PostgreSQL is published on 5434 and RabbitMQ on 5673 so this stack can run
+# alongside the local PostgreSQL 5432 / RabbitMQ 5672 the services already use for `mvnw
+# spring-boot:run`. Inside the compose network the containers still talk on the standard 5432/5672
+# -- the host mapping is only for psql/mongosh from the host.
+
+x-backend-defaults: &backend-defaults
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+# Shared Spring overrides for the five PostgreSQL + RabbitMQ services. Every key here is a scalar,
+# which is what makes environment overriding safe: only list-valued properties suffer the
+# first-source-wins binding described in api-gateway/src/main/resources/application.yml.
+x-backend-env: &backend-env
+  # No application-docker.yml exists, and none is needed -- a profile with no matching file is not
+  # an error in Boot. This only has to be something other than "local", because application-local.yml
+  # holds real credentials and is excluded from every image by .dockerignore.
+  SPRING_PROFILES_ACTIVE: docker
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  SPRING_RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_PORT: 5672
+  # NOT guest/guest, unlike the local dev defaults in every service's application.yml. RabbitMQ
+  # restricts the built-in guest account to loopback connections, and inside the compose network
+  # each service connects from its own container IP -- guest would be refused with ACCESS_REFUSED
+  # on every consumer. loopback_users only ever lists guest, so any other username is unrestricted.
+  SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-careerbridge}
+  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+  # Creates the liveness/readiness health groups. They are NOT auto-enabled outside Kubernetes, and
+  # the healthchecks below depend on them: plain /actuator/health aggregates every datastore and
+  # returns 503 whenever RabbitMQ (or, for notification-service, Mongo Atlas) is briefly unreachable,
+  # which would make Docker mark a perfectly serviceable container unhealthy.
+  MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+
+services:
+
+  postgres:
+    # Pinned to 17: the postgres:18 official image relocated PGDATA, so the /var/lib/postgresql/data
+    # volume mount below would silently stop persisting anything.
+    image: postgres:17-alpine
+    container_name: careerbridge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Maintenance database only. The five application databases are created by init.sql.
+      POSTGRES_DB: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs only when the data directory is empty, i.e. on first boot or after
+      # `docker compose down -v`. It is written to be re-runnable by hand regardless.
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # -d postgres, because pg_isready reports ready as soon as the server accepts connections;
+      # naming a database makes it an actual connection attempt.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: careerbridge-rabbitmq
+    restart: unless-stopped
+    environment:
+      # Applied only when the broker initialises its Mnesia database, i.e. on first boot. Changing
+      # RABBITMQ_PASSWORD in .env later has no effect while the rabbitmq-data volume survives --
+      # `docker compose down -v` or `rabbitmqctl change_password` are the two ways to move it.
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-careerbridge}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
+    ports:
+      - "5673:5672"
+      # Management UI on the standard port -- http://localhost:15672. This is where the end-to-end
+      # event chain gets verified: careerbridge.exchange plus the four consumer queues should all
+      # appear once the services are up.
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------------------------
+  # Backend services. None of these publishes a host port, deliberately.
+  #
+  # api-gateway is the only component in CareerBridge that validates a JWT; all five services below
+  # trust the X-User-Id header blindly and four of them have no Spring Security on the classpath at
+  # all. Publishing 8081-8085 to the host would bind them on 0.0.0.0 and let anyone act as any user
+  # with a single `curl -H "X-User-Id: 1"` -- the exact constraint CLAUDE.md records for deployment.
+  # They remain reachable from each other and from the gateway over the compose network by service
+  # name. To debug one directly, prefer `docker compose exec <svc> wget -qO- localhost:<port>/...`
+  # over adding a ports entry.
+  # ---------------------------------------------------------------------------------------------
+
+  auth-service:
+    <<: *backend-defaults
+    build: ./auth-service
+    container_name: careerbridge-auth
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_auth
+      # Signs the tokens api-gateway verifies. One JWT_SECRET feeds both containers; overriding it
+      # for one and not the other fails every authenticated request with a signature error.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Boot 4 cold start plus ddl-auto against an empty schema. Too short a start_period here just
+      # burns retries while Hibernate is still creating tables.
+      start_period: 60s
+
+  student-service:
+    <<: *backend-defaults
+    build: ./student-service
+    container_name: careerbridge-student
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_student
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8082/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  assessment-service:
+    <<: *backend-defaults
+    build: ./assessment-service
+    container_name: careerbridge-assessment
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_assessment
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8083/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Longest of the five: data.sql seeds 7 careers / 5 categories / 22 questions / 88 options on
+      # every startup, after defer-datasource-initialization waits for ddl-auto.
+      start_period: 90s
+
+  recommendation-service:
+    <<: *backend-defaults
+    build: ./recommendation-service
+    container_name: careerbridge-recommendation
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_recommendation
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8084/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  notification-service:
+    <<: *backend-defaults
+    build: ./notification-service
+    container_name: careerbridge-notification
+    environment:
+      <<: *backend-env
+      # Singular here, plural in the Mongo URI below -- both already committed that way on purpose.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_notification
+      # MongoDB Atlas, no container: the URI embeds its own credentials. Required rather than
+      # defaulted, because application.yml falls back to mongodb://localhost:27017 and inside this
+      # container localhost is the container itself -- the driver connects lazily, so the service
+      # would start clean and only fail when the first recommendation.generated event arrives.
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+      # application.yml reads ${MAIL_USERNAME} / ${MAIL_PASSWORD}; .env names them GMAIL_* to make it
+      # obvious an App Password is required, not the account password. This is where they meet.
+      MAIL_USERNAME: ${GMAIL_USERNAME:-}
+      MAIL_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8085/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: careerbridge-gateway
+    restart: unless-stopped
+    ports:
+      # The only port published to the host. VITE_API_BASE_URL points here.
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      # Verifies what auth-service signs -- same value, same .env key.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      # Resolve the ${..._SERVICE_URI} placeholders in the gateway's route block. Read the comment
+      # above `server: webmvc: routes:` in api-gateway/src/main/resources/application.yml before
+      # replacing these with SPRING_CLOUD_GATEWAY_SERVER_WEBMVC_ROUTES_n_URI -- that form drops
+      # every predicate in the list.
+      AUTH_SERVICE_URI: http://auth-service:8081
+      STUDENT_SERVICE_URI: http://student-service:8082
+      ASSESSMENT_SERVICE_URI: http://assessment-service:8083
+      RECOMMENDATION_SERVICE_URI: http://recommendation-service:8084
+      NOTIFICATION_SERVICE_URI: http://notification-service:8085
+    # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
+    # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      student-service:
+        condition: service_healthy
+      assessment-service:
+        condition: service_healthy
+      recommendation-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
