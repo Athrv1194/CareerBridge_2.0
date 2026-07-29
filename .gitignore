@@ -1,8 +1,5 @@
 # Maven
 **/target/
-**/.mvn/
-**/mvnw
-**/mvnw.cmd
 **/*.class
 
 # Spring Boot
