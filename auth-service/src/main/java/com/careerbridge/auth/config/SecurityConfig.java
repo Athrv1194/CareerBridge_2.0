@@ -35,6 +35,15 @@ public class SecurityConfig {
                                          "/api/auth/login",
                                          "/api/auth/refresh").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
+                        // Swagger UI / OpenAPI docs. Without these this filter chain's
+                        // .anyRequest().authenticated() blocks /api-docs and /swagger-ui.html
+                        // before the request ever reaches springdoc's controllers -- 401, not a
+                        // gateway or routing problem. auth-service is the only one of the 5
+                        // backend services with Spring Security on its classpath at all.
+                        .requestMatchers("/api-docs/**",
+                                         "/swagger-ui/**",
+                                         "/swagger-ui.html",
+                                         "/webjars/**").permitAll()
                         .anyRequest().authenticated())
                 // Default entry point answers 403; 401 is the correct code for "no valid credentials".
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(
