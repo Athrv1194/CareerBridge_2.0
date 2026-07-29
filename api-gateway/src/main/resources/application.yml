@@ -53,6 +53,42 @@ spring:
               predicates:
                 # Singular, matching notification-service's @RequestMapping("/api/notification").
                 - Path=/api/notification/**
+            # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
+            # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
+            # 5 routes above, the incoming and target paths differ, and this gateway's default
+            # webmvc routing forwards the ORIGINAL incoming path unchanged (there is no implicit
+            # path-merging with a uri's own path component; confirmed against this project's
+            # existing routes, which rely on exactly that passthrough behavior).
+            - id: auth-service-docs
+              uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api-docs/auth
+              filters:
+                - RewritePath=/api-docs/auth,/api-docs
+            - id: student-service-docs
+              uri: ${STUDENT_SERVICE_URI:http://localhost:8082}
+              predicates:
+                - Path=/api-docs/student
+              filters:
+                - RewritePath=/api-docs/student,/api-docs
+            - id: assessment-service-docs
+              uri: ${ASSESSMENT_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api-docs/assessment
+              filters:
+                - RewritePath=/api-docs/assessment,/api-docs
+            - id: recommendation-service-docs
+              uri: ${RECOMMENDATION_SERVICE_URI:http://localhost:8084}
+              predicates:
+                - Path=/api-docs/recommendation
+              filters:
+                - RewritePath=/api-docs/recommendation,/api-docs
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8085}
+              predicates:
+                - Path=/api-docs/notification
+              filters:
+                - RewritePath=/api-docs/notification,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -71,6 +107,30 @@ gateway:
     # The career catalogue is identical for everyone and is served without a user context.
     # Note there is no /api/assessment/careers -- that endpoint does not exist in assessment-service.
     - /api/recommendation/careers
+    # Swagger UI itself: springdoc's static resources, the UI page, its generated OpenAPI JSON, and
+    # the webjars bundle it loads them from (swagger-ui bootstrap CSS/JS). Without these the browser
+    # would 401 loading the page before a token could ever be attached.
+    - /swagger-ui.html
+    - /swagger-ui/**
+    - /api-docs/**
+    - /webjars/**
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: auth-service
+        url: /api-docs/auth
+      - name: student-service
+        url: /api-docs/student
+      - name: assessment-service
+        url: /api-docs/assessment
+      - name: recommendation-service
+        url: /api-docs/recommendation
+      - name: notification-service
+        url: /api-docs/notification
 
 management:
   endpoints:

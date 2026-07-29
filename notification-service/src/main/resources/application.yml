@@ -75,3 +75,9 @@ management:
     # MongoHealthContributorAutoConfiguration.class in spring-boot-mongodb-4.1.0.jar.
     mongodb:
       enabled: false
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
