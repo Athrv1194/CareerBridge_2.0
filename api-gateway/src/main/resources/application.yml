@@ -18,27 +18,38 @@ spring:
       # servlet OncePerRequestFilter (JwtAuthenticationFilter) rather than a per-route filter, so
       # that /actuator/** is covered too and no request can reach a downstream service carrying a
       # client-supplied X-User-Id.
+      #
+      # Each uri is a ${...} placeholder rather than a literal, so docker-compose can retarget it
+      # at a container name while the localhost default keeps `mvnw spring-boot:run` working
+      # unchanged. The placeholder is deliberate and must not be "simplified" back to a literal:
+      # the obvious alternative -- setting SPRING_CLOUD_GATEWAY_SERVER_WEBMVC_ROUTES_0_URI in the
+      # environment -- silently destroys this block. Spring's IndexedElementsBinder binds a list
+      # from the FIRST property source that supplies any element and then stops; collections are
+      # never merged across sources. One route uri arriving from the environment therefore makes
+      # the environment the sole source for the whole list, and every id and predicates entry
+      # below vanishes -- routes that match nothing, no warning, healthy app, 404 on every
+      # /api/**. Same failure signature as the spring.cloud.gateway prefix bug above.
       server:
         webmvc:
           routes:
             - id: auth-service
-              uri: http://localhost:8081
+              uri: ${AUTH_SERVICE_URI:http://localhost:8081}
               predicates:
                 - Path=/api/auth/**
             - id: student-service
-              uri: http://localhost:8082
+              uri: ${STUDENT_SERVICE_URI:http://localhost:8082}
               predicates:
                 - Path=/api/student/**
             - id: assessment-service
-              uri: http://localhost:8083
+              uri: ${ASSESSMENT_SERVICE_URI:http://localhost:8083}
               predicates:
                 - Path=/api/assessment/**
             - id: recommendation-service
-              uri: http://localhost:8084
+              uri: ${RECOMMENDATION_SERVICE_URI:http://localhost:8084}
               predicates:
                 - Path=/api/recommendation/**
             - id: notification-service
-              uri: http://localhost:8085
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8085}
               predicates:
                 # Singular, matching notification-service's @RequestMapping("/api/notification").
                 - Path=/api/notification/**
