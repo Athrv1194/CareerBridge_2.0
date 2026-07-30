@@ -132,19 +132,29 @@ public class RoadmapServiceImpl implements RoadmapService {
                 saved.getId(), studentId, saved.getCareerName(), steps.size());
     }
 
+    /**
+     * The student's current roadmap: the newest one, whatever its status.
+     *
+     * NOT filtered to IN_PROGRESS. Filtering was the original design and it 404s the moment a
+     * student ticks off their last milestone -- the roadmap flips to COMPLETED and disappears from
+     * the only endpoint that shows it, exactly when they want to see 100%. Caught in live
+     * verification, not by any unit test, because a mocked repository returns whatever it is told.
+     *
+     * A List, not an Optional: a student who takes a second assessment holds a second roadmap, so
+     * this legitimately matches several rows and a single-result finder would throw. DESC ordering
+     * makes the first the newest, so a fresh recommendation still supersedes an older completed one
+     * in the response.
+     */
     @Override
     @Transactional(readOnly = true)
     public RoadmapResponse getMyRoadmap(Long studentId) {
-        // A List, not an Optional: a student who takes a second assessment holds two IN_PROGRESS
-        // roadmaps and an Optional finder would throw. DESC ordering makes the first the newest.
-        List<StudentRoadmap> active =
-                studentRoadmapRepository.findByStudentIdAndStatusOrderByStartedAtDesc(studentId, STATUS_IN_PROGRESS);
+        List<StudentRoadmap> roadmaps = studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(studentId);
 
-        if (active.isEmpty()) {
-            throw new CustomException("No active roadmap found", HttpStatus.NOT_FOUND);
+        if (roadmaps.isEmpty()) {
+            throw new CustomException("No roadmap found", HttpStatus.NOT_FOUND);
         }
 
-        return toResponse(active.get(0));
+        return toResponse(roadmaps.get(0));
     }
 
     @Override

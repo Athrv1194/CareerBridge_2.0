@@ -164,10 +164,10 @@ class RoadmapServiceTest {
     // -------------------------------------------------------------------------------------------
 
     @Test
-    @DisplayName("returns the newest IN_PROGRESS roadmap with ordered milestones")
+    @DisplayName("returns the newest roadmap with ordered milestones")
     void getMyRoadmap_ValidStudent_ReturnsRoadmap() {
         StudentRoadmap active = roadmap(1L, 2, 0);
-        when(studentRoadmapRepository.findByStudentIdAndStatusOrderByStartedAtDesc(1L, "IN_PROGRESS"))
+        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L))
                 .thenReturn(List.of(active));
         when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
                 .thenReturn(List.of(milestone(200L, 1L, false, active)));
@@ -179,14 +179,32 @@ class RoadmapServiceTest {
     }
 
     @Test
-    @DisplayName("no active roadmap is a 404")
+    @DisplayName("no roadmap at all is a 404")
     void getMyRoadmap_NoRoadmap_Throws404() {
-        when(studentRoadmapRepository.findByStudentIdAndStatusOrderByStartedAtDesc(1L, "IN_PROGRESS"))
-                .thenReturn(List.of());
+        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L)).thenReturn(List.of());
 
         CustomException ex = assertThrows(CustomException.class, () -> roadmapService.getMyRoadmap(1L));
 
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("a fully COMPLETED roadmap is still returned, not 404'd")
+    void getMyRoadmap_CompletedRoadmap_StillReturned() {
+        // Regression guard. getMyRoadmap used to filter on status = IN_PROGRESS, so ticking off the
+        // last milestone flipped the roadmap to COMPLETED and made this endpoint 404 -- hiding the
+        // result at the exact moment the student finished it. Found in live verification; no mocked
+        // test could have caught it, since a stubbed repository returns whatever it is told.
+        StudentRoadmap finished = roadmap(1L, 2, 2);
+        finished.setStatus("COMPLETED");
+        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L)).thenReturn(List.of(finished));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
+                .thenReturn(List.of(milestone(200L, 1L, true, finished)));
+
+        var response = roadmapService.getMyRoadmap(1L);
+
+        assertEquals("COMPLETED", response.getStatus());
+        assertEquals(100.0, response.getCompletionPercentage());
     }
 
     // -------------------------------------------------------------------------------------------
