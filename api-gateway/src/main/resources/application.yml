@@ -53,6 +53,14 @@ spring:
               predicates:
                 # Singular, matching notification-service's @RequestMapping("/api/notification").
                 - Path=/api/notification/**
+            - id: organization-service
+              uri: ${ORG_SERVICE_URI:http://localhost:8087}
+              predicates:
+                # Singular, matching organization-service's @RequestMapping("/api/organization").
+                # Nothing here is in gateway.public-paths: every organization endpoint needs a
+                # valid token, because the service authorizes on the X-User-Role and X-User-Org-Id
+                # this gateway injects, and a public path forwards neither.
+                - Path=/api/organization/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -89,6 +97,12 @@ spring:
                 - Path=/api-docs/notification
               filters:
                 - RewritePath=/api-docs/notification,/api-docs
+            - id: organization-service-docs
+              uri: ${ORG_SERVICE_URI:http://localhost:8087}
+              predicates:
+                - Path=/api-docs/organization
+              filters:
+                - RewritePath=/api-docs/organization,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -131,6 +145,8 @@ springdoc:
         url: /api-docs/recommendation
       - name: notification-service
         url: /api-docs/notification
+      - name: organization-service
+        url: /api-docs/organization
 
 management:
   endpoints:

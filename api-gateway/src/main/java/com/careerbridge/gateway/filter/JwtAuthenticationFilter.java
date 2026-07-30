@@ -29,6 +29,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * The only place in CareerBridge where a JWT is verified.
@@ -69,12 +75,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
 
-        // Public paths still get wrapped, with a null id. That is what strips any X-User-Id the
-        // client sent: every downstream service trusts that header blindly and has no Spring
-        // Security, so forwarding the raw request here would let anyone act as any student with a
-        // single curl. Never replace this with a bare chain.doFilter(request, response).
+        // Public paths still get wrapped, with no identity at all. That is what strips any
+        // X-User-Id / X-User-Role / X-User-Org-Id the client sent: every downstream service trusts
+        // those headers blindly and none of them has Spring Security, so forwarding the raw request
+        // here would let anyone act as any student -- or as SUPER_ADMIN -- with a single curl.
+        // Never replace this with a bare chain.doFilter(request, response).
         if (isPublicPath(request)) {
-            chain.doFilter(new UserIdRequestWrapper(request, null), response);
+            chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(null, null, null)),
+                    response);
             return;
         }
 
@@ -87,9 +95,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = header.substring(GatewayConstants.BEARER_PREFIX.length());
 
         Long userId;
+        String role;
+        Long orgId;
         try {
             Claims claims = jwtUtil.validateToken(token);
             userId = jwtUtil.extractUserId(claims);
+            role = jwtUtil.extractRole(claims);
+            orgId = jwtUtil.extractOrgId(claims);
         } catch (ExpiredJwtException ex) {
             // Distinguished from the generic case on purpose: the frontend uses this to decide
             // whether to call /api/auth/refresh rather than bouncing the user to the login screen.
@@ -111,7 +123,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        chain.doFilter(new UserIdRequestWrapper(request, String.valueOf(userId)), response);
+        // A missing role is NOT rejected here. Every token auth-service issues carries one, but a
+        // downstream service that needs a role must decide for itself what an absent header means;
+        // failing the request at the gateway would also break the services that never read it.
+        // orgId is legitimately null (SUPER_ADMIN, or any user with no organization) and is simply
+        // forwarded as an absent header.
+        chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(userId, role, orgId)),
+                response);
+    }
+
+    /**
+     * Builds the header map the wrapper presents. Only non-null values are entered: a null value
+     * must surface downstream as an ABSENT header rather than an empty string, so that a service
+     * reading it with @RequestHeader(required = false) sees null rather than "".
+     *
+     * Case-insensitive, because the servlet API's header lookups are.
+     */
+    private static Map<String, String> identityHeaders(Long userId, String role, Long orgId) {
+        Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (userId != null) {
+            headers.put(GatewayConstants.USER_ID_HEADER, String.valueOf(userId));
+        }
+        if (role != null) {
+            headers.put(GatewayConstants.USER_ROLE_HEADER, role);
+        }
+        if (orgId != null) {
+            headers.put(GatewayConstants.USER_ORG_ID_HEADER, String.valueOf(orgId));
+        }
+        return headers;
     }
 
     private boolean isPublicPath(HttpServletRequest request) {
@@ -135,39 +174,61 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Presents X-User-Id as whatever the gateway decided, hiding anything the client sent.
+     * Presents the gateway's identity headers as whatever the gateway decided, hiding anything the
+     * client sent.
      *
      * All three header accessors must be overridden. Spring's ServletRequestHeadersAdapter -- which
      * is what turns this request into the headers the gateway proxies onward -- enumerates via
      * getHeaderNames() and then reads getHeaders(name). Overriding only getHeader(String) compiles,
      * looks correct, and is a silent no-op: the header never leaves the gateway.
      *
-     * A null userId means "no identity": the header is then reported absent rather than forwarded
-     * from the client.
+     * The security property is in MANAGED_HEADERS, not in the injected map: a managed name is
+     * removed from the client's request whether or not the gateway has a replacement for it. An
+     * earlier version of this class managed only X-User-Id, which meant a client could set
+     * X-User-Role freely and organization-service would have believed it.
      */
-    private static final class UserIdRequestWrapper extends HttpServletRequestWrapper {
+    private static final class GatewayIdentityRequestWrapper extends HttpServletRequestWrapper {
 
-        private final String userId;
+        /**
+         * Headers the gateway owns end to end. Case-insensitive, matching servlet header semantics
+         * -- otherwise "x-user-role" would slip past a check written against "X-User-Role".
+         *
+         * Anything added here is stripped from client input for free; anything NOT here is
+         * forwarded verbatim. Add a header to this set at the same moment you start trusting it
+         * downstream, never later.
+         */
+        private static final Set<String> MANAGED_HEADERS = Collections.unmodifiableSet(
+                Stream.of(GatewayConstants.USER_ID_HEADER,
+                                GatewayConstants.USER_ROLE_HEADER,
+                                GatewayConstants.USER_ORG_ID_HEADER)
+                        .collect(Collectors.toCollection(
+                                () -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
 
-        private UserIdRequestWrapper(HttpServletRequest request, String userId) {
+        /** Case-insensitive; contains only the headers the gateway actually has a value for. */
+        private final Map<String, String> injected;
+
+        private GatewayIdentityRequestWrapper(HttpServletRequest request, Map<String, String> injected) {
             super(request);
-            this.userId = userId;
+            this.injected = injected;
         }
 
         @Override
         public String getHeader(String name) {
-            if (GatewayConstants.USER_ID_HEADER.equalsIgnoreCase(name)) {
-                return userId;
+            if (MANAGED_HEADERS.contains(name)) {
+                // null when the gateway has no value: the header reads as absent, and the client's
+                // own copy is never consulted.
+                return injected.get(name);
             }
             return super.getHeader(name);
         }
 
         @Override
         public Enumeration<String> getHeaders(String name) {
-            if (GatewayConstants.USER_ID_HEADER.equalsIgnoreCase(name)) {
-                return (userId == null)
+            if (MANAGED_HEADERS.contains(name)) {
+                String value = injected.get(name);
+                return (value == null)
                         ? Collections.emptyEnumeration()
-                        : Collections.enumeration(List.of(userId));
+                        : Collections.enumeration(List.of(value));
             }
             return super.getHeaders(name);
         }
@@ -178,14 +239,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Enumeration<String> original = super.getHeaderNames();
             while (original.hasMoreElements()) {
                 String name = original.nextElement();
-                // Drop the client's own copy; ours is appended below when we have one.
-                if (!GatewayConstants.USER_ID_HEADER.equalsIgnoreCase(name)) {
+                // Drop every client-supplied copy; ours are appended below where we have them.
+                if (!MANAGED_HEADERS.contains(name)) {
                     names.add(name);
                 }
             }
-            if (userId != null) {
-                names.add(GatewayConstants.USER_ID_HEADER);
-            }
+            names.addAll(injected.keySet());
             return Collections.enumeration(names);
         }
     }

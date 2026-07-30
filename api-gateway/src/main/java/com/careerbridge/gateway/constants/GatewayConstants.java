@@ -13,6 +13,23 @@ public class GatewayConstants {
      */
     public static final String USER_ID_HEADER = "X-User-Id";
 
+    /**
+     * The caller's role, e.g. SUPER_ADMIN or ORG_ADMIN (auth-service's Role enum, as a String).
+     *
+     * Read by organization-service to make authorization decisions, so it carries exactly the same
+     * trust properties as USER_ID_HEADER above: the filter must overwrite any client-supplied value
+     * on every request. A caller who could set this header directly could act as SUPER_ADMIN and
+     * create or delete any organization.
+     */
+    public static final String USER_ROLE_HEADER = "X-User-Role";
+
+    /**
+     * The organization the caller belongs to. Legitimately absent: SUPER_ADMIN has no owning
+     * organization, and so does any user registered without one. Absent means "no organization",
+     * never "any organization" -- a downstream service must not treat a missing value as a wildcard.
+     */
+    public static final String USER_ORG_ID_HEADER = "X-User-Org-Id";
+
     /** Must match auth-service's JwtConstants.HEADER_STRING. */
     public static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -21,6 +38,16 @@ public class GatewayConstants {
 
     /** Claim carrying the numeric user id. Must match auth-service's JwtConstants.USER_ID_CLAIM. */
     public static final String USER_ID_CLAIM = "userId";
+
+    /**
+     * Claim carrying the role. Must match auth-service's JwtConstants.ROLES_CLAIM, which is the
+     * singular string "role" despite the constant's plural name -- auth-service writes exactly one
+     * role per token via user.getRole().name().
+     */
+    public static final String ROLE_CLAIM = "role";
+
+    /** Claim carrying the organization id. Must match auth-service's JwtConstants.ORG_ID_CLAIM. */
+    public static final String ORG_ID_CLAIM = "organizationId";
 
     /**
      * 401 bodies, written directly by the filter.

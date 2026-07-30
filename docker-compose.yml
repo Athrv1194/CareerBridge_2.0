@@ -194,6 +194,20 @@ services:
       retries: 12
       start_period: 60s
 
+  organization-service:
+    <<: *backend-defaults
+    build: ./organization-service
+    container_name: careerbridge-organization
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_organization
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8087/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
   api-gateway:
     build: ./api-gateway
     container_name: careerbridge-gateway
@@ -215,6 +229,7 @@ services:
       ASSESSMENT_SERVICE_URI: http://assessment-service:8083
       RECOMMENDATION_SERVICE_URI: http://recommendation-service:8084
       NOTIFICATION_SERVICE_URI: http://notification-service:8085
+      ORG_SERVICE_URI: http://organization-service:8087
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -227,6 +242,8 @@ services:
       recommendation-service:
         condition: service_healthy
       notification-service:
+        condition: service_healthy
+      organization-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
