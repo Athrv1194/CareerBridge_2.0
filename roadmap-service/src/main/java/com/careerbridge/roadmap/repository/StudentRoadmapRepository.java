@@ -17,14 +17,18 @@ public interface StudentRoadmapRepository extends JpaRepository<StudentRoadmap, 
      */
     Optional<StudentRoadmap> findByStudentIdAndRecommendationId(Long studentId, Long recommendationId);
 
-    List<StudentRoadmap> findByStudentIdOrderByStartedAtDesc(Long studentId);
-
     /**
+     * Backs GET /api/roadmap/my, which takes the first -- the newest, by the DESC ordering.
+     *
      * A List, NOT an Optional. A student who takes a second assessment gets a second recommendation
-     * and therefore a second roadmap, and the earlier one stays IN_PROGRESS -- so this legitimately
-     * matches more than one row and an Optional finder would throw
-     * IncorrectResultSizeDataAccessException. getMyRoadmap takes the first, which the DESC ordering
-     * makes the newest. Same reasoning as recommendation-service's findByUserIdAndIsActiveTrue.
+     * and therefore a second roadmap, so this legitimately matches more than one row and a
+     * single-result finder would throw IncorrectResultSizeDataAccessException on exactly the second
+     * assessment. Same reasoning as recommendation-service's findByUserIdAndIsActiveTrue.
+     *
+     * Deliberately not filtered by status. A ...AndStatusOrderByStartedAtDesc variant existed here
+     * and getMyRoadmap used it to select IN_PROGRESS only, which meant completing the last milestone
+     * flipped the roadmap to COMPLETED and 404'd the endpoint that displays it. Do not reintroduce
+     * the filter without giving the student some other way to see a finished roadmap.
      */
-    List<StudentRoadmap> findByStudentIdAndStatusOrderByStartedAtDesc(Long studentId, String status);
+    List<StudentRoadmap> findByStudentIdOrderByStartedAtDesc(Long studentId);
 }
