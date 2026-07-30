@@ -49,11 +49,21 @@ class JwtAuthenticationFilterTest {
     }
 
     private static String token(String secret, long userId, long ttlMillis) {
+        return token(secret, userId, "STUDENT", null, ttlMillis);
+    }
+
+    /**
+     * orgId is a Long rather than a long precisely so it can be null: auth-service's
+     * User.organizationId is nullable, and jjwt omits a null claim entirely, which is exactly the
+     * shape a SUPER_ADMIN's token has in production.
+     */
+    private static String token(String secret, long userId, String role, Long orgId, long ttlMillis) {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()
                 .subject("ada@careerbridge.com")
                 .claim("userId", userId)
-                .claim("role", "STUDENT")
+                .claim("role", role)
+                .claim("organizationId", orgId)
                 .issuedAt(new Date(System.currentTimeMillis() - 1000))
                 .expiration(new Date(System.currentTimeMillis() + ttlMillis))
                 .signWith(key)
@@ -67,6 +77,14 @@ class JwtAuthenticationFilterTest {
     /** The header as the downstream service would receive it. */
     private static String forwardedUserId(MockFilterChain chain) {
         return ((HttpServletRequest) chain.getRequest()).getHeader(GatewayConstants.USER_ID_HEADER);
+    }
+
+    private static String forwardedRole(MockFilterChain chain) {
+        return ((HttpServletRequest) chain.getRequest()).getHeader(GatewayConstants.USER_ROLE_HEADER);
+    }
+
+    private static String forwardedOrgId(MockFilterChain chain) {
+        return ((HttpServletRequest) chain.getRequest()).getHeader(GatewayConstants.USER_ORG_ID_HEADER);
     }
 
     @Test
@@ -197,12 +215,16 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    @DisplayName("spoofing on a protected path: the client's X-User-Id is overwritten by the token's")
+    @DisplayName("spoofing on a protected path: the client's identity headers are all overwritten")
     void filter_SpoofedUserIdHeader_IsOverwritten() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/student/profile");
         request.addHeader(GatewayConstants.AUTHORIZATION_HEADER,
                 GatewayConstants.BEARER_PREFIX + validToken());
         request.addHeader(GatewayConstants.USER_ID_HEADER, "999");
+        // The privilege-escalation attempt organization-service's RBAC depends on us blocking: a
+        // STUDENT token plus a hand-set SUPER_ADMIN role. Only the token may decide the role.
+        request.addHeader(GatewayConstants.USER_ROLE_HEADER, "SUPER_ADMIN");
+        request.addHeader(GatewayConstants.USER_ORG_ID_HEADER, "777");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
@@ -213,16 +235,29 @@ class JwtAuthenticationFilterTest {
                         ((HttpServletRequest) chain.getRequest())
                                 .getHeaders(GatewayConstants.USER_ID_HEADER))
                 .contains("999"));
+
+        assertEquals("STUDENT", forwardedRole(chain),
+                "a client-supplied role must never survive; the token said STUDENT");
+        // validToken() carries no organizationId, so the spoofed 777 must leave no trace at all.
+        assertNull(forwardedOrgId(chain), "a client-supplied org id must never survive");
+        assertFalse(Collections.list(
+                        ((HttpServletRequest) chain.getRequest()).getHeaderNames()).stream()
+                        .anyMatch(GatewayConstants.USER_ORG_ID_HEADER::equalsIgnoreCase),
+                "X-User-Org-Id must not appear in getHeaderNames() when the token has no org");
     }
 
     @Test
-    @DisplayName("spoofing on a public path: the client's X-User-Id is stripped, not forwarded")
+    @DisplayName("spoofing on a public path: every identity header is stripped, not forwarded")
     void filter_SpoofedUserIdOnPublicPath_IsStripped() throws Exception {
         // The one that fails if anyone "optimises" the public branch into a bare
-        // chain.doFilter(request, response). Downstream services trust X-User-Id blindly and have
-        // no Spring Security, so forwarding the raw request here is full impersonation via curl.
+        // chain.doFilter(request, response). Downstream services trust these headers blindly and
+        // have no Spring Security, so forwarding the raw request here is full impersonation via
+        // curl -- and, since X-User-Role landed, privilege escalation rather than just identity
+        // theft.
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/recommendation/careers");
         request.addHeader(GatewayConstants.USER_ID_HEADER, "999");
+        request.addHeader(GatewayConstants.USER_ROLE_HEADER, "SUPER_ADMIN");
+        request.addHeader(GatewayConstants.USER_ORG_ID_HEADER, "777");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 
@@ -231,10 +266,71 @@ class JwtAuthenticationFilterTest {
         assertEquals(200, response.getStatus());
         assertNotNull(chain.getRequest(), "public paths still reach the chain");
         assertNull(forwardedUserId(chain), "a client-supplied id must never survive");
-        assertFalse(Collections.list(
-                        ((HttpServletRequest) chain.getRequest()).getHeaderNames()).stream()
-                        .anyMatch(GatewayConstants.USER_ID_HEADER::equalsIgnoreCase),
+        assertNull(forwardedRole(chain), "a client-supplied role must never survive");
+        assertNull(forwardedOrgId(chain), "a client-supplied org id must never survive");
+
+        List<String> names = Collections.list(
+                ((HttpServletRequest) chain.getRequest()).getHeaderNames());
+        assertFalse(names.stream().anyMatch(GatewayConstants.USER_ID_HEADER::equalsIgnoreCase),
                 "X-User-Id must not appear in getHeaderNames() either");
+        assertFalse(names.stream().anyMatch(GatewayConstants.USER_ROLE_HEADER::equalsIgnoreCase),
+                "X-User-Role must not appear in getHeaderNames() either");
+        assertFalse(names.stream().anyMatch(GatewayConstants.USER_ORG_ID_HEADER::equalsIgnoreCase),
+                "X-User-Org-Id must not appear in getHeaderNames() either");
+    }
+
+    @Test
+    @DisplayName("valid token: role and org id are injected alongside the user id")
+    void filter_ValidToken_AddsRoleAndOrgIdHeaders() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/organization/1");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER, GatewayConstants.BEARER_PREFIX
+                + token(SECRET, 7L, "ORG_ADMIN", 3L, 900_000));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertEquals("7", forwardedUserId(chain));
+        assertEquals("ORG_ADMIN", forwardedRole(chain));
+        assertEquals("3", forwardedOrgId(chain));
+
+        // Same all-three-accessors rule as the user id: getHeaders/getHeaderNames are what the
+        // gateway's proxy step actually reads, so injecting via getHeader alone would be invisible.
+        HttpServletRequest forwarded = (HttpServletRequest) chain.getRequest();
+        assertEquals("ORG_ADMIN",
+                Collections.list(forwarded.getHeaders(GatewayConstants.USER_ROLE_HEADER)).get(0));
+        assertEquals("3",
+                Collections.list(forwarded.getHeaders(GatewayConstants.USER_ORG_ID_HEADER)).get(0));
+
+        List<String> names = Collections.list(forwarded.getHeaderNames());
+        assertTrue(names.stream().anyMatch(GatewayConstants.USER_ROLE_HEADER::equalsIgnoreCase),
+                "X-User-Role must appear in getHeaderNames()");
+        assertTrue(names.stream().anyMatch(GatewayConstants.USER_ORG_ID_HEADER::equalsIgnoreCase),
+                "X-User-Org-Id must appear in getHeaderNames()");
+    }
+
+    @Test
+    @DisplayName("token with no organizationId: the header is absent, not empty")
+    void filter_TokenWithoutOrgId_OmitsOrgIdHeader() throws Exception {
+        // A SUPER_ADMIN belongs to no organization. Forwarding "" or "null" here would make
+        // @RequestHeader(required = false) Long bind-fail with a 400 instead of handing the service
+        // a clean null, so the header must genuinely not be present.
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/organization");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER, GatewayConstants.BEARER_PREFIX
+                + token(SECRET, 1L, "SUPER_ADMIN", null, 900_000));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals("SUPER_ADMIN", forwardedRole(chain));
+        assertNull(forwardedOrgId(chain));
+        assertFalse(Collections.list(
+                        ((HttpServletRequest) chain.getRequest())
+                                .getHeaders(GatewayConstants.USER_ORG_ID_HEADER))
+                        .iterator().hasNext(),
+                "getHeaders must be empty, not a single empty string");
     }
 
     @Test
