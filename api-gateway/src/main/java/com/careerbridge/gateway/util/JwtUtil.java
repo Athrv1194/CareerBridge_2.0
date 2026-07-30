@@ -70,4 +70,34 @@ public class JwtUtil {
     public Long extractUserId(Claims claims) {
         return claims.get(GatewayConstants.USER_ID_CLAIM, Long.class);
     }
+
+    /**
+     * Reads the role that downstream services receive as X-User-Role.
+     *
+     * auth-service writes this with user.getRole().name(), so it is already a plain String and
+     * needs no widening -- but the typed accessor is used anyway for symmetry, and because it
+     * fails loudly if the claim ever changes shape (a list of roles, say) rather than throwing a
+     * ClassCastException at the call site.
+     *
+     * @return the role name, or null when the claim is absent. A null role reaches downstream
+     *         services as an absent header, which their authorization checks must reject.
+     */
+    public String extractRole(Claims claims) {
+        return claims.get(GatewayConstants.ROLE_CLAIM, String.class);
+    }
+
+    /**
+     * Reads the caller's organization id, forwarded as X-User-Org-Id.
+     *
+     * Same Integer/Long widening trap as extractUserId -- auth-service writes a Long, JSON has only
+     * "number", and Jackson hands back an Integer for anything under 2^31. The typed accessor
+     * widens; a (Long) cast would throw for every real organization id.
+     *
+     * @return the id, or null. Null is a normal, expected value here rather than an error: a
+     *         SUPER_ADMIN belongs to no single organization, and auth-service's User.organizationId
+     *         is nullable. The filter forwards no header at all in that case.
+     */
+    public Long extractOrgId(Claims claims) {
+        return claims.get(GatewayConstants.ORG_ID_CLAIM, Long.class);
+    }
 }

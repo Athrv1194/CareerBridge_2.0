@@ -67,6 +67,38 @@ class JwtUtilTest {
     }
 
     @Test
+    @DisplayName("role and organizationId are extracted with the same typed accessors")
+    void extractRoleAndOrgId_ValidToken_ReturnsClaims() {
+        String token = Jwts.builder()
+                .subject("admin@careerbridge.com")
+                .claim("userId", 7L)
+                .claim("role", "ORG_ADMIN")
+                .claim("organizationId", 3L)
+                .issuedAt(new Date(System.currentTimeMillis() - 1000))
+                .expiration(new Date(System.currentTimeMillis() + 900_000))
+                .signWith(keyFor(SECRET))
+                .compact();
+
+        Claims claims = jwtUtil.validateToken(token);
+
+        assertEquals("ORG_ADMIN", jwtUtil.extractRole(claims));
+        // The Integer/Long widening trap: JSON has only "number", so Jackson hands back an Integer
+        // for any id under 2^31 and a (Long) cast would throw here for every real organization.
+        assertEquals(3L, jwtUtil.extractOrgId(claims));
+    }
+
+    @Test
+    @DisplayName("absent organizationId claim yields null, not an exception")
+    void extractOrgId_ClaimMissing_ReturnsNull() {
+        // The SUPER_ADMIN shape: auth-service's User.organizationId is nullable, and jjwt omits a
+        // null claim entirely rather than writing JSON null.
+        Claims claims = jwtUtil.validateToken(token(SECRET, 42L, 900_000));
+
+        assertNull(jwtUtil.extractOrgId(claims));
+        assertEquals("STUDENT", jwtUtil.extractRole(claims));
+    }
+
+    @Test
     @DisplayName("HS384, not HS256: jjwt picks the variant from the 49-byte key length")
     void signedToken_UsesHS384_NotHS256() {
         // auth-service calls signWith(key) with no algorithm argument, so the key length decides.
