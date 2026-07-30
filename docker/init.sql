@@ -1,4 +1,4 @@
--- Creates the five CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
+-- Creates the seven CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
 -- postgres image runs it once, on first boot only (empty data directory). Re-running it by hand
 -- against a live server is safe -- see the guard below.
 --
@@ -35,3 +35,7 @@ SELECT 'CREATE DATABASE careerbridge_notification'
 -- organization-service (P1). Multi-tenancy: organizations and their departments.
 SELECT 'CREATE DATABASE careerbridge_organization'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_organization')\gexec
+
+-- roadmap-service (P1). Career roadmap templates and per-student milestone progress.
+SELECT 'CREATE DATABASE careerbridge_roadmap'
+ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_roadmap')\gexec
