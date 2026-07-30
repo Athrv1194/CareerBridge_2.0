@@ -31,3 +31,7 @@ SELECT 'CREATE DATABASE careerbridge_recommendation'
 -- is deliberate and already committed.
 SELECT 'CREATE DATABASE careerbridge_notification'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_notification')\gexec
+
+-- organization-service (P1). Multi-tenancy: organizations and their departments.
+SELECT 'CREATE DATABASE careerbridge_organization'
+ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_organization')\gexec
