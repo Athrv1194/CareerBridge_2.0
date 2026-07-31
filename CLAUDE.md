@@ -324,3 +324,50 @@ API-gateway specifics worth knowing before touching it:
 - **notification-service's `application-local.yml` needs three secrets, not one**: the PostgreSQL password, the MongoDB Atlas `mongodb+srv://` URI (embeds its own user/password), and a Gmail **App Password** (16 chars, requires 2FA; the account password will not authenticate). Every team member needs their own, or `mvnw clean install` fails on `contextLoads`.
 - **notification-service end-to-end is unverified**: `student.registered` → contact row → `recommendation.generated` → real email + Mongo document. Needs RabbitMQ running. Everything below the broker is proven — Postgres DDL, Atlas connectivity (live `ping`), and all three REST endpoints were exercised against a running instance.
 - **roadmap-service's event leg is unverified against a live broker**: `recommendation.generated` → `careerbridge.roadmap.queue` → a generated roadmap. Everything below the broker is proven (Postgres DDL, the seeder run twice for idempotency, 16 unit tests), and `contextLoads` passes with RabbitMQ *down*, so a green build says nothing here. Verify with the stack up: check the queue exists in the RabbitMQ UI with a non-zero delivered count, then `GET /api/roadmap/my` after an assessment submit.
+
+## Admin Module — feature/admin-module (assessment-service additions)
+
+### assessment-service changes
+
+**Question entity (model/Question.java)**
+- Added `isActive` (Boolean, @Builder.Default=true, NOT NULL DEFAULT true) — DDL-auto backfilled all 22 rows
+- Added `updatedAt` (LocalDateTime, @UpdateTimestamp)
+- No DataMigrationRunner — @Builder.Default + PostgreSQL column DEFAULT handled backfill automatically
+
+**QuestionRepository additions (Step 8)**
+- Removed unfiltered finders; replaced with:
+  - `findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc` — student pool + validation
+  - `countByCategoryIdAndIsActiveTrue` — ≥N guard
+  - `findAllByOrderByCategoryIdAscOrderIndexAsc` — admin listing (all questions, including inactive)
+- Deleting the old finders (not adding alongside) enforced the migration as a compile error — caught 12 stale references immediately
+
+**Admin DTOs**
+- AdminOptionRequest: text, weight (Integer 0–3, @NotNull @Min(0) @Max(3))
+- AdminOptionResponse: id, text, weight
+- AdminQuestionRequest: text, categoryId, orderIndex, isActive (@Builder.Default=true), options (@Size(min=2,max=4), @Valid)
+- AdminQuestionResponse: id, categoryId, categoryName, text, orderIndex, isActive, options, createdAt, updatedAt
+- isCorrect was deliberately NOT used — assessment-service uses a graded weight model (0–3), not binary correct/incorrect. Seed data confirmed: 0 violations of exactly-one-max-weight across all 22 questions.
+
+**AdminQuestionService + AdminQuestionServiceImpl**
+- 6 methods: addQuestion, editQuestion, getQuestion, listQuestions(categoryId nullable), activateQuestion, deactivateQuestion
+- RBAC: SUPER_ADMIN and ORG_ADMIN only; others throw CustomException 403 "Only SUPER_ADMIN or ORG_ADMIN may manage the question bank"
+- Exactly-one-max-weight guard on addQuestion AND editQuestion — uses `.intValue() == AssessmentConstants.MAX_OPTION_WEIGHT`, never ==
+- editQuestion: full option replace (deleteByQuestionId then save new). Safe because AttemptAnswer stores awarded weight, not a live FK to Option
+- Weight guard runs BEFORE deleteByQuestionId — a rejected edit cannot strand a question with zero options
+- deactivateQuestion: soft-only, logs WARN if category drops below MIN_QUESTIONS_PER_CATEGORY, does not hard-refuse
+- No DELETE endpoint — deactivation is permanent soft-retire to protect historical AttemptAnswer rows
+- listQuestions: 3 queries flat (questions → categories → options), assembled in memory. Uses findByQuestionIdInOrderByOrderIndex scoped to fetched IDs
+- Option entity uses Long questionId (not @ManyToOne), field is optionText, no built-in delete method → added deleteByQuestionId to OptionRepository
+
+**AdminQuestionController** (`/api/assessment/admin`)
+- GET /questions, GET /questions/{id}, POST /questions (201), PUT /questions/{id} (200), PATCH /questions/{id}/activate (204), PATCH /questions/{id}/deactivate (204)
+- All read X-User-Role header (required). No X-User-Id, no X-User-Org-Id (question bank is not org-scoped)
+- standalone MockMvc in tests (not @WebMvcTest) — matches every other controller test in the project; real LocalValidatorFactoryBean wired so @Valid genuinely fires
+
+**Test counts**
+- AdminQuestionServiceTest: 23 tests
+- AdminQuestionControllerTest: 11 tests
+- AssessmentServiceTest: 17 (pre-existing + Step 8 additions, unaffected)
+- ScoringEngineTest: 7 (unaffected)
+- AssessmentServiceApplicationTests: 1 (contextLoads)
+- Total assessment-service: 59/59 green

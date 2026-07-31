@@ -1,0 +1,46 @@
+package com.careerbridge.auth.service;
+
+import com.careerbridge.auth.dto.AdminStatsResponse;
+import com.careerbridge.auth.dto.UserSummaryResponse;
+
+import java.util.List;
+
+/**
+ * Platform user management for SUPER_ADMIN and ORG_ADMIN.
+ *
+ * Every method takes callerRole as its first argument and enforces authorization itself. That is
+ * deliberate and matches organization-service, roadmap-service and prs-service: the gateway knows
+ * who the caller is but nothing about what they may reach, and a controller that decided this would
+ * put the rule one layer away from the data it protects.
+ *
+ * callerOrgId is nullable throughout -- a SUPER_ADMIN belongs to no organization, so the gateway
+ * forwards no X-User-Org-Id header for them.
+ */
+public interface AdminUserService {
+
+    /**
+     * SUPER_ADMIN sees every active user; ORG_ADMIN sees only their own organization's.
+     *
+     * roleFilter is optional: null or blank means every role. An unrecognised value is a 400 rather
+     * than an empty list, so a typo'd filter is not mistaken for "no users match".
+     */
+    List<UserSummaryResponse> listUsers(String callerRole, Long callerOrgId, String roleFilter);
+
+    UserSummaryResponse getUserById(String callerRole, Long callerOrgId, Long targetUserId);
+
+    /**
+     * SUPER_ADMIN only -- an ORG_ADMIN who could grant roles could grant themselves SUPER_ADMIN.
+     *
+     * callerId is taken so the caller cannot change their OWN role: the last SUPER_ADMIN demoting
+     * themselves leaves the platform with no administrator and no API path back.
+     */
+    UserSummaryResponse changeUserRole(String callerRole, Long callerId, Long targetUserId, String newRole);
+
+    /** Takes callerId for the same self-lockout reason as changeUserRole. */
+    UserSummaryResponse deactivateUser(String callerRole, Long callerId, Long callerOrgId, Long targetUserId);
+
+    UserSummaryResponse activateUser(String callerRole, Long callerOrgId, Long targetUserId);
+
+    /** Counts are platform-wide for a SUPER_ADMIN and organization-scoped for an ORG_ADMIN. */
+    AdminStatsResponse getPlatformStats(String callerRole, Long callerOrgId);
+}
