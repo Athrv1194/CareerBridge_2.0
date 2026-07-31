@@ -69,7 +69,10 @@ public class Question {
      * otherwise write null straight past the field initialiser.
      */
     @Builder.Default
-    @Column(name = "is_active", nullable = false, columnDefinition = "boolean not null default true")
+    // nullable is NOT set here: columnDefinition already carries "not null", and adding
+    // nullable = false made Hibernate emit "boolean not null default true not null" -- accepted by
+    // PostgreSQL, but duplicated.
+    @Column(name = "is_active", columnDefinition = "boolean not null default true")
     private Boolean isActive = true;
 
     @CreationTimestamp
@@ -77,10 +80,31 @@ public class Question {
     private LocalDateTime createdAt;
 
     /**
-     * Null for every seeded question until an admin first edits it: @UpdateTimestamp fires only on
-     * Hibernate's own update path, and data.sql bypasses Hibernate entirely. That is the honest
-     * value -- the row genuinely has never been updated.
+     * The DEFAULT in columnDefinition is REQUIRED and must not be simplified away.
+     *
+     * Hibernate marks an @UpdateTimestamp column NOT NULL in generated DDL and there is no way to
+     * talk it out of that: @Column(nullable = true) does not override it, and neither does a bare
+     * columnDefinition -- Hibernate appends its own "not null" after whatever is written here.
+     * Both were tried against a live database; the generator wins each time.
+     *
+     * So `alter table questions add column updated_at timestamp(6) not null` is what gets emitted,
+     * and that cannot apply to a table already holding rows -- PostgreSQL rejects it with
+     * "contains null values". A DEFAULT is the one thing that makes the statement legal, because
+     * PostgreSQL then backfills existing rows as part of the same ALTER. Same technique as
+     * is_active directly above.
+     *
+     * What made this dangerous rather than merely broken: ddl-auto logs the failed ALTER as a WARN
+     * and carries on, so the service starts HEALTHY with the column simply missing, and every query
+     * mapping Question then fails at runtime with "column q1_0.updated_at does not exist" --
+     * including the student-facing endpoints, not just the admin surface. Nothing in the test suite
+     * catches it: unit tests mock the repository, and contextLoads never queries questions. It
+     * surfaced only on a live request.
+     *
+     * Consequence to know: the 22 seeded questions carry the migration timestamp rather than null,
+     * so updated_at reads as "last known change" rather than "an admin edited this". That matches
+     * the common convention of seeding updated_at alongside created_at.
      */
     @UpdateTimestamp
+    @Column(name = "updated_at", columnDefinition = "timestamp(6) not null default now()")
     private LocalDateTime updatedAt;
 }
