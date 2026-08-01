@@ -147,11 +147,11 @@ class AssessmentServiceTest {
         request.setCategoryId(CATEGORY_ID);
 
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.countByCategoryId(CATEGORY_ID)).thenReturn(8);
+        when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(8);
         when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
                 USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(attemptRepository.save(any(AssessmentAttempt.class))).thenReturn(inProgressAttempt());
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(pool);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(pool);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(pool));
 
@@ -193,11 +193,11 @@ class AssessmentServiceTest {
         request.setCategoryId(CATEGORY_ID);
 
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.countByCategoryId(CATEGORY_ID)).thenReturn(10);
+        when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(10);
         when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
                 USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(attemptRepository.save(any(AssessmentAttempt.class))).thenReturn(inProgressAttempt());
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(pool);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(pool);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(pool));
 
@@ -222,7 +222,7 @@ class AssessmentServiceTest {
         request.setCategoryId(CATEGORY_ID);
 
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.countByCategoryId(CATEGORY_ID)).thenReturn(5);
+        when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(5);
         when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
                 USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressAttempt()));
@@ -241,7 +241,7 @@ class AssessmentServiceTest {
         request.setCategoryId(CATEGORY_ID);
 
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.countByCategoryId(CATEGORY_ID)).thenReturn(3);
+        when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(3);
 
         CustomException ex = assertThrows(CustomException.class,
                 () -> assessmentService.startAttempt(USER_ID, request));
@@ -258,7 +258,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(questions));
         when(careerPathRepository.findAll()).thenReturn(List.of(
@@ -309,7 +309,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(questions));
         // Five careers against TOP_CAREERS_TO_RECOMMEND = 3, so "all" and "top N" cannot coincide.
@@ -359,7 +359,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(questions));
         when(careerPathRepository.findAll()).thenReturn(List.of());
@@ -391,7 +391,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(questions));
 
@@ -414,7 +414,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(pool);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(pool);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(pool));
 
@@ -437,7 +437,7 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
-        when(questionRepository.findByCategoryIdOrderByOrderIndex(CATEGORY_ID)).thenReturn(questions);
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
                 .thenReturn(optionsFor(questions));
 
@@ -537,6 +537,47 @@ class AssessmentServiceTest {
                 () -> assessmentService.getQuestions(CATEGORY_ID));
 
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
-        verify(questionRepository, never()).findByCategoryIdOrderByOrderIndex(any());
+        verify(questionRepository, never()).findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(any());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // ADMIN MODULE: Question.isActive. These pin the half of the filter that has no visible symptom
+    // -- the student flow silently serving, or mis-scoring against, retired questions.
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getQuestions: the preview reads only active questions")
+    void getQuestions_ReadsOnlyActiveQuestions() {
+        when(categoryRepository.existsById(CATEGORY_ID)).thenReturn(true);
+        // Empty on purpose: loadOptions short-circuits on an empty question list, so stubbing the
+        // option repository here would be an UnnecessaryStubbing failure under strict stubs.
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID))
+                .thenReturn(List.of());
+
+        assessmentService.getQuestions(CATEGORY_ID);
+
+        // The unfiltered finder no longer exists on the repository, so this is really asserting that
+        // the filtered one is the only path -- kept explicit so a future reintroduction is caught.
+        verify(questionRepository).findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID);
+    }
+
+    @Test
+    @DisplayName("startAttempt: the minimum-questions guard counts active questions only")
+    void startAttempt_GuardCountsActiveOnly() {
+        // A category holding 6 questions of which only 3 are active must fail the >= 5 guard. If the
+        // count ignored isActive it would pass here, then draw a 3-question pool and score the
+        // student against the fixed maxPossibleScore of 15 -- a silent 60% ceiling.
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(3);
+
+        AssessmentRequest request = new AssessmentRequest();
+        request.setCategoryId(CATEGORY_ID);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> assessmentService.startAttempt(USER_ID, request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        assertTrue(ex.getMessage().contains("too few questions"));
+        verify(attemptRepository, never()).save(any());
     }
 }

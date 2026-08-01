@@ -208,6 +208,65 @@ services:
       retries: 12
       start_period: 60s
 
+  roadmap-service:
+    <<: *backend-defaults
+    build: ./roadmap-service
+    container_name: careerbridge-roadmap
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_roadmap
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8088/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Longer than the other backends: RoadmapDataSeeder runs as a CommandLineRunner after ddl-auto
+      # and writes 7 templates plus 47 milestones before the app reports ready on first boot.
+      start_period: 90s
+
+  prs-service:
+    <<: *backend-defaults
+    build: ./prs-service
+    container_name: careerbridge-prs
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_prs
+      # One of the two synchronous service-to-service calls in the stack (recruiter-service makes
+      # the other two). application.yml defaults this to localhost:8082 so `mvnw spring-boot:run`
+      # works on a host; inside the compose network the container name is what resolves.
+      # student-service publishes no host port, which is fine -- this call never leaves the network.
+      STUDENT_SERVICE_URL: http://student-service:8082
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8089/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Shorter than roadmap-service's 90s: no seeder here, every row is created by an event.
+      start_period: 30s
+
+  recruiter-service:
+    <<: *backend-defaults
+    build: ./recruiter-service
+    container_name: careerbridge-recruiter
+    # No ports entry, like every other backend service. api-gateway is the only component that
+    # validates a JWT; this service trusts X-User-Id/X-User-Role blindly, so a published host port
+    # would let anyone post jobs or read the candidate pool as any role.
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_recruiter
+      # Two synchronous calls, both inside the compose network and neither through the gateway:
+      # student-service for the public candidate pool, prs-service for candidate scores. Both
+      # default to localhost in application.yml so `mvnw spring-boot:run` works on a host.
+      STUDENT_SERVICE_URL: http://student-service:8082
+      PRS_SERVICE_URL: http://prs-service:8089
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8090/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Same as prs-service: no seeder, every row comes from a controller call.
+      start_period: 30s
+
   api-gateway:
     build: ./api-gateway
     container_name: careerbridge-gateway
@@ -230,6 +289,9 @@ services:
       RECOMMENDATION_SERVICE_URI: http://recommendation-service:8084
       NOTIFICATION_SERVICE_URI: http://notification-service:8085
       ORG_SERVICE_URI: http://organization-service:8087
+      ROADMAP_SERVICE_URI: http://roadmap-service:8088
+      PRS_SERVICE_URI: http://prs-service:8089
+      RECRUITER_SERVICE_URI: http://recruiter-service:8090
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -244,6 +306,12 @@ services:
       notification-service:
         condition: service_healthy
       organization-service:
+        condition: service_healthy
+      roadmap-service:
+        condition: service_healthy
+      prs-service:
+        condition: service_healthy
+      recruiter-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]

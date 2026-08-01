@@ -29,7 +29,11 @@
       "Read(//c/Users/Atharva/.m2/repository/com/fasterxml/jackson/core/jackson-databind/**)",
       "Bash(./mvnw -o dependency:tree)",
       "Bash(git merge *)",
-      "Bash(cd D:/Software/CareerBridge_2.0 && git show main:.claude/settings.local.json > /tmp/main_settings.json 2>&1 && echo \"exists on main\" || echo \"does not exist on main\" *)"
+      "Bash(cd D:/Software/CareerBridge_2.0 && git show main:.claude/settings.local.json > /tmp/main_settings.json 2>&1 && echo \"exists on main\" || echo \"does not exist on main\" *)",
+      "Bash(git pull *)",
+      "Bash(docker exec *)",
+      "Bash(python -c ' *)",
+      "Bash(python -)"
     ]
   }
 }
