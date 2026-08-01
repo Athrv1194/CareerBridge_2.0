@@ -77,6 +77,15 @@ spring:
                 # injects, and /{studentId} and /leaderboard authorize on X-User-Role -- a public
                 # path forwards neither.
                 - Path=/api/prs/**
+            - id: recruiter-service
+              uri: ${RECRUITER_SERVICE_URI:http://localhost:8090}
+              predicates:
+                # Singular, matching recruiter-service's @RequestMapping("/api/recruiter").
+                # Nothing here is in gateway.public-paths, including the GET /api/recruiter/jobs
+                # job board: every endpoint authorizes on the X-User-Role this gateway injects, and
+                # a public path forwards no identity headers at all -- it would arrive with no role
+                # and 400 on the required header rather than being usefully public.
+                - Path=/api/recruiter/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -131,6 +140,12 @@ spring:
                 - Path=/api-docs/prs
               filters:
                 - RewritePath=/api-docs/prs,/api-docs
+            - id: recruiter-service-docs
+              uri: ${RECRUITER_SERVICE_URI:http://localhost:8090}
+              predicates:
+                - Path=/api-docs/recruiter
+              filters:
+                - RewritePath=/api-docs/recruiter,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -191,6 +206,8 @@ springdoc:
         url: /api-docs/roadmap
       - name: prs-service
         url: /api-docs/prs
+      - name: recruiter-service
+        url: /api-docs/recruiter
 
 management:
   endpoints:
