@@ -112,7 +112,8 @@ public class AssessmentServiceImpl implements AssessmentService {
             throw new CustomException("Category not found", HttpStatus.NOT_FOUND);
         }
         // Preview returns the whole bank, shuffled. Only startAttempt narrows to the scored subset.
-        return toQuestionDtos(shuffled(questionRepository.findByCategoryIdOrderByOrderIndex(categoryId)));
+        return toQuestionDtos(shuffled(
+                questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(categoryId)));
     }
 
     @Override
@@ -123,7 +124,11 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         // Fail before the student answers anything: a thin category cannot produce a meaningful
         // percentage, and an empty one would divide into a 0% score that looks like a real result.
-        int questionCount = safeCount(questionRepository.countByCategoryId(category.getId()));
+        // Counts ACTIVE questions only, matching selectQuestionsForAttempt's pool exactly. If this
+        // counted retired questions the guard could pass on 6 while the pool served 3, and the fixed
+        // maxPossibleScore of 15 would cap the student at 60% with nothing logged.
+        int questionCount = safeCount(
+                questionRepository.countByCategoryIdAndIsActiveTrue(category.getId()));
         if (questionCount < AssessmentConstants.MIN_QUESTIONS_PER_CATEGORY) {
             throw new CustomException(
                     "Category '" + category.getName() + "' has too few questions to assess",
@@ -175,7 +180,8 @@ public class AssessmentServiceImpl implements AssessmentService {
 
         // Two queries for the whole category, then every per-answer check runs in memory.
         // Looking each question and option up individually would be 2 queries per answer.
-        List<Question> questions = questionRepository.findByCategoryIdOrderByOrderIndex(category.getId());
+        List<Question> questions =
+                questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(category.getId());
         Map<Long, Option> optionsById = loadOptions(questions).stream()
                 .collect(Collectors.toMap(Option::getId, Function.identity()));
         Set<Long> validQuestionIds = questions.stream().map(Question::getId).collect(Collectors.toSet());
@@ -314,7 +320,8 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     /** Draws QUESTIONS_PER_ATTEMPT questions at random from the category. */
     private List<Question> selectQuestionsForAttempt(Long categoryId) {
-        List<Question> pool = shuffled(questionRepository.findByCategoryIdOrderByOrderIndex(categoryId));
+        List<Question> pool = shuffled(
+                questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(categoryId));
         return pool.size() <= AssessmentConstants.QUESTIONS_PER_ATTEMPT
                 ? pool
                 : new ArrayList<>(pool.subList(0, AssessmentConstants.QUESTIONS_PER_ATTEMPT));
@@ -437,7 +444,7 @@ public class AssessmentServiceImpl implements AssessmentService {
         return StringUtils.hasText(json) ? MAPPER.readValue(json, CAREER_SCORES_TYPE) : Map.of();
     }
 
-    /** countByCategoryId is declared as Integer, so a null from an empty table reads as zero. */
+    /** countByCategoryIdAndIsActiveTrue is an Integer, so a null from an empty table reads as zero. */
     private int safeCount(Integer count) {
         return count == null ? 0 : count;
     }

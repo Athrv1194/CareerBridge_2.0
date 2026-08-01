@@ -53,6 +53,11 @@ public class StudentEventConsumer {
                     .email(event.getEmail())
                     .firstName(event.getFirstName())
                     .lastName(event.getLastName())
+                    // Stored so getPublicProfiles can return only STUDENT profiles. This event is
+                    // published for every registration regardless of role, so a profile is created
+                    // for recruiters and admins too -- the role is the only thing that tells them
+                    // apart afterwards.
+                    .role(event.getRole())
                     .profileCompletionPercentage(0)
                     .build());
 
