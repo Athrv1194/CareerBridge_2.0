@@ -272,4 +272,55 @@ class AuthServiceTest {
         assertEquals(Role.STUDENT, saved.getValue().getRole());
         verify(rabbitTemplate).convertAndSend(anyString(), eq("student.registered"), any(Object.class));
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // ADMIN MODULE: a user deactivated through /api/auth/admin/users/{id}/deactivate must not be
+    // able to authenticate. Both tests below pin behaviour that already existed before the admin
+    // module -- they exist because the admin endpoints are what make deactivation reachable, and
+    // nothing was covering the gate.
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("login: a deactivated user is refused with the same generic 401 as a bad password")
+    void login_DeactivatedUser_Throws401() {
+        User deactivated = persistedUser();
+        deactivated.setIsDeleted(true);
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(deactivated));
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.login(loginRequest));
+
+        // 401 and "Invalid email or password", NOT a distinct 403 "account deactivated". A specific
+        // message would turn login into a user-enumeration oracle: an attacker could learn both that
+        // an email exists and that it is deactivated. Deliberate -- do not "improve" this message.
+        assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatus());
+        assertEquals("Invalid email or password", ex.getMessage());
+
+        // The gate runs before the password is even checked, so a deactivated account cannot be used
+        // as a password oracle either.
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(jwtConfig, never()).generateAccessToken(any(User.class));
+    }
+
+    @Test
+    @DisplayName("refresh: a deactivated user's existing refresh token stops working too")
+    void refreshToken_DeactivatedUser_Throws401() {
+        // Without this the deactivation would only take effect when the access token expired, and a
+        // valid refresh token would keep minting new ones for up to its full lifetime.
+        User deactivated = persistedUser();
+        deactivated.setIsDeleted(true);
+        when(refreshTokenRepository.findByToken("refresh-token")).thenReturn(Optional.of(
+                RefreshToken.builder()
+                        .token("refresh-token")
+                        .userId(1L)
+                        .isRevoked(false)
+                        .expiryDate(LocalDateTime.now().plusDays(7))
+                        .build()));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(deactivated));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> authService.refreshToken("refresh-token"));
+
+        assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatus());
+        verify(jwtConfig, never()).generateAccessToken(any(User.class));
+    }
 }
