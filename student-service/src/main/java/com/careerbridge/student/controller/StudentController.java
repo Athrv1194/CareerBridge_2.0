@@ -3,6 +3,7 @@ package com.careerbridge.student.controller;
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
 import com.careerbridge.student.dto.ProjectDto;
+import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
 import com.careerbridge.student.dto.StudentProfileRequest;
 import com.careerbridge.student.dto.StudentProfileResponse;
@@ -33,6 +34,7 @@ import java.util.List;
 public class StudentController {
 
     private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String USER_ROLE_HEADER = "X-User-Role";
 
     private final StudentService studentService;
 
@@ -85,5 +87,16 @@ public class StudentController {
             @RequestHeader(USER_ID_HEADER) Long userId,
             @Valid @RequestBody CertificateDto dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(studentService.addCertificate(userId, dto));
+    }
+
+    /**
+     * Candidate search source for recruiter-service, called directly on the compose network (not
+     * through the gateway with the caller's own token). RBAC lives in the service, not here --
+     * this only forwards the caller's role.
+     */
+    @GetMapping("/profiles/public")
+    public ResponseEntity<List<PublicStudentProfileResponse>> getPublicProfiles(
+            @RequestHeader(USER_ROLE_HEADER) String callerRole) {
+        return ResponseEntity.ok(studentService.getPublicProfiles(callerRole));
     }
 }

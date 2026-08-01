@@ -17,8 +17,10 @@ import java.time.LocalDateTime;
  * payload from the method signature without ever reading the sender's __TypeId__ header.
  *
  * role is a String, not an enum copy: wire-identical ("STUDENT"), but a duplicated enum would make
- * Jackson hard-fail every event the day auth-service adds a seventh role. This service does not
- * store the role anyway.
+ * Jackson hard-fail every event the day auth-service adds a seventh role. It IS stored, on
+ * StudentProfile.role -- auth-service publishes this event for every registration regardless of
+ * role, so the role is the only thing that distinguishes a real student's profile from a
+ * recruiter's or an admin's afterwards.
  */
 @Data
 @Builder

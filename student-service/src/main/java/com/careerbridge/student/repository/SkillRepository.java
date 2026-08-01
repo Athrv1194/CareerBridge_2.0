@@ -10,4 +10,7 @@ public interface SkillRepository extends JpaRepository<Skill, Long> {
     List<Skill> findByStudentProfileId(Long studentProfileId);
 
     Boolean existsByStudentProfileIdAndSkillName(Long studentProfileId, String skillName);
+
+    /** Batch load for candidate search: one query for every public profile's skills, not N. */
+    List<Skill> findByStudentProfileIdIn(List<Long> studentProfileIds);
 }
