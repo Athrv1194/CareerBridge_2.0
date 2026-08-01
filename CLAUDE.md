@@ -301,7 +301,7 @@ API-gateway specifics worth knowing before touching it:
 - **`userId` claim: `claims.get("userId", Long.class)`, never a `(Long)` cast.** auth-service writes the claim as a `Long`, but JSON only has "number", so Jackson deserializes anything under 2³¹ back as an `Integer` — which is every real user id. A cast throws `ClassCastException` on the first authenticated request. jjwt's typed accessor widens correctly.
 - **HS384, not HS256** — same 49-byte-secret rule as auth-service (see below); this gateway must derive the key exactly the same way (`Keys.hmacShaKeyFor`, no explicit algorithm) or verification fails for every token.
 - **`gateway.jwt-secret` must stay byte-identical to auth-service's `jwt.secret`.** One signs, the other verifies; there is no `application-local.yml` for this service because the committed default already matches auth-service and there is no other secret to protect.
-- **Public paths are the whole `/api/auth/**` surface, `/actuator/**`, and `/api/recommendation/careers`.** `/api/auth/refresh` can never be JWT-validated (refresh tokens are opaque UUIDs checked against a Postgres table, not JWTs — see auth-service specifics), and `/logout` is called precisely when the access token has expired, so gating the whole auth surface behind a valid access token is wrong, not lazy. There is no `/api/assessment/careers` — that endpoint does not exist on assessment-service; don't re-add it from the original spec without checking.
+- **Public paths are three specific auth endpoints — `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh` — plus `/actuator/**`, `/api/recommendation/careers`, and the Swagger surface.** This was `/api/auth/**` until the admin module landed, and the wildcard was **not** harmless: a public path is forwarded with `identityHeaders(null, null, null)`, so `/api/auth/admin/**` reached auth-service with no `X-User-Role` and 400'd on the required header — unreachable rather than insecure, but broken. `/api/auth/refresh` can never be JWT-validated (refresh tokens are opaque UUIDs checked against a Postgres table, not JWTs — see auth-service specifics); `/login` and `/register` are how a caller obtains a token in the first place. **`/api/auth/logout` requires a valid token and is intentionally protected** — auth-service's own `SecurityConfig` has always permitted only register/login/refresh and fallen through to `.anyRequest().authenticated()`, so the gateway now agrees with the service rather than forwarding a request it will reject. There is no `/api/assessment/careers` — that endpoint does not exist on assessment-service; don't re-add it from the original spec without checking.
 - **No Spring Security dependency, and none of the five backend services has one either.** `config/SecurityConfig.java` is a deliberately empty stub, same convention as student-service's — the servlet filter does the authentication, and a full Spring Security filter chain here would immediately need `permitAll` everywhere, which is ceremony around code that already exists.
 - Eureka client dependency was removed — nothing in this repo configures a discovery server, routes are hardcoded `localhost:<port>` URIs, and the dependency only produced continuous connection-refused log noise.
 - Since this gateway is the only thing validating a JWT, **ports 8081–8089 must not be publicly reachable** at deploy time — the same constraint already noted for student-service's port 8082, now true of all eight backend services. `docker-compose.yml` already enforces this by publishing no host port for any of them.
@@ -324,3 +324,50 @@ API-gateway specifics worth knowing before touching it:
 - **notification-service's `application-local.yml` needs three secrets, not one**: the PostgreSQL password, the MongoDB Atlas `mongodb+srv://` URI (embeds its own user/password), and a Gmail **App Password** (16 chars, requires 2FA; the account password will not authenticate). Every team member needs their own, or `mvnw clean install` fails on `contextLoads`.
 - **notification-service end-to-end is unverified**: `student.registered` → contact row → `recommendation.generated` → real email + Mongo document. Needs RabbitMQ running. Everything below the broker is proven — Postgres DDL, Atlas connectivity (live `ping`), and all three REST endpoints were exercised against a running instance.
 - **roadmap-service's event leg is unverified against a live broker**: `recommendation.generated` → `careerbridge.roadmap.queue` → a generated roadmap. Everything below the broker is proven (Postgres DDL, the seeder run twice for idempotency, 16 unit tests), and `contextLoads` passes with RabbitMQ *down*, so a green build says nothing here. Verify with the stack up: check the queue exists in the RabbitMQ UI with a non-zero delivered count, then `GET /api/roadmap/my` after an assessment submit.
+
+## Admin Module — feature/admin-module (assessment-service additions)
+
+### assessment-service changes
+
+**Question entity (model/Question.java)**
+- Added `isActive` (Boolean, @Builder.Default=true, NOT NULL DEFAULT true) — DDL-auto backfilled all 22 rows
+- Added `updatedAt` (LocalDateTime, @UpdateTimestamp)
+- No DataMigrationRunner — @Builder.Default + PostgreSQL column DEFAULT handled backfill automatically
+
+**QuestionRepository additions (Step 8)**
+- Removed unfiltered finders; replaced with:
+  - `findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc` — student pool + validation
+  - `countByCategoryIdAndIsActiveTrue` — ≥N guard
+  - `findAllByOrderByCategoryIdAscOrderIndexAsc` — admin listing (all questions, including inactive)
+- Deleting the old finders (not adding alongside) enforced the migration as a compile error — caught 12 stale references immediately
+
+**Admin DTOs**
+- AdminOptionRequest: text, weight (Integer 0–3, @NotNull @Min(0) @Max(3))
+- AdminOptionResponse: id, text, weight
+- AdminQuestionRequest: text, categoryId, orderIndex, isActive (@Builder.Default=true), options (@Size(min=2,max=4), @Valid)
+- AdminQuestionResponse: id, categoryId, categoryName, text, orderIndex, isActive, options, createdAt, updatedAt
+- isCorrect was deliberately NOT used — assessment-service uses a graded weight model (0–3), not binary correct/incorrect. Seed data confirmed: 0 violations of exactly-one-max-weight across all 22 questions.
+
+**AdminQuestionService + AdminQuestionServiceImpl**
+- 6 methods: addQuestion, editQuestion, getQuestion, listQuestions(categoryId nullable), activateQuestion, deactivateQuestion
+- RBAC: SUPER_ADMIN and ORG_ADMIN only; others throw CustomException 403 "Only SUPER_ADMIN or ORG_ADMIN may manage the question bank"
+- Exactly-one-max-weight guard on addQuestion AND editQuestion — uses `.intValue() == AssessmentConstants.MAX_OPTION_WEIGHT`, never ==
+- editQuestion: full option replace (deleteByQuestionId then save new). Safe because AttemptAnswer stores awarded weight, not a live FK to Option
+- Weight guard runs BEFORE deleteByQuestionId — a rejected edit cannot strand a question with zero options
+- deactivateQuestion: soft-only, logs WARN if category drops below MIN_QUESTIONS_PER_CATEGORY, does not hard-refuse
+- No DELETE endpoint — deactivation is permanent soft-retire to protect historical AttemptAnswer rows
+- listQuestions: 3 queries flat (questions → categories → options), assembled in memory. Uses findByQuestionIdInOrderByOrderIndex scoped to fetched IDs
+- Option entity uses Long questionId (not @ManyToOne), field is optionText, no built-in delete method → added deleteByQuestionId to OptionRepository
+
+**AdminQuestionController** (`/api/assessment/admin`)
+- GET /questions, GET /questions/{id}, POST /questions (201), PUT /questions/{id} (200), PATCH /questions/{id}/activate (204), PATCH /questions/{id}/deactivate (204)
+- All read X-User-Role header (required). No X-User-Id, no X-User-Org-Id (question bank is not org-scoped)
+- standalone MockMvc in tests (not @WebMvcTest) — matches every other controller test in the project; real LocalValidatorFactoryBean wired so @Valid genuinely fires
+
+**Test counts**
+- AdminQuestionServiceTest: 23 tests
+- AdminQuestionControllerTest: 11 tests
+- AssessmentServiceTest: 17 (pre-existing + Step 8 additions, unaffected)
+- ScoringEngineTest: 7 (unaffected)
+- AssessmentServiceApplicationTests: 1 (contextLoads)
+- Total assessment-service: 59/59 green

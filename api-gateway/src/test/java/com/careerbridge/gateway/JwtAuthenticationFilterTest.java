@@ -42,9 +42,14 @@ class JwtAuthenticationFilterTest {
 
     @BeforeEach
     void setUp() {
+        // Mirrors application.yml exactly. The three auth entries are listed individually rather
+        // than as /api/auth/** on purpose: the wildcard made /api/auth/admin/** public, and a
+        // public path is forwarded with no identity headers, so the admin endpoints could never
+        // receive the X-User-Role they authorize on.
         GatewayProperties properties = new GatewayProperties(
                 SECRET,
-                List.of("/api/auth/**", "/actuator/**", "/api/recommendation/careers"));
+                List.of("/api/auth/login", "/api/auth/register", "/api/auth/refresh",
+                        "/actuator/**", "/api/recommendation/careers"));
         filter = new JwtAuthenticationFilter(new JwtUtil(properties), properties);
     }
 
@@ -346,5 +351,73 @@ class JwtAuthenticationFilterTest {
 
         assertEquals(401, response.getStatus());
         assertNull(chain.getRequest());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // ADMIN MODULE: public-paths was narrowed from the /api/auth/** wildcard to three explicit
+    // entries. These pin both halves of that change.
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("admin auth path with no token: 401, because /api/auth/** is no longer a wildcard")
+    void filter_AdminAuthPathWithoutToken_IsProtected() throws Exception {
+        // Under the old /api/auth/** wildcard this path was PUBLIC, and a public path is forwarded
+        // with identityHeaders(null, null, null) -- so it reached auth-service with no X-User-Role
+        // and 400'd on the required header, making every admin endpoint permanently unreachable.
+        // A 200 here would mean the wildcard is back.
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/admin/users");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(401, response.getStatus());
+        assertNull(chain.getRequest(), "a protected path must not reach the chain without a token");
+    }
+
+    @Test
+    @DisplayName("admin auth path with a valid token: the role is injected for the service to authorize on")
+    void filter_AdminAuthPathWithToken_InjectsRole() throws Exception {
+        // The other half: reaching auth-service is not enough, the role header has to arrive too.
+        // AdminUserController reads X-User-Role as a required header and AdminUserService is what
+        // turns it into a 403 for a non-admin.
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/admin/users");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER,
+                GatewayConstants.BEARER_PREFIX + token(SECRET, 42L, "SUPER_ADMIN", null, 60_000));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertEquals("42", forwardedUserId(chain));
+        assertEquals("SUPER_ADMIN", forwardedRole(chain));
+    }
+
+    @Test
+    @DisplayName("login stays public after the narrowing")
+    void filter_LoginStillPublic() throws Exception {
+        // The narrowing must not cost the endpoints that genuinely cannot carry a token.
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/register");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest(), "register must still pass through with no token");
+    }
+
+    @Test
+    @DisplayName("refresh stays public: refresh tokens are opaque UUIDs this gateway cannot verify")
+    void filter_RefreshStillPublic() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/refresh");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest(), "refresh is called because the access token expired");
     }
 }
