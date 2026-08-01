@@ -4,6 +4,7 @@ import com.careerbridge.student.constants.SkillConstants;
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
 import com.careerbridge.student.dto.ProjectDto;
+import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
 import com.careerbridge.student.dto.StudentProfileRequest;
 import com.careerbridge.student.dto.StudentProfileResponse;
@@ -24,9 +25,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class StudentServiceImpl implements StudentService {
+
+    /** Matches auth-service's Role enum. Strings, because that is what arrives in X-User-Role. */
+    private static final Set<String> ALLOWED_PUBLIC_PROFILE_ROLES =
+            Set.of("RECRUITER", "PLACEMENT_OFFICER", "ORG_ADMIN", "SUPER_ADMIN");
+
+    /** The only role that belongs in a candidate pool. See getPublicProfiles. */
+    private static final String ROLE_STUDENT = "STUDENT";
 
     private final StudentProfileRepository studentProfileRepository;
     private final EducationRepository educationRepository;
@@ -202,6 +213,49 @@ public class StudentServiceImpl implements StudentService {
     @Override
     public List<String> getSkillSuggestions() {
         return SkillConstants.PREDEFINED_SKILLS;
+    }
+
+    /**
+     * RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN and SUPER_ADMIN only -- a STUDENT calling this would
+     * be able to enumerate every other public profile on the platform, which is not what "public"
+     * on a single profile is meant to permit. RBAC lives here, in the service layer, never in the
+     * controller or the gateway.
+     *
+     * Filtered to STUDENT profiles only. auth-service publishes student.registered for every
+     * registration regardless of role, so this table holds a profile row for recruiters and admins
+     * too; without the role predicate they appear in recruiter-service's candidate pool.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<PublicStudentProfileResponse> getPublicProfiles(String callerRole) {
+        if (!ALLOWED_PUBLIC_PROFILE_ROLES.contains(callerRole)) {
+            throw new CustomException(
+                    "Only RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN or SUPER_ADMIN may list public profiles",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        List<StudentProfile> profiles = studentProfileRepository.findByIsPublicTrueAndRole(ROLE_STUDENT);
+        if (profiles.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> profileIds = profiles.stream().map(StudentProfile::getId).toList();
+        // One query for every profile's skills, grouped in memory -- not N queries.
+        Map<Long, List<String>> skillsByProfileId = skillRepository.findByStudentProfileIdIn(profileIds)
+                .stream()
+                .collect(Collectors.groupingBy(Skill::getStudentProfileId,
+                        Collectors.mapping(Skill::getSkillName, Collectors.toList())));
+
+        return profiles.stream()
+                .map(p -> PublicStudentProfileResponse.builder()
+                        .studentId(p.getUserId())
+                        .firstName(p.getFirstName())
+                        .lastName(p.getLastName())
+                        .email(p.getEmail())
+                        .skills(skillsByProfileId.getOrDefault(p.getId(), List.of()))
+                        .profileCompletionPercentage(p.getProfileCompletionPercentage())
+                        .build())
+                .toList();
     }
 
     private StudentProfile requireProfile(Long userId) {

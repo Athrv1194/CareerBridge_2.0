@@ -41,6 +41,23 @@ public class StudentProfile {
 
     private String email;
 
+    /**
+     * The auth-service role this profile belongs to, harvested from StudentRegisteredEvent.
+     *
+     * Nullable and with no @Builder.Default on purpose: this column was added to an already
+     * populated table, and a NOT NULL column with no DEFAULT makes ddl-auto's ALTER fail against
+     * existing rows (silently, as a WARN -- assessment-service's logged Question.updatedAt
+     * incident). Rows predating this column were backfilled by hand from careerbridge_auth.users.
+     *
+     * A String, not auth-service's Role enum, matching StudentRegisteredEvent's own field: a
+     * duplicated enum would hard-fail every event the day auth-service adds a seventh role.
+     *
+     * Exists so getPublicProfiles can return only STUDENT profiles. auth-service publishes
+     * student.registered for EVERY registration regardless of role, so without this filter the
+     * recruiter candidate pool contains recruiters and admins too.
+     */
+    private String role;
+
     private String phone;
 
     // Free text well past the 255-char column default. TEXT, not @Lob: Hibernate's

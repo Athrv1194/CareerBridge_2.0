@@ -297,4 +297,72 @@ class StudentServiceTest {
         assertTrue(suggestions.contains("Java"));
         verify(studentProfileRepository, never()).findByUserId(anyLong());
     }
+
+    @Test
+    @DisplayName("getPublicProfiles: STUDENT role is refused with 403")
+    void getPublicProfiles_StudentRole_Throws403() {
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.getPublicProfiles("STUDENT"));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(studentProfileRepository, never()).findByIsPublicTrueAndRole(anyString());
+    }
+
+    @Test
+    @DisplayName("getPublicProfiles: RECRUITER role is permitted")
+    void getPublicProfiles_RecruiterRole_ReturnsList() {
+        when(studentProfileRepository.findByIsPublicTrueAndRole("STUDENT")).thenReturn(List.of(profile));
+        when(skillRepository.findByStudentProfileIdIn(List.of(PROFILE_ID))).thenReturn(List.of(
+                Skill.builder().studentProfileId(PROFILE_ID).skillName("Java").build(),
+                Skill.builder().studentProfileId(PROFILE_ID).skillName("Spring Boot").build()));
+
+        List<com.careerbridge.student.dto.PublicStudentProfileResponse> result =
+                studentService.getPublicProfiles("RECRUITER");
+
+        assertEquals(1, result.size());
+        assertEquals(USER_ID, result.get(0).getStudentId());
+        assertEquals(List.of("Java", "Spring Boot"), result.get(0).getSkills());
+    }
+
+    @Test
+    @DisplayName("getPublicProfiles: no public profiles returns an empty list without querying skills")
+    void getPublicProfiles_NoPublicProfiles_ReturnsEmptyList() {
+        when(studentProfileRepository.findByIsPublicTrueAndRole("STUDENT")).thenReturn(List.of());
+
+        List<com.careerbridge.student.dto.PublicStudentProfileResponse> result =
+                studentService.getPublicProfiles("SUPER_ADMIN");
+
+        assertTrue(result.isEmpty());
+        verify(skillRepository, never()).findByStudentProfileIdIn(any());
+    }
+
+    @Test
+    @DisplayName("getPublicProfiles: a profile with no skills gets an empty list, not a crash")
+    void getPublicProfiles_ProfileWithNoSkills_EmptySkillsList() {
+        when(studentProfileRepository.findByIsPublicTrueAndRole("STUDENT")).thenReturn(List.of(profile));
+        when(skillRepository.findByStudentProfileIdIn(List.of(PROFILE_ID))).thenReturn(List.of());
+
+        List<com.careerbridge.student.dto.PublicStudentProfileResponse> result =
+                studentService.getPublicProfiles("ORG_ADMIN");
+
+        assertTrue(result.get(0).getSkills().isEmpty());
+    }
+
+    /**
+     * The candidate pool must contain students only. auth-service publishes student.registered for
+     * EVERY registration, so this table holds a profile row for recruiters and admins too -- without
+     * the role predicate they show up as candidates in recruiter-service. Caught in live
+     * verification, where the pool returned 18 rows including recruiters and SUPER_ADMINs.
+     */
+    @Test
+    @DisplayName("getPublicProfiles: queries with the STUDENT role, never unfiltered")
+    void getPublicProfiles_FiltersToStudentRoleOnly() {
+        when(studentProfileRepository.findByIsPublicTrueAndRole("STUDENT")).thenReturn(List.of(profile));
+        when(skillRepository.findByStudentProfileIdIn(List.of(PROFILE_ID))).thenReturn(List.of());
+
+        studentService.getPublicProfiles("RECRUITER");
+
+        // Pins the argument: a call with any other role, or an unfiltered finder, fails here.
+        verify(studentProfileRepository).findByIsPublicTrueAndRole("STUDENT");
+    }
 }
