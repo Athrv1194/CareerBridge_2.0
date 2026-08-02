@@ -12,15 +12,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Three consumer queues and one publisher -- the most connected service in CareerBridge, since the
- * Placement Readiness Score is a composite of what three other services produce.
+ * Four consumer queues and one publisher -- the most connected service in CareerBridge, since the
+ * Placement Readiness Score is a composite of what four other services produce.
  *
- * One queue per event type, never one queue with three listeners. Two @RabbitListener methods on a
- * single queue create two containers consuming it and RabbitMQ round-robins between them, so
+ * One queue per event type, never one queue with multiple listeners. Two @RabbitListener methods on
+ * a single queue create two containers consuming it and RabbitMQ round-robins between them, so
  * roughly half of each event type binds into the wrong class. Jackson 3 has
  * FAIL_ON_UNKNOWN_PROPERTIES off, so that does not throw -- it yields an all-null object a null
  * guard silently discards, and half the score updates vanish with no error anywhere. This is
- * notification-service's logged lesson, and it costs three queues to avoid.
+ * notification-service's logged lesson, and it costs four queues to avoid.
  *
  * There is deliberately no custom SimpleRabbitListenerContainerFactory. TypePrecedence.INFERRED is
  * already Spring AMQP's default, and Boot injects the single MessageConverter bean below into the
@@ -35,6 +35,7 @@ public class RabbitMQConfig {
     public static final String PRS_USER_QUEUE = "careerbridge.prs.user.queue";
     public static final String PRS_RECOMMENDATION_QUEUE = "careerbridge.prs.recommendation.queue";
     public static final String PRS_ROADMAP_QUEUE = "careerbridge.prs.roadmap.queue";
+    public static final String PRS_RESUME_QUEUE = "careerbridge.prs.resume.queue";
 
     /**
      * "student.registered", NOT "user.registered".
@@ -50,6 +51,7 @@ public class RabbitMQConfig {
     public static final String STUDENT_REGISTERED_ROUTING_KEY = "student.registered";
     public static final String RECOMMENDATION_GENERATED_ROUTING_KEY = "recommendation.generated";
     public static final String ROADMAP_UPDATED_ROUTING_KEY = "roadmap.updated";
+    public static final String RESUME_GENERATED_ROUTING_KEY = "resume.generated";
 
     public static final String PRS_UPDATED_ROUTING_KEY = "prs.updated";
 
@@ -85,6 +87,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue prsResumeQueue() {
+        return new Queue(PRS_RESUME_QUEUE, true);
+    }
+
+    @Bean
     public Binding prsStudentRegisteredBinding(Queue prsUserQueue, TopicExchange careerBridgeExchange) {
         return BindingBuilder.bind(prsUserQueue)
                 .to(careerBridgeExchange)
@@ -106,8 +113,15 @@ public class RabbitMQConfig {
                 .with(ROADMAP_UPDATED_ROUTING_KEY);
     }
 
+    @Bean
+    public Binding prsResumeGeneratedBinding(Queue prsResumeQueue, TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(prsResumeQueue)
+                .to(careerBridgeExchange)
+                .with(RESUME_GENERATED_ROUTING_KEY);
+    }
+
     /**
-     * Only three bindings are declared. prs.updated is published, never consumed here, and a queue
+     * Only four bindings are declared. prs.updated is published, never consumed here, and a queue
      * bound to it with no listener would accrue every event forever and read as an unprocessed
      * backlog -- the same reason organization-service declares no queue for organization.created
      * and roadmap-service none for roadmap.updated. A future dashboard service declares its own.

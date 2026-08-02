@@ -12,10 +12,11 @@ import lombok.NoArgsConstructor;
  * input appears with its weight and its weighted contribution, and the four contributions sum to
  * totalScore exactly. A student who is stuck at 62 can read straight off this which lever to pull.
  *
- * reservedWeight/reservedContribution are the reason the composite tops out at 90 rather than 100:
- * 10% is held back for the future resume builder and contributes 0.0 today. Reporting it as a
- * visible zero is the whole point -- omitting it would leave ten points unaccounted for and make
- * the total look like a rounding bug.
+ * resumeWeight/resumeContribution were named reservedWeight/reservedContribution before
+ * resume-service shipped, when this 10% genuinely was unallocated. Renamed rather than left stale
+ * because "reserved" would now be actively misleading: the slot is live, not held back. A student
+ * who has never generated a resume simply sees resumeContribution at 0.0, which reads the same as
+ * "reserved" did but is now an honest true zero rather than a permanently disabled field.
  */
 @Data
 @Builder
@@ -50,11 +51,14 @@ public class PrsBreakdown {
     /** profileScore x 0.20. */
     private Double profileContribution;
 
-    /** Always 10 -- reserved for the future resume builder. */
-    private Integer reservedWeight;
+    /** Always 10. */
+    private Integer resumeWeight;
 
-    /** Always 0.0 until the resume builder ships. */
-    private Double reservedContribution;
+    /** Raw 0-100 input: the ATS score of the student's latest generated resume. 0.0 if none exists. */
+    private Double resumeScore;
+
+    /** resumeScore x 0.10. */
+    private Double resumeContribution;
 
     /** Equals the sum of the four contributions above. */
     private Double totalScore;
