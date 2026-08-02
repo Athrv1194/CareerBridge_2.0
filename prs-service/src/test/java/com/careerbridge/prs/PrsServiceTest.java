@@ -205,9 +205,49 @@ class PrsServiceTest {
                 ArgumentCaptor.forClass(PlacementReadinessScore.class);
         verify(prsRepository).save(captor.capture());
         assertEquals(100.0, captor.getValue().getProfileScore());
-        // 100*0.40 + 100*0.30 + 100*0.20 = 90.0 -- the ceiling, because 10% is reserved.
+        // 100*0.40 + 100*0.30 + 100*0.20 + 0*0.10 = 90.0 -- resumeScore defaults to 0.0 on the
+        // fixture built by prs(...), which does not set it explicitly.
         assertEquals(90.0, captor.getValue().getTotalScore());
         assertEquals("A", captor.getValue().getGrade());
+    }
+
+    @Test
+    @DisplayName("resume score is stored raw and the total now reaches 100 when all four inputs are maxed")
+    void updateResumeScore_ValidEvent_UpdatesAndRecomputesTotal() {
+        when(prsRepository.findByStudentId(1L))
+                .thenReturn(Optional.of(prs(1L, 100.0, 100.0, 100.0, 90.0, "A")));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(100.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateResumeScore(1L, 100.0);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        PlacementReadinessScore saved = captor.getValue();
+        assertEquals(100.0, saved.getResumeScore());
+        // 100*0.40 + 100*0.30 + 100*0.20 + 100*0.10 = 100.0 -- the slot is live, not reserved.
+        assertEquals(100.0, saved.getTotalScore());
+        assertEquals("A", saved.getGrade());
+    }
+
+    @Test
+    @DisplayName("a student who never generated a resume keeps resumeScore at 0 and totalScore unaffected")
+    void updateAssessmentScore_NoResumeYet_ResumeScoreStaysZero() {
+        PlacementReadinessScore record = prs(1L, 0.0, 50.0, 0.0, 15.0, "F");
+        record.setResumeScore(0.0);
+        when(prsRepository.findByStudentId(1L)).thenReturn(Optional.of(record));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(80.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateAssessmentScore(1L, 90.0);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        // Same 67.0 as updateAssessmentScore_ValidEvent_UpdatesAndRecomputesTotal -- activating the
+        // resume slot must not change a score for a student who has not generated one.
+        assertEquals(67.0, captor.getValue().getTotalScore());
     }
 
     // -------------------------------------------------------------------------------------------
@@ -268,13 +308,14 @@ class PrsServiceTest {
         assertEquals(36.0, response.getBreakdown().getAssessmentContribution());
         assertEquals(15.0, response.getBreakdown().getRoadmapContribution());
         assertEquals(16.0, response.getBreakdown().getProfileContribution());
-        assertEquals(10, response.getBreakdown().getReservedWeight());
-        assertEquals(0.0, response.getBreakdown().getReservedContribution());
+        assertEquals(10, response.getBreakdown().getResumeWeight());
+        // prs(...) does not set resumeScore, so it defaults to 0.0 -- same fixture, live slot.
+        assertEquals(0.0, response.getBreakdown().getResumeContribution());
         // The breakdown must actually add up -- this is what the endpoint promises.
         double sum = response.getBreakdown().getAssessmentContribution()
                 + response.getBreakdown().getRoadmapContribution()
                 + response.getBreakdown().getProfileContribution()
-                + response.getBreakdown().getReservedContribution();
+                + response.getBreakdown().getResumeContribution();
         assertEquals(response.getTotalScore(), sum, 0.001);
     }
 

@@ -2,6 +2,7 @@ package com.careerbridge.prs.consumer;
 
 import com.careerbridge.prs.config.RabbitMQConfig;
 import com.careerbridge.prs.event.RecommendationGeneratedEvent;
+import com.careerbridge.prs.event.ResumeGeneratedEvent;
 import com.careerbridge.prs.event.RoadmapUpdatedEvent;
 import com.careerbridge.prs.event.StudentRegisteredEvent;
 import com.careerbridge.prs.service.PrsService;
@@ -11,7 +12,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 /**
- * The three inbound legs of the Placement Readiness Score, one listener per queue.
+ * The four inbound legs of the Placement Readiness Score, one listener per queue.
  *
  * Three methods in one class is fine; three methods on one QUEUE would not be. Spring AMQP creates
  * a container per @RabbitListener, and RabbitMQ round-robins deliveries between containers sharing
@@ -100,6 +101,23 @@ public class PrsEventConsumer {
         } catch (Exception ex) {
             log.error("Failed to handle {} for studentId={}: {}",
                     RabbitMQConfig.ROADMAP_UPDATED_ROUTING_KEY,
+                    event == null ? null : event.getStudentId(),
+                    ex.getMessage());
+        }
+    }
+
+    /** 10% input. The slot that was reserved from day one; resume-service is what activates it. */
+    @RabbitListener(queues = RabbitMQConfig.PRS_RESUME_QUEUE)
+    public void onResumeGenerated(ResumeGeneratedEvent event) {
+        try {
+            if (event == null) {
+                log.warn("Ignoring null {} payload", RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY);
+                return;
+            }
+            prsService.updateResumeScore(event.getStudentId(), event.getAtsScore());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for studentId={}: {}",
+                    RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY,
                     event == null ? null : event.getStudentId(),
                     ex.getMessage());
         }
