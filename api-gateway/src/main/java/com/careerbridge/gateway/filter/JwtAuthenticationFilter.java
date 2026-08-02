@@ -81,7 +81,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // here would let anyone act as any student -- or as SUPER_ADMIN -- with a single curl.
         // Never replace this with a bare chain.doFilter(request, response).
         if (isPublicPath(request)) {
-            chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(null, null, null)),
+            chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(null, null, null, null)),
                     response);
             return;
         }
@@ -97,11 +97,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Long userId;
         String role;
         Long orgId;
+        String plan;
         try {
             Claims claims = jwtUtil.validateToken(token);
             userId = jwtUtil.extractUserId(claims);
             role = jwtUtil.extractRole(claims);
             orgId = jwtUtil.extractOrgId(claims);
+            plan = jwtUtil.extractPlan(claims);
         } catch (ExpiredJwtException ex) {
             // Distinguished from the generic case on purpose: the frontend uses this to decide
             // whether to call /api/auth/refresh rather than bouncing the user to the login screen.
@@ -127,8 +129,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // downstream service that needs a role must decide for itself what an absent header means;
         // failing the request at the gateway would also break the services that never read it.
         // orgId is legitimately null (SUPER_ADMIN, or any user with no organization) and is simply
-        // forwarded as an absent header.
-        chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(userId, role, orgId)),
+        // forwarded as an absent header. plan is null for any token minted before auth-service
+        // started writing the claim, and is likewise forwarded as absent.
+        chain.doFilter(new GatewayIdentityRequestWrapper(request, identityHeaders(userId, role, orgId, plan)),
                 response);
     }
 
@@ -139,7 +142,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      *
      * Case-insensitive, because the servlet API's header lookups are.
      */
-    private static Map<String, String> identityHeaders(Long userId, String role, Long orgId) {
+    private static Map<String, String> identityHeaders(Long userId, String role, Long orgId, String plan) {
         Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         if (userId != null) {
             headers.put(GatewayConstants.USER_ID_HEADER, String.valueOf(userId));
@@ -149,6 +152,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
         if (orgId != null) {
             headers.put(GatewayConstants.USER_ORG_ID_HEADER, String.valueOf(orgId));
+        }
+        if (plan != null) {
+            headers.put(GatewayConstants.USER_PLAN_HEADER, plan);
         }
         return headers;
     }
@@ -196,11 +202,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
          * Anything added here is stripped from client input for free; anything NOT here is
          * forwarded verbatim. Add a header to this set at the same moment you start trusting it
          * downstream, never later.
+         *
+         * X-User-Plan is here even though NOTHING reads it yet, which is the correct order rather
+         * than an oversight. A forwarded-but-unmanaged header is invisible right up until some
+         * service starts trusting it, and on that day every caller sending
+         * "X-User-Plan: STUDENT_PREMIUM" becomes premium for free -- in a change that touches no
+         * security code and so gets reviewed as a feature.
          */
         private static final Set<String> MANAGED_HEADERS = Collections.unmodifiableSet(
                 Stream.of(GatewayConstants.USER_ID_HEADER,
                                 GatewayConstants.USER_ROLE_HEADER,
-                                GatewayConstants.USER_ORG_ID_HEADER)
+                                GatewayConstants.USER_ORG_ID_HEADER,
+                                GatewayConstants.USER_PLAN_HEADER)
                         .collect(Collectors.toCollection(
                                 () -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
 
