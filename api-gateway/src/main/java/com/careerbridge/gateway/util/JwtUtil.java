@@ -100,4 +100,18 @@ public class JwtUtil {
     public Long extractOrgId(Claims claims) {
         return claims.get(GatewayConstants.ORG_ID_CLAIM, Long.class);
     }
+
+    /**
+     * Reads the caller's subscription plan, forwarded as X-User-Plan.
+     *
+     * Returns null for a token minted before auth-service started writing the claim, and for a
+     * User row whose subscriptionPlan is null. Both cases forward no header at all rather than an
+     * empty one -- see identityHeaders in JwtAuthenticationFilter.
+     *
+     * The typed accessor rather than a cast, for consistency with extractRole: jjwt's
+     * claims.get(name, String.class) returns null for an absent claim instead of throwing.
+     */
+    public String extractPlan(Claims claims) {
+        return claims.get(GatewayConstants.PLAN_CLAIM, String.class);
+    }
 }

@@ -30,6 +30,26 @@ public class GatewayConstants {
      */
     public static final String USER_ORG_ID_HEADER = "X-User-Org-Id";
 
+    /**
+     * The caller's subscription plan, e.g. FREE or STUDENT_PREMIUM, from payment-service by way of
+     * auth-service's User row and the JWT.
+     *
+     * NOTHING READS THIS YET, and that is exactly why it must be in MANAGED_HEADERS from the first
+     * commit. A header the gateway forwards but never overwrites is invisible until the day some
+     * service starts trusting it -- and on that day every caller who sends
+     * "X-User-Plan: STUDENT_PREMIUM" is premium for free, in a diff that contains no security code
+     * at all. The same shape as the SEV-2 of 2026-08-04, where the wrapper managed only X-User-Id
+     * and a client-supplied X-User-Role sailed straight through.
+     *
+     * Legitimately absent, like USER_ORG_ID_HEADER: a token minted before this claim existed, or a
+     * User row with a null subscriptionPlan, forwards no header at all. Absent means "no known
+     * plan", never "any plan".
+     *
+     * Advisory only. It lags reality by the RabbitMQ delivery plus the access-token lifetime, so a
+     * service that needs a decisive answer must ask payment-service directly.
+     */
+    public static final String USER_PLAN_HEADER = "X-User-Plan";
+
     /** Must match auth-service's JwtConstants.HEADER_STRING. */
     public static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -48,6 +68,9 @@ public class GatewayConstants {
 
     /** Claim carrying the organization id. Must match auth-service's JwtConstants.ORG_ID_CLAIM. */
     public static final String ORG_ID_CLAIM = "organizationId";
+
+    /** Claim carrying the subscription plan. Must match auth-service's JwtConstants.PLAN_CLAIM. */
+    public static final String PLAN_CLAIM = "plan";
 
     /**
      * 401 bodies, written directly by the filter.
