@@ -1,4 +1,4 @@
--- Creates the ten CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
+-- Creates the eleven CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
 -- postgres image runs it once, on first boot only (empty data directory). Re-running it by hand
 -- against a live server is safe -- see the guard below.
 --
@@ -51,3 +51,8 @@ SELECT 'CREATE DATABASE careerbridge_recruiter'
 -- resume-service (P1). Generated resumes, including the PDF bytes themselves (bytea column).
 SELECT 'CREATE DATABASE careerbridge_resume'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_resume')\gexec
+
+-- payment-service (P1). Plan catalog, Razorpay payments and subscription history.
+-- ai-coach-service is deliberately absent from this file: it uses MongoDB Atlas only.
+SELECT 'CREATE DATABASE careerbridge_payment'
+ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_payment')\gexec

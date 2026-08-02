@@ -102,6 +102,14 @@ spring:
                 # and/or X-User-Role this gateway injects. This service introduces no new trusted
                 # header, so MANAGED_HEADERS in JwtAuthenticationFilter is unchanged.
                 - Path=/api/ai-coach/**
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URI:http://localhost:8093}
+              predicates:
+                # Singular, matching payment-service's @RequestMapping("/api/payment").
+                # GET /api/payment/plans IS in gateway.public-paths below -- the pricing page is
+                # shown to visitors before login. Every other endpoint here authorizes on the
+                # X-User-Id and X-User-Role this gateway injects.
+                - Path=/api/payment/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -174,6 +182,12 @@ spring:
                 - Path=/api-docs/ai-coach
               filters:
                 - RewritePath=/api-docs/ai-coach,/api-docs
+            - id: payment-service-docs
+              uri: ${PAYMENT_SERVICE_URI:http://localhost:8093}
+              predicates:
+                - Path=/api-docs/payment
+              filters:
+                - RewritePath=/api-docs/payment,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -204,6 +218,11 @@ gateway:
     # The career catalogue is identical for everyone and is served without a user context.
     # Note there is no /api/assessment/careers -- that endpoint does not exist in assessment-service.
     - /api/recommendation/careers
+    # The pricing page, shown to visitors before they have an account. Exactly this one path, never
+    # /api/payment/** -- every other endpoint in that service needs the identity headers a public
+    # path deliberately strips. payment-service's getPlans() reads no headers at all for the same
+    # reason: a required header on a public path 400s every request instead of being public.
+    - /api/payment/plans
     # Swagger UI itself: springdoc's static resources, the UI page, its generated OpenAPI JSON, and
     # the webjars bundle it loads them from (swagger-ui bootstrap CSS/JS). Without these the browser
     # would 401 loading the page before a token could ever be attached.
@@ -240,6 +259,8 @@ springdoc:
         url: /api-docs/resume
       - name: ai-coach-service
         url: /api-docs/ai-coach
+      - name: payment-service
+        url: /api-docs/payment
 
 management:
   endpoints:
