@@ -59,7 +59,7 @@ class PrsControllerTest {
                         .assessmentWeight(40).assessmentScore(90.0).assessmentContribution(36.0)
                         .roadmapWeight(30).roadmapScore(50.0).roadmapContribution(15.0)
                         .profileWeight(20).profileScore(80.0).profileContribution(16.0)
-                        .reservedWeight(10).reservedContribution(0.0)
+                        .resumeWeight(10).resumeScore(0.0).resumeContribution(0.0)
                         .totalScore(67.0)
                         .build())
                 .build();
@@ -77,8 +77,8 @@ class PrsControllerTest {
                 .andExpect(jsonPath("$.grade").value("B"))
                 .andExpect(jsonPath("$.breakdown.assessmentWeight").value(40))
                 .andExpect(jsonPath("$.breakdown.assessmentContribution").value(36.0))
-                .andExpect(jsonPath("$.breakdown.reservedWeight").value(10))
-                .andExpect(jsonPath("$.breakdown.reservedContribution").value(0.0));
+                .andExpect(jsonPath("$.breakdown.resumeWeight").value(10))
+                .andExpect(jsonPath("$.breakdown.resumeContribution").value(0.0));
     }
 
     @Test

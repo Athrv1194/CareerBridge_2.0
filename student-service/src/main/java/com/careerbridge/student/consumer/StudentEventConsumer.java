@@ -1,9 +1,11 @@
 package com.careerbridge.student.consumer;
 
 import com.careerbridge.student.config.RabbitMQConfig;
+import com.careerbridge.student.event.ResumeGeneratedEvent;
 import com.careerbridge.student.event.StudentRegisteredEvent;
 import com.careerbridge.student.model.StudentProfile;
 import com.careerbridge.student.repository.StudentProfileRepository;
+import com.careerbridge.student.service.StudentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -15,9 +17,12 @@ public class StudentEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(StudentEventConsumer.class);
 
     private final StudentProfileRepository studentProfileRepository;
+    private final StudentService studentService;
 
-    public StudentEventConsumer(StudentProfileRepository studentProfileRepository) {
+    public StudentEventConsumer(StudentProfileRepository studentProfileRepository,
+                                StudentService studentService) {
         this.studentProfileRepository = studentProfileRepository;
+        this.studentService = studentService;
     }
 
     /**
@@ -69,6 +74,44 @@ public class StudentEventConsumer {
             log.error("Failed to handle {} for userId={}: {}",
                     RabbitMQConfig.STUDENT_REGISTERED_ROUTING_KEY,
                     event == null ? null : event.getUserId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Fills in StudentProfile.resumeUrl, worth 15% of profile completion in
+     * ProfileCompletionCalculator -- nothing wrote this field before resume-service existed, so
+     * every student was permanently capped at 85%.
+     *
+     * Routed through StudentService.updateResumeUrl rather than touching the repository directly:
+     * the write needs recalculate()'s private path, not a bare field set, or the completion
+     * percentage would silently desync from the profile the moment resumeUrl changed.
+     *
+     * Deliberately not @Transactional here, matching onStudentRegistered -- the transaction lives
+     * inside updateResumeUrl, which is proxied through the Spring-managed StudentService bean.
+     *
+     * Accepted edge case: deleting the student's last resume in resume-service does not clear
+     * resumeUrl here, since there is no resume.deleted event. A student who deletes their only
+     * resume keeps the 15% and a URL that now 404s until they generate a new one.
+     */
+    @RabbitListener(queues = RabbitMQConfig.STUDENT_RESUME_QUEUE)
+    public void onResumeGenerated(ResumeGeneratedEvent event) {
+        try {
+            if (event == null || event.getStudentId() == null || event.getResumeId() == null) {
+                log.warn("Ignoring {} with no studentId or resumeId",
+                        RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY);
+                return;
+            }
+
+            studentService.updateResumeUrl(event.getStudentId(),
+                    "/api/resume/download/" + event.getResumeId());
+
+            log.info("Set resumeUrl for userId={} from resumeId={}",
+                    event.getStudentId(), event.getResumeId());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for studentId={}: {}",
+                    RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY,
+                    event == null ? null : event.getStudentId(),
                     ex.getMessage());
         }
     }

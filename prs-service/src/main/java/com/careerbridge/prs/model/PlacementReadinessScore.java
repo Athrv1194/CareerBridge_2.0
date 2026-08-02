@@ -20,16 +20,17 @@ import java.time.LocalDateTime;
  * One student's Placement Readiness Score. Exactly one row per student, enforced by
  * uk_prs_student_id.
  *
- * The three raw inputs are stored as they arrived (0-100 each), never pre-weighted, so the weights
+ * The four raw inputs are stored as they arrived (0-100 each), never pre-weighted, so the weights
  * can be re-tuned later without the stored values becoming meaningless. totalScore is the derived
- * figure and is always recomputed from the three, never incremented:
+ * figure and is always recomputed from all four, never incremented:
  *
- *   totalScore = assessmentScore x 0.40 + roadmapScore x 0.30 + profileScore x 0.20
+ *   totalScore = assessmentScore x 0.40 + roadmapScore x 0.30 + profileScore x 0.20 + resumeScore x 0.10
  *
- * Note the weights sum to 0.90, not 1.00 -- the remaining 10% is reserved for the future resume
- * builder. totalScore therefore tops out at 90 by design, and PrsBreakdown surfaces the reserved
- * slice explicitly so the gap is self-explaining. Do not "fix" this by normalising to 100: every
- * stored score would silently shift the day the resume builder lands.
+ * The weights now sum to 1.00. Until 2026-08-01 they summed to 0.90, with the remaining 10%
+ * explicitly reserved for "a future resume builder" -- resume-service is that builder, and
+ * resumeScore is fed by its resume.generated event, consumed on careerbridge.prs.resume.queue. A
+ * student who has never generated a resume keeps resumeScore at its default 0.0, so nothing about
+ * an existing score changes on its own; totalScore only rises once a resume actually exists.
  *
  * The unique constraint is the real idempotency guarantee for the student.registered consumer, not
  * the existsByStudentId check in initialisePrs -- RabbitMQ is at-least-once, so a redelivery can
@@ -89,7 +90,20 @@ public class PlacementReadinessScore {
     @Column(nullable = false)
     private Double profileScore = 0.0;
 
-    /** Derived, recomputed on every update. 0-90 in practice; see the class comment. */
+    /**
+     * Raw ATS score (0-100) from the student's latest resume, harvested from resume.generated.
+     * Carries 10% of the total. Added 2026-08-01 to a table that already had rows.
+     *
+     * The DEFAULT 0 in columnDefinition is mandatory, not decorative: a NOT NULL column with no
+     * DEFAULT makes ddl-auto's ALTER fail against existing rows, silently, as a WARN -- the
+     * Question.updatedAt incident, and StudentProfile.role after it. With the default present,
+     * ddl-auto backfills every pre-existing row to 0.0 rather than failing the ALTER.
+     */
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "double precision not null default 0")
+    private Double resumeScore = 0.0;
+
+    /** Derived, recomputed on every update. 0-100 since the resume slot activated. */
     @Builder.Default
     @Column(nullable = false)
     private Double totalScore = 0.0;

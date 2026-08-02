@@ -20,6 +20,8 @@ import com.careerbridge.student.repository.ProjectRepository;
 import com.careerbridge.student.repository.SkillRepository;
 import com.careerbridge.student.repository.StudentProfileRepository;
 import com.careerbridge.student.util.ProfileCompletionCalculator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class StudentServiceImpl implements StudentService {
+
+    private static final Logger log = LoggerFactory.getLogger(StudentServiceImpl.class);
 
     /** Matches auth-service's Role enum. Strings, because that is what arrives in X-User-Role. */
     private static final Set<String> ALLOWED_PUBLIC_PROFILE_ROLES =
@@ -256,6 +260,17 @@ public class StudentServiceImpl implements StudentService {
                         .profileCompletionPercentage(p.getProfileCompletionPercentage())
                         .build())
                 .toList();
+    }
+
+    @Override
+    @Transactional
+    public void updateResumeUrl(Long userId, String resumeUrl) {
+        studentProfileRepository.findByUserId(userId).ifPresentOrElse(profile -> {
+            profile.setResumeUrl(resumeUrl);
+            // recalculate() saves internally, same path updateProfile/addEducation/addSkill/
+            // addProject all use -- this is the only place RESUME's 15% can ever be earned.
+            recalculate(profile);
+        }, () -> log.warn("No student profile for userId={}; ignoring resume.generated", userId));
     }
 
     private StudentProfile requireProfile(Long userId) {
