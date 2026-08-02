@@ -38,6 +38,10 @@ public class JwtConfig {
                 .claim(JwtConstants.USER_ID_CLAIM, user.getId())
                 .claim(JwtConstants.ROLES_CLAIM, user.getRole().name())
                 .claim(JwtConstants.ORG_ID_CLAIM, user.getOrganizationId())
+                // Read fresh from the User row on every mint, including on refresh -- refreshToken
+                // re-loads the user by id rather than trusting anything in the old token, so a
+                // student who just paid gets the new plan on their next refresh.
+                .claim(JwtConstants.PLAN_CLAIM, user.getSubscriptionPlan())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiry))
                 .signWith(key)
