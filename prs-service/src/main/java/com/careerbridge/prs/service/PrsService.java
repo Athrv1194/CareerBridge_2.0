@@ -23,6 +23,9 @@ public interface PrsService {
     /** 30% input. Recomputes the total and grade, then publishes prs.updated fail-soft. */
     void updateRoadmapScore(Long studentId, Double completionPercentage);
 
+    /** 10% input. Recomputes the total and grade, then publishes prs.updated fail-soft. */
+    void updateResumeScore(Long studentId, Double atsScore);
+
     PrsResponse getMyPrs(Long studentId);
 
     PrsResponse getPrsByStudentId(Long callerId, String callerRole, Long targetStudentId);

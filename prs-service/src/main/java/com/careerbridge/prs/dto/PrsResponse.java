@@ -29,7 +29,9 @@ public class PrsResponse {
 
     private Double profileScore;
 
-    /** Weighted composite, 0-90 in practice. See PrsBreakdown for why not 100. */
+    private Double resumeScore;
+
+    /** Weighted composite, 0-100 since the resume slot activated 2026-08-01. */
     private Double totalScore;
 
     /** A / B / C / D / F. */

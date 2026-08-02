@@ -29,20 +29,21 @@ public class PrsServiceImpl implements PrsService {
     private static final String ROLE_ORG_ADMIN = "ORG_ADMIN";
 
     /**
-     * The weights sum to 0.90, not 1.00. The missing 0.10 is reserved for the future resume builder
-     * and contributes nothing today, so totalScore tops out at 90 by design -- PrsBreakdown reports
-     * the reserved slice explicitly so the gap explains itself. Do not normalise these to sum to 1
-     * "to reach 100": every stored score would shift the day the resume builder lands.
+     * The weights sum to 1.00. Until 2026-08-01 they summed to 0.90, with RESUME_WEIGHT unallocated
+     * ("reserved for the future resume builder") -- resume-service is that builder, and this weight
+     * is now live. A student who has never generated a resume keeps resumeScore at its entity
+     * default of 0.0, so no existing score changes on its own; totalScore only rises once a resume
+     * actually exists for that student.
      */
     private static final double ASSESSMENT_WEIGHT = 0.40;
     private static final double ROADMAP_WEIGHT = 0.30;
     private static final double PROFILE_WEIGHT = 0.20;
-    private static final double RESERVED_WEIGHT = 0.10;
+    private static final double RESUME_WEIGHT = 0.10;
 
     private static final int ASSESSMENT_WEIGHT_PCT = 40;
     private static final int ROADMAP_WEIGHT_PCT = 30;
     private static final int PROFILE_WEIGHT_PCT = 20;
-    private static final int RESERVED_WEIGHT_PCT = 10;
+    private static final int RESUME_WEIGHT_PCT = 10;
 
     private static final double GRADE_A_MIN = 80.0;
     private static final double GRADE_B_MIN = 60.0;
@@ -124,6 +125,21 @@ public class PrsServiceImpl implements PrsService {
         recomputeAndSave(prs, "roadmap");
     }
 
+    @Override
+    @Transactional
+    public void updateResumeScore(Long studentId, Double atsScore) {
+        if (studentId == null || atsScore == null) {
+            log.warn("Ignoring {} with null studentId or atsScore",
+                    RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY);
+            return;
+        }
+
+        PlacementReadinessScore prs = loadOrCreate(studentId);
+        prs.setResumeScore(atsScore);
+
+        recomputeAndSave(prs, "resume");
+    }
+
     /**
      * Defensive creation, deliberately fail-open. A recommendation or roadmap event for a student
      * with no PRS row means student.registered was missed -- most likely because they registered
@@ -196,11 +212,12 @@ public class PrsServiceImpl implements PrsService {
     // Scoring
     // ---------------------------------------------------------------------------------------------
 
-    /** Always recomputed from the three stored inputs, never incremented, so it cannot drift. */
+    /** Always recomputed from the four stored inputs, never incremented, so it cannot drift. */
     private double computeTotalScore(PlacementReadinessScore prs) {
         double total = nullSafe(prs.getAssessmentScore()) * ASSESSMENT_WEIGHT
                 + nullSafe(prs.getRoadmapScore()) * ROADMAP_WEIGHT
-                + nullSafe(prs.getProfileScore()) * PROFILE_WEIGHT;
+                + nullSafe(prs.getProfileScore()) * PROFILE_WEIGHT
+                + nullSafe(prs.getResumeScore()) * RESUME_WEIGHT;
 
         return round2(total);
     }
@@ -352,6 +369,7 @@ public class PrsServiceImpl implements PrsService {
         double assessment = nullSafe(prs.getAssessmentScore());
         double roadmap = nullSafe(prs.getRoadmapScore());
         double profile = nullSafe(prs.getProfileScore());
+        double resume = nullSafe(prs.getResumeScore());
 
         PrsBreakdown breakdown = PrsBreakdown.builder()
                 .assessmentWeight(ASSESSMENT_WEIGHT_PCT)
@@ -363,10 +381,9 @@ public class PrsServiceImpl implements PrsService {
                 .profileWeight(PROFILE_WEIGHT_PCT)
                 .profileScore(profile)
                 .profileContribution(round2(profile * PROFILE_WEIGHT))
-                .reservedWeight(RESERVED_WEIGHT_PCT)
-                // Always 0.0 until the resume builder ships. The weight is declared above purely so
-                // this stays a one-line change then.
-                .reservedContribution(round2(0.0 * RESERVED_WEIGHT))
+                .resumeWeight(RESUME_WEIGHT_PCT)
+                .resumeScore(resume)
+                .resumeContribution(round2(resume * RESUME_WEIGHT))
                 .totalScore(prs.getTotalScore())
                 .build();
 
@@ -375,6 +392,7 @@ public class PrsServiceImpl implements PrsService {
                 .assessmentScore(assessment)
                 .roadmapScore(roadmap)
                 .profileScore(profile)
+                .resumeScore(resume)
                 .totalScore(prs.getTotalScore())
                 .grade(prs.getGrade())
                 .breakdown(breakdown)
