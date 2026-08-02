@@ -1,0 +1,18 @@
+# Build output -- stage 1 compiles from source inside the image.
+target/
+
+# distributionType is only-script, so no jar is committed here; excluded anyway so a locally
+# cached one never gets baked in.
+.mvn/wrapper/maven-wrapper.jar
+
+# NEVER let this into an image. It carries the real PostgreSQL password, and for
+# notification-service the MongoDB Atlas URI and the Gmail App Password too. Excluding it is also
+# what makes SPRING_PROFILES_ACTIVE harmless to get wrong in the container.
+**/application-local.yml
+**/application-prod.yml
+
+*.md
+.gitignore
+.git/
+.dockerignore
+Dockerfile

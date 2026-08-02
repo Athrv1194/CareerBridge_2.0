@@ -94,6 +94,14 @@ spring:
                 # and/or X-User-Role this gateway injects, including /download/{id} -- a resume PDF
                 # is not public content, and a public path would forward it with no identity at all.
                 - Path=/api/resume/**
+            - id: ai-coach-service
+              uri: ${AI_COACH_SERVICE_URI:http://localhost:8092}
+              predicates:
+                # Singular, matching ai-coach-service's @RequestMapping("/api/ai-coach").
+                # Nothing here is in gateway.public-paths: every endpoint authorizes on X-User-Id
+                # and/or X-User-Role this gateway injects. This service introduces no new trusted
+                # header, so MANAGED_HEADERS in JwtAuthenticationFilter is unchanged.
+                - Path=/api/ai-coach/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -160,6 +168,12 @@ spring:
                 - Path=/api-docs/resume
               filters:
                 - RewritePath=/api-docs/resume,/api-docs
+            - id: ai-coach-service-docs
+              uri: ${AI_COACH_SERVICE_URI:http://localhost:8092}
+              predicates:
+                - Path=/api-docs/ai-coach
+              filters:
+                - RewritePath=/api-docs/ai-coach,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -224,6 +238,8 @@ springdoc:
         url: /api-docs/recruiter
       - name: resume-service
         url: /api-docs/resume
+      - name: ai-coach-service
+        url: /api-docs/ai-coach
 
 management:
   endpoints:

@@ -106,9 +106,9 @@ services:
   # ---------------------------------------------------------------------------------------------
   # Backend services. None of these publishes a host port, deliberately.
   #
-  # api-gateway is the only component in CareerBridge that validates a JWT; all five services below
-  # trust the X-User-Id header blindly and four of them have no Spring Security on the classpath at
-  # all. Publishing 8081-8085 to the host would bind them on 0.0.0.0 and let anyone act as any user
+  # api-gateway is the only component in CareerBridge that validates a JWT; all eleven services below
+  # trust the X-User-Id header blindly and ten of them have no Spring Security on the classpath at
+  # all. Publishing 8081-8092 to the host would bind them on 0.0.0.0 and let anyone act as any user
   # with a single `curl -H "X-User-Id: 1"` -- the exact constraint CLAUDE.md records for deployment.
   # They remain reachable from each other and from the gateway over the compose network by service
   # name. To debug one directly, prefer `docker compose exec <svc> wget -qO- localhost:<port>/...`
@@ -296,6 +296,46 @@ services:
       # Same as prs-service and recruiter-service: no seeder, every row comes from a controller call.
       start_period: 30s
 
+  ai-coach-service:
+    build: ./ai-coach-service
+    container_name: careerbridge-ai-coach
+    # Deliberately does NOT use the *backend-defaults or *backend-env anchors, unlike every service
+    # above. This is the only backend service with neither PostgreSQL nor RabbitMQ on its classpath:
+    # *backend-defaults would add depends_on edges to two containers it never touches (delaying
+    # startup and the gateway behind it), and *backend-env would set SPRING_DATASOURCE_* and
+    # SPRING_RABBITMQ_* properties that have no binder here at all.
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MANAGEMENT_ENDPOINT_HEALTH_PROBES_ENABLED: "true"
+      # Same Atlas cluster and same secret as notification-service, redirected to its own database
+      # by SPRING_MONGODB_DATABASE rather than a second connection string. Required, not defaulted,
+      # for the same reason as notification-service: application.yml falls back to
+      # mongodb://localhost:27017 and inside this container localhost is the container itself.
+      MONGODB_URI: ${MONGODB_URI:?set MONGODB_URI in .env}
+      MONGODB_DATABASE: careerbridge_ai_coach
+      # Three synchronous calls, all inside the compose network and none through the gateway:
+      # roadmap-service for the student's career and milestone titles (and, for the admin refresh,
+      # all 47 template titles in one call), student-service and prs-service for coaching context.
+      # All three default to localhost in application.yml so `mvnw spring-boot:run` works on a host.
+      ROADMAP_SERVICE_URL: http://roadmap-service:8088
+      STUDENT_SERVICE_URL: http://student-service:8082
+      PRS_SERVICE_URL: http://prs-service:8089
+      # Optional, unlike every other secret in this file. Every client checks the key is non-blank
+      # before calling out, so an unset key degrades one feature rather than failing startup --
+      # see .env.example. A ${VAR:?} here would block `docker compose up` for anyone without keys.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8092/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Same as prs-service and resume-service: no seeder, no ddl-auto. The 47-milestone catalog is
+      # populated by an admin POST, never at startup.
+      start_period: 30s
+
   api-gateway:
     build: ./api-gateway
     container_name: careerbridge-gateway
@@ -322,6 +362,7 @@ services:
       PRS_SERVICE_URI: http://prs-service:8089
       RECRUITER_SERVICE_URI: http://recruiter-service:8090
       RESUME_SERVICE_URI: http://resume-service:8091
+      AI_COACH_SERVICE_URI: http://ai-coach-service:8092
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -344,6 +385,8 @@ services:
       recruiter-service:
         condition: service_healthy
       resume-service:
+        condition: service_healthy
+      ai-coach-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
