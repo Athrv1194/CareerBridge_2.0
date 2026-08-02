@@ -86,6 +86,14 @@ spring:
                 # a public path forwards no identity headers at all -- it would arrive with no role
                 # and 400 on the required header rather than being usefully public.
                 - Path=/api/recruiter/**
+            - id: resume-service
+              uri: ${RESUME_SERVICE_URI:http://localhost:8091}
+              predicates:
+                # Singular, matching resume-service's @RequestMapping("/api/resume").
+                # Nothing here is in gateway.public-paths: every endpoint authorizes on X-User-Id
+                # and/or X-User-Role this gateway injects, including /download/{id} -- a resume PDF
+                # is not public content, and a public path would forward it with no identity at all.
+                - Path=/api/resume/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -146,6 +154,12 @@ spring:
                 - Path=/api-docs/recruiter
               filters:
                 - RewritePath=/api-docs/recruiter,/api-docs
+            - id: resume-service-docs
+              uri: ${RESUME_SERVICE_URI:http://localhost:8091}
+              predicates:
+                - Path=/api-docs/resume
+              filters:
+                - RewritePath=/api-docs/resume,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -208,6 +222,8 @@ springdoc:
         url: /api-docs/prs
       - name: recruiter-service
         url: /api-docs/recruiter
+      - name: resume-service
+        url: /api-docs/resume
 
 management:
   endpoints:

@@ -49,6 +49,14 @@ services:
     image: postgres:17-alpine
     container_name: careerbridge-postgres
     restart: unless-stopped
+    # max_connections raised from the image default of 100. Ten PostgreSQL-backed services now
+    # share this instance, and none of them override HikariCP's default maximumPoolSize/minimumIdle
+    # of 10 -- at steady state that is 100 connections with zero headroom for anything else,
+    # including a diagnostic psql session. Found live: the 10th service (resume-service) tipped
+    # actual usage into "sorry, too many clients already" within seconds of a fresh `up -d`, not
+    # under any real load. 300 leaves headroom for the ten services' pools plus admin connections
+    # with room to add more services before this needs revisiting.
+    command: postgres -c max_connections=300
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -267,6 +275,27 @@ services:
       # Same as prs-service: no seeder, every row comes from a controller call.
       start_period: 30s
 
+  resume-service:
+    <<: *backend-defaults
+    build: ./resume-service
+    container_name: careerbridge-resume
+    # No ports entry, no named volume. The generated PDF lives in the student_resumes.pdf_content
+    # bytea column, not on disk -- no RESUME_STORAGE_DIR, and no volume to lose on a container
+    # replace. Survives restarts and multiple replicas for free, which a Docker named volume would
+    # not once there is more than one replica.
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_resume
+      # The one synchronous call, inside the compose network, never through the gateway.
+      STUDENT_SERVICE_URL: http://student-service:8082
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8091/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # Same as prs-service and recruiter-service: no seeder, every row comes from a controller call.
+      start_period: 30s
+
   api-gateway:
     build: ./api-gateway
     container_name: careerbridge-gateway
@@ -292,6 +321,7 @@ services:
       ROADMAP_SERVICE_URI: http://roadmap-service:8088
       PRS_SERVICE_URI: http://prs-service:8089
       RECRUITER_SERVICE_URI: http://recruiter-service:8090
+      RESUME_SERVICE_URI: http://resume-service:8091
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -312,6 +342,8 @@ services:
       prs-service:
         condition: service_healthy
       recruiter-service:
+        condition: service_healthy
+      resume-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
