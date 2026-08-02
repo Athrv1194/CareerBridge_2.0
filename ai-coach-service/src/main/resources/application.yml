@@ -1,0 +1,109 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: ai-coach-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # spring.mongodb.uri, NOT spring.data.mongodb.uri -- Boot 4 moved driver-level connection settings
+  # out of spring.data.mongodb.* into spring.mongodb.*. The old name is deprecated at level "error"
+  # since 4.0.0: Boot does not bind it and does not warn, so the driver silently falls back to
+  # localhost:27017/test. Logged SEV-2 against notification-service on 2026-07-27; do not repeat it.
+  #
+  # Kept as a plain mongodb:// default here, deliberately, NOT mongodb+srv:// -- a +srv URI resolves
+  # DNS TXT records eagerly in the driver's ConnectionString constructor, which means contextLoads
+  # would need working DNS even with nothing else running. This is the one service in the repo whose
+  # mvnw clean install is green on a fresh clone with no Atlas, no Postgres, no RabbitMQ reachable;
+  # a real Atlas URI belongs only in the gitignored application-local.yml, same as notification-service.
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017/careerbridge_ai_coach}
+    # Database name is mandatory even when the URI supplies one -- MongoDatabaseFactoryConfiguration
+    # asserts hasText(database). Setting it explicitly also lets this service share
+    # notification-service's MONGODB_URI in docker-compose and redirect to its own database.
+    database: ${MONGODB_DATABASE:careerbridge_ai_coach}
+
+  # No datasource block: no PostgreSQL, no JPA anywhere in this service.
+  # No spring.rabbitmq block: no RabbitMQ dependency at all. Resource enrichment is admin-triggered
+  # (POST /resources/refresh), not event-driven -- recommendation.generated carries no milestone
+  # data, so there is nothing to consume.
+  # No spring.jpa.defer-datasource-initialization: no data.sql, nothing to defer.
+  # No spring.autoconfigure.exclude: no Spring Security on the classpath, so naming an absent
+  # UserDetailsServiceAutoConfiguration class would fail startup outright (same class as every other
+  # non-auth-service backend in this project).
+
+  # Strictly serial background executor for CatalogRefresher.run(). With the default unbounded queue
+  # a ThreadPoolTaskExecutor never grows past core-size, so core-size: 1 alone pins serial execution
+  # and makes the 300ms inter-milestone sleep meaningful. Deliberately no Executor/TaskExecutor @Bean
+  # anywhere in this service -- defining one suppresses Boot's own applicationTaskExecutor entirely
+  # (TaskExecutorConfiguration is @ConditionalOnMissingBean(Executor.class)), and
+  # ApplicationTaskExecutorAsyncConfigurer resolves that bean by name lazily, so the failure would
+  # only surface the first time @Async actually runs -- invisible to contextLoads.
+  task:
+    execution:
+      pool:
+        core-size: 1
+        max-size: 1
+      thread-name-prefix: ai-coach-async-
+
+  # spring-boot-starter-validation is declared explicitly in pom.xml even though springdoc pulls it
+  # in transitively -- @NotBlank/@Size on SendMessageRequest must not depend on a transitive.
+
+# management.health.mongodb.enabled, NOT management.health.mongo.enabled -- Boot 4 renamed the whole
+# Mongo module and the health-indicator id moved with it, from "mongo" to "mongodb". Also, Atlas
+# reserves the "local" database (which MongoHealthIndicator's hello check targets) from every
+# customer role including atlasAdmin, so the indicator is structurally incompatible with Atlas
+# regardless of privilege -- logged SEV-3 against notification-service on 2026-07-29.
+management:
+  health:
+    mongodb:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info,liveness,readiness
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+# Internal cross-service clients -- all default to localhost, matching every other service's
+# convention (AUTH_SERVICE_URI, STUDENT_SERVICE_URL, etc.). docker-compose overrides with container
+# hostnames. None of these calls go through api-gateway.
+roadmap:
+  service:
+    url: ${ROADMAP_SERVICE_URL:http://localhost:8088}
+student:
+  service:
+    url: ${STUDENT_SERVICE_URL:http://localhost:8082}
+prs:
+  service:
+    url: ${PRS_SERVICE_URL:http://localhost:8089}
+
+# External APIs. Keys default to blank -- every client checks StringUtils.hasText before calling out,
+# so a fresh clone with no keys yet stays green rather than sending "Authorization: Bearer " and
+# getting an opaque 401.
+groq:
+  api:
+    url: https://api.groq.com/openai/v1/chat/completions
+    key: ${GROQ_API_KEY:}
+  model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+
+tavily:
+  api:
+    url: https://api.tavily.com
+    key: ${TAVILY_API_KEY:}
+
+youtube:
+  api:
+    key: ${YOUTUBE_API_KEY:}
+    search:
+      url: https://www.googleapis.com/youtube/v3/search
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
