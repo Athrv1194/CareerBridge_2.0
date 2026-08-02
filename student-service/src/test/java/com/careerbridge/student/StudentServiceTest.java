@@ -365,4 +365,34 @@ class StudentServiceTest {
         // Pins the argument: a call with any other role, or an unfiltered finder, fails here.
         verify(studentProfileRepository).findByIsPublicTrueAndRole("STUDENT");
     }
+
+    // -------------------------------------------------------------------------------------------
+    // updateResumeUrl
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("updateResumeUrl: sets the url and recalculates completion through the shared path")
+    void updateResumeUrl_ExistingProfile_SetsUrlAndRecalculates() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        stubEmptyChildren();
+
+        studentService.updateResumeUrl(USER_ID, "/api/resume/download/500");
+
+        ArgumentCaptor<StudentProfile> saved = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentProfileRepository).save(saved.capture());
+        assertEquals("/api/resume/download/500", saved.getValue().getResumeUrl());
+        // RESUME is worth 15 of ProfileCompletionCalculator's 100; nothing else is filled in this
+        // fixture, so 15 is exactly the delta a resumeUrl alone should produce.
+        assertEquals(15, saved.getValue().getProfileCompletionPercentage());
+    }
+
+    @Test
+    @DisplayName("updateResumeUrl: a student with no profile row is a no-op, not an exception")
+    void updateResumeUrl_NoProfile_DoesNothing() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+
+        studentService.updateResumeUrl(USER_ID, "/api/resume/download/500");
+
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
 }

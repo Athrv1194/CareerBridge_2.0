@@ -31,4 +31,14 @@ public interface StudentService {
      * ORG_ADMIN and SUPER_ADMIN -- a STUDENT must not be able to enumerate their peers.
      */
     List<PublicStudentProfileResponse> getPublicProfiles(String callerRole);
+
+    /**
+     * Called only from the resume.generated consumer. Sets resumeUrl and recalculates completion
+     * through the same private path every other mutating method uses, so RESUME's 15% actually
+     * lands -- nothing wrote this field before resume-service existed.
+     *
+     * A no-op, not an error, if the profile does not exist: the consumer is fail-soft and a missing
+     * profile for a valid resume event is not something retrying would fix.
+     */
+    void updateResumeUrl(Long userId, String resumeUrl);
 }

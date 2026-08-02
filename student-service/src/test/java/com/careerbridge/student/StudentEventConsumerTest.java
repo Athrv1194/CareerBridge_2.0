@@ -1,9 +1,11 @@
 package com.careerbridge.student;
 
 import com.careerbridge.student.consumer.StudentEventConsumer;
+import com.careerbridge.student.event.ResumeGeneratedEvent;
 import com.careerbridge.student.event.StudentRegisteredEvent;
 import com.careerbridge.student.model.StudentProfile;
 import com.careerbridge.student.repository.StudentProfileRepository;
+import com.careerbridge.student.service.StudentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ class StudentEventConsumerTest {
     private static final Long USER_ID = 42L;
 
     @Mock private StudentProfileRepository studentProfileRepository;
+    @Mock private StudentService studentService;
 
     @InjectMocks private StudentEventConsumer consumer;
 
@@ -94,5 +97,66 @@ class StudentEventConsumerTest {
         assertDoesNotThrow(() -> consumer.onStudentRegistered(malformed));
 
         verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // onResumeGenerated
+    // -------------------------------------------------------------------------------------------
+
+    private ResumeGeneratedEvent resumeEvent() {
+        return ResumeGeneratedEvent.builder()
+                .resumeId(500L)
+                .studentId(USER_ID)
+                .atsScore(72.5)
+                .version(2)
+                .generatedAt(LocalDateTime.now())
+                .build();
+    }
+
+    @Test
+    @DisplayName("resume.generated: sets resumeUrl built from the event's resumeId")
+    void resumeGeneratedEvent_SetsResumeUrl() {
+        consumer.onResumeGenerated(resumeEvent());
+
+        verify(studentService).updateResumeUrl(USER_ID, "/api/resume/download/500");
+    }
+
+    @Test
+    @DisplayName("resume.generated: routes through StudentService, never the repository directly")
+    void resumeGeneratedEvent_DoesNotTouchRepositoryDirectly() {
+        consumer.onResumeGenerated(resumeEvent());
+
+        // The write needs recalculate()'s private path in StudentServiceImpl, not a bare field
+        // set -- touching the repository here would desync profileCompletionPercentage silently.
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("resume.generated: a payload with no studentId is ignored rather than throwing")
+    void resumeGeneratedEvent_MissingStudentId_Ignored() {
+        ResumeGeneratedEvent malformed = ResumeGeneratedEvent.builder().resumeId(500L).build();
+
+        assertDoesNotThrow(() -> consumer.onResumeGenerated(malformed));
+
+        verify(studentService, never()).updateResumeUrl(any(), any());
+    }
+
+    @Test
+    @DisplayName("resume.generated: a payload with no resumeId is ignored rather than throwing")
+    void resumeGeneratedEvent_MissingResumeId_Ignored() {
+        ResumeGeneratedEvent malformed = ResumeGeneratedEvent.builder().studentId(USER_ID).build();
+
+        assertDoesNotThrow(() -> consumer.onResumeGenerated(malformed));
+
+        verify(studentService, never()).updateResumeUrl(any(), any());
+    }
+
+    @Test
+    @DisplayName("resume.generated: a failed update is swallowed, so the listener cannot spin on redelivery")
+    void resumeGeneratedEvent_UpdateFails_DoesNotRethrow() {
+        doThrow(new RuntimeException("db down"))
+                .when(studentService).updateResumeUrl(any(), any());
+
+        assertDoesNotThrow(() -> consumer.onResumeGenerated(resumeEvent()));
     }
 }
