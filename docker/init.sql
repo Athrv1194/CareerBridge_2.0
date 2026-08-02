@@ -1,4 +1,4 @@
--- Creates the nine CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
+-- Creates the ten CareerBridge databases. Mounted at /docker-entrypoint-initdb.d/init.sql, so the
 -- postgres image runs it once, on first boot only (empty data directory). Re-running it by hand
 -- against a live server is safe -- see the guard below.
 --
@@ -47,3 +47,7 @@ SELECT 'CREATE DATABASE careerbridge_prs'
 -- recruiter-service (P1). Companies, job postings, applications and interviews.
 SELECT 'CREATE DATABASE careerbridge_recruiter'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_recruiter')\gexec
+
+-- resume-service (P1). Generated resumes, including the PDF bytes themselves (bytea column).
+SELECT 'CREATE DATABASE careerbridge_resume'
+ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_resume')\gexec
