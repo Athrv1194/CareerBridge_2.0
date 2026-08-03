@@ -3,6 +3,7 @@ package com.careerbridge.recruiter.messaging;
 import com.careerbridge.recruiter.config.RabbitMQConfig;
 import com.careerbridge.recruiter.event.ApplicationStatusUpdatedEvent;
 import com.careerbridge.recruiter.event.ApplicationSubmittedEvent;
+import com.careerbridge.recruiter.event.PlacementCompletedEvent;
 import com.careerbridge.recruiter.model.enums.ApplicationStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +13,8 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 
 /**
- * Fail-soft on both publishes: the JobApplication row is already committed by the time either
- * method runs, so rethrowing on a broker outage would report failure for work that actually
+ * Fail-soft on all three publishes: the JobApplication row is already committed by the time any of
+ * these methods run, so rethrowing on a broker outage would report failure for work that actually
  * happened. Same pattern as organization-service's organization.created and roadmap-service's
  * roadmap.updated.
  */
@@ -61,6 +62,30 @@ public class RecruiterEventPublisher {
         } catch (Exception ex) {
             log.warn("Failed to publish {} for applicationId={}: {}",
                     RabbitMQConfig.APPLICATION_STATUS_UPDATED_ROUTING_KEY, applicationId, ex.getMessage());
+        }
+    }
+
+    /**
+     * Fired when a student ACCEPTS an offer -- the moment a placement actually happens. An extended
+     * offer is not a placement, since the student may still decline it.
+     *
+     * The event is built by the caller rather than assembled from loose arguments here: it needs
+     * the job title and company name, which the service layer has already loaded for its own
+     * response and would otherwise have to be re-fetched.
+     */
+    public void publishPlacementCompleted(PlacementCompletedEvent event) {
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.EXCHANGE,
+                    RabbitMQConfig.PLACEMENT_COMPLETED_ROUTING_KEY,
+                    event);
+            log.info("Published {} for studentId={} company={} ctc={} LPA",
+                    RabbitMQConfig.PLACEMENT_COMPLETED_ROUTING_KEY,
+                    event.getStudentId(), event.getCompanyName(), event.getOfferedCtc());
+        } catch (Exception ex) {
+            log.warn("Failed to publish {} for applicationId={}: {}",
+                    RabbitMQConfig.PLACEMENT_COMPLETED_ROUTING_KEY,
+                    event.getApplicationId(), ex.getMessage());
         }
     }
 }

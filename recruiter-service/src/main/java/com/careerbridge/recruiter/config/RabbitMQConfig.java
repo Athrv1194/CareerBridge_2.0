@@ -10,10 +10,10 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Publisher-only, same shape as organization-service's RabbitMQConfig: this service publishes
- * application.submitted and application.status.updated, and nothing in CareerBridge consumes
- * either yet, so no queue is declared here. A queue bound with no listener accrues every event
- * forever and looks like an unprocessed backlog -- the future notification-service consumer
- * declares its own queue when it lands.
+ * application.submitted, application.status.updated and placement.completed, and nothing in
+ * CareerBridge consumes any of them yet, so no queue is declared here. A queue bound with no
+ * listener accrues every event forever and looks like an unprocessed backlog -- the future
+ * notification-service consumer declares its own queue when it lands.
  */
 @Configuration
 public class RabbitMQConfig {
@@ -22,6 +22,12 @@ public class RabbitMQConfig {
 
     public static final String APPLICATION_SUBMITTED_ROUTING_KEY = "application.submitted";
     public static final String APPLICATION_STATUS_UPDATED_ROUTING_KEY = "application.status.updated";
+
+    /**
+     * Published when a student ACCEPTS an offer, not when one is extended -- a placement is the
+     * student taking the job, and an extended offer may still be declined.
+     */
+    public static final String PLACEMENT_COMPLETED_ROUTING_KEY = "placement.completed";
 
     /**
      * durable=true, autoDelete=false must match every other service's declaration of this same
