@@ -168,8 +168,22 @@ public class PaymentServiceImpl implements PaymentService {
     // Verification
     // ---------------------------------------------------------------------------------------
 
+    /**
+     * noRollbackFor = CustomException.class is required here, not decorative.
+     *
+     * Caught live, not by any unit test: Spring's default rollback rule reverts a transaction on
+     * any unchecked exception, including CustomException. Without this, the invalid-signature
+     * branch below writes status=FAILED and saves it, then throws CustomException(400) to report
+     * the rejection to the caller -- and that throw silently rolled the FAILED write back,
+     * leaving the payment stuck at PENDING forever with no record that a forged signature was
+     * ever attempted. A Mockito-based test cannot see this: with no real Spring transaction proxy
+     * in play, verify(paymentRepository).save(...) passes whether or not a surrounding
+     * transaction would have reverted it. Confirmed against a live sandbox payment: before this
+     * fix, a forged POST /verify correctly returned 400 while the payment row silently stayed
+     * PENDING; after it, the row reads FAILED as intended.
+     */
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = CustomException.class)
     public PaymentVerifyResponse verifyPayment(String callerRole, Long userId,
                                                 VerifyPaymentRequest request) {
         requireSubscriber(callerRole);
