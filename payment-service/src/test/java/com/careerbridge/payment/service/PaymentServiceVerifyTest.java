@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -317,6 +318,25 @@ class PaymentServiceVerifyTest {
         assertEquals(300L, response.getSubscriptionId());
         verify(subscriptionRepository).save(any());
         verify(applicationEventPublisher).publishEvent(any(Object.class));
+    }
+
+    @Test
+    void verifyPayment_TransactionalAnnotation_DoesNotRollBackOnCustomException() throws Exception {
+        // Caught live, not by any Mockito test: without noRollbackFor, Spring's default rule
+        // reverts the WHOLE transaction on any unchecked exception -- including the
+        // payment.setStatus(FAILED) + save() the invalid-signature branch performs just before
+        // throwing CustomException(400) to report the rejection. That silently undid the FAILED
+        // write, leaving a forged /verify attempt looking exactly like it was never attempted.
+        // A Mockito test can't see this: with no real Spring transaction proxy involved,
+        // verify(paymentRepository).save(...) passes whether or not a surrounding transaction
+        // would have reverted it -- which is exactly why this needs a reflective pin instead.
+        Method verifyPayment = PaymentServiceImpl.class.getMethod("verifyPayment",
+                String.class, Long.class, VerifyPaymentRequest.class);
+        Transactional annotation = verifyPayment.getAnnotation(Transactional.class);
+        assertNotNull(annotation, "verifyPayment must carry @Transactional");
+        assertTrue(List.of(annotation.noRollbackFor()).contains(CustomException.class),
+                "verifyPayment must not roll back on CustomException, or the FAILED status "
+                        + "write in the invalid-signature branch is silently reverted");
     }
 
     @Test
