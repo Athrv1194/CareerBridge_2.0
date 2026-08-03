@@ -182,6 +182,40 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("refresh: the new token is minted from a freshly loaded User, so a plan change lands")
+    void refreshToken_AfterPlanChange_MintsFromFreshlyLoadedUser() {
+        // The keystone of the payment-service subscription chain. payment-service publishes
+        // subscription.activated, this service's consumer writes the new plan onto the User row,
+        // and the student then refreshes. That only surfaces the new plan if refreshToken re-reads
+        // the user from the database rather than trusting anything cached or carried in the old
+        // token. If this ever regresses to reusing stale state, a paid student would keep the FREE
+        // claim forever.
+        RefreshToken stored = RefreshToken.builder()
+                .id(10L)
+                .token("refresh-token")
+                .userId(1L)
+                .expiryDate(LocalDateTime.now().plusDays(3))
+                .isRevoked(false)
+                .build();
+
+        User upgraded = persistedUser();
+        upgraded.setSubscriptionPlan("STUDENT_PREMIUM");
+        upgraded.setSubscriptionExpiry(LocalDateTime.now().plusDays(30));
+
+        when(refreshTokenRepository.findByToken("refresh-token")).thenReturn(Optional.of(stored));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(upgraded));
+        when(jwtConfig.generateAccessToken(any(User.class))).thenReturn("new-access-token");
+
+        authService.refreshToken("refresh-token");
+
+        // The entity handed to the token builder must be the one just loaded, carrying the new plan.
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(jwtConfig).generateAccessToken(captor.capture());
+        assertEquals("STUDENT_PREMIUM", captor.getValue().getSubscriptionPlan());
+        verify(userRepository).findById(1L);
+    }
+
+    @Test
     @DisplayName("login: soft-deleted account is refused even with the correct password")
     void login_SoftDeletedUser_ThrowsException() {
         User deleted = persistedUser();

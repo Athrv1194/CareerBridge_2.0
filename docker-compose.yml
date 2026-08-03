@@ -296,6 +296,36 @@ services:
       # Same as prs-service and recruiter-service: no seeder, every row comes from a controller call.
       start_period: 30s
 
+  payment-service:
+    <<: *backend-defaults
+    build: ./payment-service
+    container_name: careerbridge-payment
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_payment
+      # Razorpay SANDBOX keys. The key id is public and is returned to the browser so Checkout.js
+      # can open the modal; the secret signs and verifies and must never leave the server.
+      # Use the rzp_test_ pair, never rzp_live_ -- there is nothing in this codebase that
+      # distinguishes them, so the prefix is the only guard.
+      #
+      # Optional (${VAR:-}), not required, and that is a deliberate trade. A ${VAR:?} here would
+      # abort `docker compose up` for the WHOLE fifteen-container stack for any teammate who has
+      # not obtained sandbox keys, which is a far worse daily failure than the one it prevents.
+      # RazorpayClient checks for a blank key before every outbound call and answers a clear 503
+      # ("Payments are not configured yet") rather than sending an empty Authorization header, so an
+      # unconfigured deployment degrades exactly one feature and says so.
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8093/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # 60s, not 90s. PlanDataSeeder writes four rows, which is nothing like roadmap-service's 7
+      # templates plus 47 milestones; what dominates here is Boot 4 cold start plus ddl-auto against
+      # an empty schema, which is the 60s bucket.
+      start_period: 60s
+
   ai-coach-service:
     build: ./ai-coach-service
     container_name: careerbridge-ai-coach
@@ -363,6 +393,7 @@ services:
       RECRUITER_SERVICE_URI: http://recruiter-service:8090
       RESUME_SERVICE_URI: http://resume-service:8091
       AI_COACH_SERVICE_URI: http://ai-coach-service:8092
+      PAYMENT_SERVICE_URI: http://payment-service:8093
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -387,6 +418,8 @@ services:
       resume-service:
         condition: service_healthy
       ai-coach-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]

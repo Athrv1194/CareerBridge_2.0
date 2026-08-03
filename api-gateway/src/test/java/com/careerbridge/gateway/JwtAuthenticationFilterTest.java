@@ -63,12 +63,23 @@ class JwtAuthenticationFilterTest {
      * shape a SUPER_ADMIN's token has in production.
      */
     private static String token(String secret, long userId, String role, Long orgId, long ttlMillis) {
+        return token(secret, userId, role, orgId, null, ttlMillis);
+    }
+
+    /**
+     * plan is nullable for the same reason orgId is: auth-service only started writing the claim
+     * when payment-service landed, so a token minted before that -- or for a User row with a null
+     * subscriptionPlan -- legitimately carries no plan at all, and jjwt omits a null claim entirely.
+     */
+    private static String token(String secret, long userId, String role, Long orgId,
+                                String plan, long ttlMillis) {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()
                 .subject("ada@careerbridge.com")
                 .claim("userId", userId)
                 .claim("role", role)
                 .claim("organizationId", orgId)
+                .claim("plan", plan)
                 .issuedAt(new Date(System.currentTimeMillis() - 1000))
                 .expiration(new Date(System.currentTimeMillis() + ttlMillis))
                 .signWith(key)
@@ -90,6 +101,101 @@ class JwtAuthenticationFilterTest {
 
     private static String forwardedOrgId(MockFilterChain chain) {
         return ((HttpServletRequest) chain.getRequest()).getHeader(GatewayConstants.USER_ORG_ID_HEADER);
+    }
+
+    private static String forwardedPlan(MockFilterChain chain) {
+        return ((HttpServletRequest) chain.getRequest()).getHeader(GatewayConstants.USER_PLAN_HEADER);
+    }
+
+    @Test
+    @DisplayName("valid token: the subscription plan is injected as X-User-Plan")
+    void filter_ValidToken_AddsPlanHeader() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/ai-coach/resources");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER, GatewayConstants.BEARER_PREFIX
+                + token(SECRET, 21L, "STUDENT", null, "STUDENT_PREMIUM", 900_000));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertEquals("STUDENT_PREMIUM", forwardedPlan(chain));
+
+        // Same all-three-accessors rule as the other identity headers: getHeaders/getHeaderNames
+        // are what the gateway's proxy step actually reads.
+        HttpServletRequest forwarded = (HttpServletRequest) chain.getRequest();
+        assertEquals("STUDENT_PREMIUM",
+                Collections.list(forwarded.getHeaders(GatewayConstants.USER_PLAN_HEADER)).get(0));
+        assertTrue(Collections.list(forwarded.getHeaderNames()).stream()
+                        .anyMatch(GatewayConstants.USER_PLAN_HEADER::equalsIgnoreCase),
+                "X-User-Plan must appear in getHeaderNames()");
+    }
+
+    @Test
+    @DisplayName("token with no plan claim: the header is absent, not empty")
+    void filter_TokenWithoutPlan_OmitsPlanHeader() throws Exception {
+        // Every token minted before payment-service landed has no plan claim. Forwarding "" would
+        // look to a downstream service like a real plan named "".
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/student/profile");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER, GatewayConstants.BEARER_PREFIX
+                + token(SECRET, 42L, "STUDENT", null, null, 900_000));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNull(forwardedPlan(chain));
+        assertFalse(Collections.list(
+                        ((HttpServletRequest) chain.getRequest())
+                                .getHeaders(GatewayConstants.USER_PLAN_HEADER))
+                        .iterator().hasNext(),
+                "getHeaders must be empty, not a single empty string");
+    }
+
+    @Test
+    @DisplayName("spoofed X-User-Plan on a protected path is overwritten by the token's value")
+    void filter_SpoofedPlanHeader_IsOverwritten() throws Exception {
+        // The half of "inject and strip" that gets forgotten. Nothing reads this header yet, which
+        // is exactly why it has to be managed from day one: the day a service starts gating on it,
+        // an unmanaged header would make every caller premium for free.
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/ai-coach/resources");
+        request.addHeader(GatewayConstants.AUTHORIZATION_HEADER, GatewayConstants.BEARER_PREFIX
+                + token(SECRET, 21L, "STUDENT", null, "FREE", 900_000));
+        request.addHeader(GatewayConstants.USER_PLAN_HEADER, "STUDENT_PREMIUM");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals("FREE", forwardedPlan(chain), "the token's plan must win, never the client's");
+        HttpServletRequest forwarded = (HttpServletRequest) chain.getRequest();
+        List<String> values = Collections.list(forwarded.getHeaders(GatewayConstants.USER_PLAN_HEADER));
+        assertEquals(1, values.size(), "the spoofed value must not survive alongside the real one");
+        assertEquals("FREE", values.get(0));
+    }
+
+    @Test
+    @DisplayName("spoofed X-User-Plan on a PUBLIC path is stripped entirely")
+    void filter_SpoofedPlanHeaderOnPublicPath_IsStripped() throws Exception {
+        // A public path is forwarded with no identity at all, so there is no replacement value --
+        // membership in MANAGED_HEADERS is the only thing removing the client's header here.
+        // Uses an already-public path deliberately: this asserts the stripping property itself, not
+        // the payment-service route, so it stays valid however public-paths later changes.
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.addHeader(GatewayConstants.USER_PLAN_HEADER, "COLLEGE_PRO");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNull(forwardedPlan(chain));
+        assertFalse(Collections.list(
+                        ((HttpServletRequest) chain.getRequest())
+                                .getHeaders(GatewayConstants.USER_PLAN_HEADER))
+                        .iterator().hasNext(),
+                "a client-supplied plan must not survive a public path");
     }
 
     @Test

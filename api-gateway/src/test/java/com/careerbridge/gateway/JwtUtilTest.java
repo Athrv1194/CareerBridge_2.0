@@ -190,4 +190,30 @@ class JwtUtilTest {
 
         assertThrows(WeakKeyException.class, () -> new JwtUtil(weak));
     }
+
+    @Test
+    @DisplayName("plan claim present: returned as a String for injection as X-User-Plan")
+    void extractPlan_TokenWithPlan_ReturnsPlan() {
+        String jwt = Jwts.builder()
+                .subject("ada@careerbridge.com")
+                .claim("userId", 42L)
+                .claim("role", "STUDENT")
+                .claim("plan", "STUDENT_PREMIUM")
+                .issuedAt(new Date(System.currentTimeMillis() - 1000))
+                .expiration(new Date(System.currentTimeMillis() + 900_000))
+                .signWith(keyFor(SECRET))
+                .compact();
+
+        assertEquals("STUDENT_PREMIUM", jwtUtil.extractPlan(jwtUtil.validateToken(jwt)));
+    }
+
+    @Test
+    @DisplayName("plan claim missing: returns null so the filter omits the header entirely")
+    void extractPlan_TokenWithoutPlan_ReturnsNull() {
+        // Every token issued before payment-service landed looks like this. The typed accessor
+        // returns null for an absent claim rather than throwing.
+        Claims claims = jwtUtil.validateToken(token(SECRET, 42L, 900_000));
+
+        assertNull(jwtUtil.extractPlan(claims));
+    }
 }
