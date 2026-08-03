@@ -1,13 +1,19 @@
 package com.careerbridge.recruiter;
 
+import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
+import com.careerbridge.recruiter.dto.OfferResponseRequest;
 import com.careerbridge.recruiter.dto.PrsLeaderboardEntryDto;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
+import com.careerbridge.recruiter.event.PlacementCompletedEvent;
 import com.careerbridge.recruiter.exception.CustomException;
 import com.careerbridge.recruiter.messaging.RecruiterEventPublisher;
+import com.careerbridge.recruiter.model.Company;
 import com.careerbridge.recruiter.model.Job;
 import com.careerbridge.recruiter.model.JobApplication;
 import com.careerbridge.recruiter.model.enums.ApplicationStatus;
+import com.careerbridge.recruiter.model.enums.OfferOutcome;
+import com.careerbridge.recruiter.repository.CompanyRepository;
 import com.careerbridge.recruiter.repository.JobApplicationRepository;
 import com.careerbridge.recruiter.repository.JobRepository;
 import com.careerbridge.recruiter.service.ApplicationServiceImpl;
@@ -23,7 +29,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +56,7 @@ class ApplicationServiceTest {
 
     @Mock private JobApplicationRepository jobApplicationRepository;
     @Mock private JobRepository jobRepository;
+    @Mock private CompanyRepository companyRepository;
     @Mock private PrsServiceClient prsServiceClient;
     @Mock private RecruiterEventPublisher eventPublisher;
 
@@ -384,5 +393,265 @@ class ApplicationServiceTest {
         assertEquals(1, result.size());
         assertEquals(STUDENT_ID, result.get(0).getStudentId());
         assertEquals("Java Backend Developer", result.get(0).getJobTitle());
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // extendOffer -- the recruiter side
+    // ------------------------------------------------------------------------------------------
+
+    private JobApplication interviewedApplication() {
+        return JobApplication.builder()
+                .id(APPLICATION_ID).jobId(JOB_ID).studentId(STUDENT_ID)
+                .status(ApplicationStatus.INTERVIEWED)
+                .build();
+    }
+
+    private static ExtendOfferRequest offerOf(String ctc) {
+        return ExtendOfferRequest.builder().offeredCtc(new BigDecimal(ctc)).build();
+    }
+
+    @Test
+    @DisplayName("extendOffer: sets OFFERED, the CTC and the offer date")
+    void extendOffer_Valid_SetsStatusCtcAndDate() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(interviewedApplication()));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        JobApplicationResponse result = applicationService.extendOffer(
+                "RECRUITER", RECRUITER_ID, APPLICATION_ID, offerOf("8.50"));
+
+        ArgumentCaptor<JobApplication> captor = ArgumentCaptor.forClass(JobApplication.class);
+        verify(jobApplicationRepository).save(captor.capture());
+        assertEquals(ApplicationStatus.OFFERED, captor.getValue().getStatus());
+        assertEquals(new BigDecimal("8.50"), captor.getValue().getOfferedCtc());
+        assertTrue(captor.getValue().getOfferDate() != null, "offerDate must be stamped");
+        assertEquals(new BigDecimal("8.50"), result.getOfferedCtc());
+    }
+
+    @Test
+    @DisplayName("extendOffer: extending is not a placement, so nothing is published")
+    void extendOffer_PublishesNothing() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(interviewedApplication()));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        applicationService.extendOffer("RECRUITER", RECRUITER_ID, APPLICATION_ID, offerOf("8.50"));
+
+        verify(eventPublisher, never()).publishPlacementCompleted(any());
+    }
+
+    @Test
+    @DisplayName("extendOffer: re-extending before any response corrects the CTC and keeps the date")
+    void extendOffer_ReExtendBeforeResponse_UpdatesCtcAndKeepsOriginalDate() {
+        LocalDateTime originalDate = LocalDateTime.now().minusDays(2);
+        JobApplication alreadyOffered = interviewedApplication();
+        alreadyOffered.setStatus(ApplicationStatus.OFFERED);
+        alreadyOffered.setOfferedCtc(new BigDecimal("8.00"));
+        alreadyOffered.setOfferDate(originalDate);
+
+        when(jobApplicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(alreadyOffered));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        applicationService.extendOffer("RECRUITER", RECRUITER_ID, APPLICATION_ID, offerOf("9.25"));
+
+        ArgumentCaptor<JobApplication> captor = ArgumentCaptor.forClass(JobApplication.class);
+        verify(jobApplicationRepository).save(captor.capture());
+        assertEquals(new BigDecimal("9.25"), captor.getValue().getOfferedCtc());
+        assertEquals(originalDate, captor.getValue().getOfferDate(),
+                "correcting the amount must not restamp when the offer was made");
+    }
+
+    @Test
+    @DisplayName("extendOffer: terms are frozen once the student has responded")
+    void extendOffer_AlreadyRespondedTo_Throws400() {
+        JobApplication accepted = interviewedApplication();
+        accepted.setStatus(ApplicationStatus.OFFERED);
+        accepted.setOfferOutcome(OfferOutcome.ACCEPTED);
+
+        when(jobApplicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(accepted));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+
+        CustomException ex = assertThrows(CustomException.class, () -> applicationService.extendOffer(
+                "RECRUITER", RECRUITER_ID, APPLICATION_ID, offerOf("12.00")));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("extendOffer: refused on a rejected application")
+    void extendOffer_RejectedApplication_Throws400() {
+        JobApplication rejected = interviewedApplication();
+        rejected.setStatus(ApplicationStatus.REJECTED);
+
+        when(jobApplicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(rejected));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(CustomException.class,
+                () -> applicationService.extendOffer("RECRUITER", RECRUITER_ID, APPLICATION_ID,
+                        offerOf("8.50"))).getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("extendOffer: a recruiter who does not own the job gets 403, not 404")
+    void extendOffer_NotJobOwner_Throws403() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(interviewedApplication()));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+
+        CustomException ex = assertThrows(CustomException.class, () -> applicationService.extendOffer(
+                "RECRUITER", 999L, APPLICATION_ID, offerOf("8.50")));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("extendOffer: unknown application is 404")
+    void extendOffer_ApplicationNotFound_Throws404() {
+        when(jobApplicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.empty());
+
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(CustomException.class,
+                () -> applicationService.extendOffer("RECRUITER", RECRUITER_ID, APPLICATION_ID,
+                        offerOf("8.50"))).getStatus());
+    }
+
+    @Test
+    @DisplayName("extendOffer: a student cannot extend an offer to themselves")
+    void extendOffer_StudentRole_Throws403() {
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(CustomException.class,
+                () -> applicationService.extendOffer("STUDENT", STUDENT_ID, APPLICATION_ID,
+                        offerOf("8.50"))).getStatus());
+        verify(jobApplicationRepository, never()).findById(anyLong());
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // respondToOffer -- the student side
+    // ------------------------------------------------------------------------------------------
+
+    private JobApplication offeredApplication() {
+        return JobApplication.builder()
+                .id(APPLICATION_ID).jobId(JOB_ID).studentId(STUDENT_ID)
+                .status(ApplicationStatus.OFFERED)
+                .offeredCtc(new BigDecimal("8.50"))
+                .offerDate(LocalDateTime.now().minusDays(1))
+                .build();
+    }
+
+    private static OfferResponseRequest respondWith(OfferOutcome outcome) {
+        return OfferResponseRequest.builder().outcome(outcome).build();
+    }
+
+    @Test
+    @DisplayName("respondToOffer: accepting records the outcome and publishes placement.completed")
+    void respondToOffer_Accept_SetsOutcomeAndPublishesPlacementCompleted() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(offeredApplication()));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+        when(companyRepository.findById(anyLong()))
+                .thenReturn(Optional.of(Company.builder().id(1L).name("Acme Corp").build()));
+
+        applicationService.respondToOffer("STUDENT", STUDENT_ID, APPLICATION_ID,
+                respondWith(OfferOutcome.ACCEPTED));
+
+        ArgumentCaptor<JobApplication> saved = ArgumentCaptor.forClass(JobApplication.class);
+        verify(jobApplicationRepository).save(saved.capture());
+        assertEquals(OfferOutcome.ACCEPTED, saved.getValue().getOfferOutcome());
+
+        ArgumentCaptor<PlacementCompletedEvent> event =
+                ArgumentCaptor.forClass(PlacementCompletedEvent.class);
+        verify(eventPublisher).publishPlacementCompleted(event.capture());
+        assertEquals(STUDENT_ID, event.getValue().getStudentId());
+        assertEquals("Acme Corp", event.getValue().getCompanyName());
+        assertEquals(new BigDecimal("8.50"), event.getValue().getOfferedCtc());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: declining is recorded but is not a placement")
+    void respondToOffer_Decline_PublishesNothing() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(offeredApplication()));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+
+        applicationService.respondToOffer("STUDENT", STUDENT_ID, APPLICATION_ID,
+                respondWith(OfferOutcome.DECLINED));
+
+        ArgumentCaptor<JobApplication> saved = ArgumentCaptor.forClass(JobApplication.class);
+        verify(jobApplicationRepository).save(saved.capture());
+        assertEquals(OfferOutcome.DECLINED, saved.getValue().getOfferOutcome());
+        verify(eventPublisher, never()).publishPlacementCompleted(any());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: a broker outage must not fail a decision already saved")
+    void respondToOffer_BrokerDown_StillSucceeds() {
+        // The publisher swallows its own failures, so this asserts the service does not add a
+        // rethrow of its own around a row that is already committed.
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(offeredApplication()));
+        when(jobApplicationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepository.findById(JOB_ID)).thenReturn(Optional.of(job));
+        when(companyRepository.findById(anyLong())).thenReturn(Optional.empty());
+
+        JobApplicationResponse result = applicationService.respondToOffer(
+                "STUDENT", STUDENT_ID, APPLICATION_ID, respondWith(OfferOutcome.ACCEPTED));
+
+        assertEquals(OfferOutcome.ACCEPTED, result.getOfferOutcome());
+        verify(eventPublisher).publishPlacementCompleted(any());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: another student's application is 403, not 404")
+    void respondToOffer_NotApplicationOwner_Throws403() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(offeredApplication()));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> applicationService.respondToOffer("STUDENT", 999L, APPLICATION_ID,
+                        respondWith(OfferOutcome.ACCEPTED)));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: refused when no offer has been extended")
+    void respondToOffer_NoOfferExtended_Throws400() {
+        when(jobApplicationRepository.findById(APPLICATION_ID))
+                .thenReturn(Optional.of(interviewedApplication()));
+
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(CustomException.class,
+                () -> applicationService.respondToOffer("STUDENT", STUDENT_ID, APPLICATION_ID,
+                        respondWith(OfferOutcome.ACCEPTED))).getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: the outcome is terminal -- a second response is refused")
+    void respondToOffer_AlreadyResponded_Throws400() {
+        JobApplication accepted = offeredApplication();
+        accepted.setOfferOutcome(OfferOutcome.ACCEPTED);
+        when(jobApplicationRepository.findById(APPLICATION_ID)).thenReturn(Optional.of(accepted));
+
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(CustomException.class,
+                () -> applicationService.respondToOffer("STUDENT", STUDENT_ID, APPLICATION_ID,
+                        respondWith(OfferOutcome.DECLINED))).getStatus());
+        verify(jobApplicationRepository, never()).save(any());
+        verify(eventPublisher, never()).publishPlacementCompleted(any());
+    }
+
+    @Test
+    @DisplayName("respondToOffer: a recruiter cannot accept on the student's behalf")
+    void respondToOffer_RecruiterRole_Throws403() {
+        assertEquals(HttpStatus.FORBIDDEN, assertThrows(CustomException.class,
+                () -> applicationService.respondToOffer("RECRUITER", RECRUITER_ID, APPLICATION_ID,
+                        respondWith(OfferOutcome.ACCEPTED))).getStatus());
+        verify(jobApplicationRepository, never()).findById(anyLong());
     }
 }

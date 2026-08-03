@@ -1,8 +1,10 @@
 package com.careerbridge.recruiter.controller;
 
 import com.careerbridge.recruiter.dto.CandidateResponse;
+import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.InterviewResponse;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
+import com.careerbridge.recruiter.dto.OfferResponseRequest;
 import com.careerbridge.recruiter.dto.ScheduleInterviewRequest;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
 import com.careerbridge.recruiter.dto.UpdateInterviewRequest;
@@ -102,6 +104,36 @@ public class RecruiterApplicationController {
             @Valid @RequestBody UpdateApplicationStatusRequest request) {
         return ResponseEntity.ok(applicationService.updateApplicationStatus(
                 callerRole, recruiterId, applicationId, request));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Offers
+    //
+    // Two endpoints rather than one, split by who is entitled to decide: the RECRUITER who owns the
+    // job extends the offer and names the CTC, and only the STUDENT who owns the application can
+    // accept or decline it. Nobody accepts a job on somebody else's behalf.
+    // -------------------------------------------------------------------------------------------
+
+    /** RECRUITER, and only for an application against a job they own. */
+    @PatchMapping("/applications/{applicationId}/offer")
+    public ResponseEntity<JobApplicationResponse> extendOffer(
+            @RequestHeader(USER_ID_HEADER) Long recruiterId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ExtendOfferRequest request) {
+        return ResponseEntity.ok(applicationService.extendOffer(
+                callerRole, recruiterId, applicationId, request));
+    }
+
+    /** STUDENT, and only for their own application. */
+    @PatchMapping("/applications/{applicationId}/offer/respond")
+    public ResponseEntity<JobApplicationResponse> respondToOffer(
+            @RequestHeader(USER_ID_HEADER) Long studentId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody OfferResponseRequest request) {
+        return ResponseEntity.ok(applicationService.respondToOffer(
+                callerRole, studentId, applicationId, request));
     }
 
     // -------------------------------------------------------------------------------------------

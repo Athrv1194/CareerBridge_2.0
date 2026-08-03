@@ -1,13 +1,20 @@
 package com.careerbridge.recruiter.service;
 
 import com.careerbridge.recruiter.constants.RecruiterRoles;
+import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
+import com.careerbridge.recruiter.dto.OfferResponseRequest;
 import com.careerbridge.recruiter.dto.PrsLeaderboardEntryDto;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
+import com.careerbridge.recruiter.event.PlacementCompletedEvent;
 import com.careerbridge.recruiter.exception.CustomException;
 import com.careerbridge.recruiter.messaging.RecruiterEventPublisher;
+import com.careerbridge.recruiter.model.Company;
 import com.careerbridge.recruiter.model.Job;
 import com.careerbridge.recruiter.model.JobApplication;
+import com.careerbridge.recruiter.model.enums.ApplicationStatus;
+import com.careerbridge.recruiter.model.enums.OfferOutcome;
+import com.careerbridge.recruiter.repository.CompanyRepository;
 import com.careerbridge.recruiter.repository.JobApplicationRepository;
 import com.careerbridge.recruiter.repository.JobRepository;
 import org.slf4j.Logger;
@@ -17,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,15 +41,18 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     private final JobApplicationRepository jobApplicationRepository;
     private final JobRepository jobRepository;
+    private final CompanyRepository companyRepository;
     private final PrsServiceClient prsServiceClient;
     private final RecruiterEventPublisher eventPublisher;
 
     public ApplicationServiceImpl(JobApplicationRepository jobApplicationRepository,
                                   JobRepository jobRepository,
+                                  CompanyRepository companyRepository,
                                   PrsServiceClient prsServiceClient,
                                   RecruiterEventPublisher eventPublisher) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobRepository = jobRepository;
+        this.companyRepository = companyRepository;
         this.prsServiceClient = prsServiceClient;
         this.eventPublisher = eventPublisher;
     }
@@ -178,6 +189,139 @@ public class ApplicationServiceImpl implements ApplicationService {
         return toResponse(saved, job.getTitle());
     }
 
+    /**
+     * The recruiter extends an offer. Sets status to OFFERED and records the CTC and the date.
+     *
+     * Re-callable while the student has not answered yet -- correcting a mistyped CTC is
+     * legitimate, and this deliberately does NOT copy updateApplicationStatus's "already in that
+     * status" 400, which is about status transitions rather than offer terms. Once the student has
+     * responded the terms are frozen: changing the CTC on an offer somebody already accepted is
+     * not a correction, it is a different offer.
+     */
+    @Override
+    @Transactional
+    public JobApplicationResponse extendOffer(String callerRole, Long recruiterId, Long applicationId,
+                                              ExtendOfferRequest request) {
+        requireRole(callerRole, RecruiterRoles.RECRUITER, "Only a RECRUITER may extend an offer");
+
+        JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new CustomException("Application not found", HttpStatus.NOT_FOUND));
+
+        Job job = requireOwnedJob(application, recruiterId);
+
+        // A guard updateApplicationStatus does not currently have. Offering a job to a candidate
+        // already rejected for it is a data-entry mistake, not a workflow -- un-rejecting is a
+        // deliberate status change the recruiter can make first.
+        if (application.getStatus() == ApplicationStatus.REJECTED) {
+            throw new CustomException("Cannot extend an offer on a rejected application",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        if (application.getOfferOutcome() != null) {
+            throw new CustomException(
+                    "The student has already responded to this offer; its terms can no longer change",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        application.setStatus(ApplicationStatus.OFFERED);
+        application.setOfferedCtc(request.getOfferedCtc());
+        // Preserved on a re-extend: the offer was made when it was first made, and only the amount
+        // is being corrected.
+        if (application.getOfferDate() == null) {
+            application.setOfferDate(LocalDateTime.now());
+        }
+
+        JobApplication saved = jobApplicationRepository.save(application);
+
+        // No placement.completed here -- an extended offer is not a placement. See respondToOffer.
+        log.info("applicationId={} offered {} LPA by recruiterId={}",
+                applicationId, request.getOfferedCtc(), recruiterId);
+        return toResponse(saved, job.getTitle());
+    }
+
+    /**
+     * The student answers. Terminal: ACCEPTED or DECLINED, once.
+     *
+     * A second response is refused rather than silently overwritten -- accepting and then declining
+     * is a renege, which is a real workflow with real consequences and needs to be modelled
+     * deliberately if it is ever wanted, not fall out of a mutable field.
+     */
+    @Override
+    @Transactional
+    public JobApplicationResponse respondToOffer(String callerRole, Long studentId, Long applicationId,
+                                                 OfferResponseRequest request) {
+        requireRole(callerRole, RecruiterRoles.STUDENT, "Only a STUDENT may respond to an offer");
+
+        JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new CustomException("Application not found", HttpStatus.NOT_FOUND));
+
+        // Objects.equals, never ==: both boxed Long outside the Integer cache. 403 rather than 404
+        // here, matching updateApplicationStatus -- the caller addressed a real application, and
+        // calling it "not found" would be misleading.
+        if (!Objects.equals(application.getStudentId(), studentId)) {
+            throw new CustomException("This application does not belong to you", HttpStatus.FORBIDDEN);
+        }
+
+        if (application.getStatus() != ApplicationStatus.OFFERED) {
+            throw new CustomException("No offer has been extended for this application",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        if (application.getOfferOutcome() != null) {
+            throw new CustomException(
+                    "You have already responded to this offer", HttpStatus.BAD_REQUEST);
+        }
+
+        application.setOfferOutcome(request.getOutcome());
+        JobApplication saved = jobApplicationRepository.save(application);
+
+        Job job = jobRepository.findById(saved.getJobId()).orElse(null);
+
+        if (request.getOutcome() == OfferOutcome.ACCEPTED) {
+            eventPublisher.publishPlacementCompleted(PlacementCompletedEvent.builder()
+                    .applicationId(saved.getId())
+                    .studentId(saved.getStudentId())
+                    .jobId(saved.getJobId())
+                    .jobTitle(job == null ? null : job.getTitle())
+                    .companyName(companyNameOf(job))
+                    .offeredCtc(saved.getOfferedCtc())
+                    .offerDate(saved.getOfferDate())
+                    .acceptedAt(LocalDateTime.now())
+                    .build());
+        }
+
+        log.info("applicationId={} offer {} by studentId={}",
+                applicationId, request.getOutcome(), studentId);
+        return toResponse(saved, job == null ? null : job.getTitle());
+    }
+
+    /**
+     * Loads the job behind an application and asserts the caller owns it. Separate lookup plus
+     * Objects.equals rather than a compound finder, deliberately: this returns 403 for someone
+     * else's application, where a findByIdAndRecruiterId would collapse it into a 404. CLAUDE.md
+     * records why application and interview endpoints differ from company and job lookups here.
+     */
+    private Job requireOwnedJob(JobApplication application, Long recruiterId) {
+        Job job = jobRepository.findById(application.getJobId())
+                .orElseThrow(() -> new CustomException("Job not found", HttpStatus.NOT_FOUND));
+
+        if (!Objects.equals(job.getRecruiterId(), recruiterId)) {
+            throw new CustomException("You do not own the job this application belongs to",
+                    HttpStatus.FORBIDDEN);
+        }
+        return job;
+    }
+
+    /** Null-safe: the event carries a null company name rather than failing a committed placement. */
+    private String companyNameOf(Job job) {
+        if (job == null || job.getCompanyId() == null) {
+            return null;
+        }
+        return companyRepository.findById(job.getCompanyId())
+                .map(Company::getName)
+                .orElse(null);
+    }
+
     private void requireRole(String callerRole, String required, String message) {
         if (!required.equals(callerRole)) {
             throw new CustomException(message, HttpStatus.FORBIDDEN);
@@ -206,6 +350,9 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .jobTitle(jobTitle)
                 .studentId(application.getStudentId())
                 .status(application.getStatus())
+                .offeredCtc(application.getOfferedCtc())
+                .offerDate(application.getOfferDate())
+                .offerOutcome(application.getOfferOutcome())
                 .appliedAt(application.getAppliedAt())
                 .updatedAt(application.getUpdatedAt())
                 .build();
