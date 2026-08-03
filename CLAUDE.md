@@ -430,6 +430,208 @@ API-gateway specifics worth knowing before touching it:
 - Eureka client dependency was removed — nothing in this repo configures a discovery server, routes are hardcoded `localhost:<port>` URIs, and the dependency only produced continuous connection-refused log noise.
 - Since this gateway is the only thing validating a JWT, **ports 8081–8089 must not be publicly reachable** at deploy time — the same constraint already noted for student-service's port 8082, now true of all eight backend services. `docker-compose.yml` already enforces this by publishing no host port for any of them.
 
+## Verified API Reference
+
+Read directly from each controller/DTO on 2026-08-03 (branch `dev` @ `7a056f9`), not transcribed from a spec. All paths below are relative to the gateway (`http://localhost:8080`) unless noted. Every non-public endpoint requires `Authorization: Bearer <token>`; `X-User-Id`/`X-User-Role`/`X-User-Org-Id` are injected by api-gateway from the JWT and never sent by the caller directly — they are listed here because that's what the controller reads, not because a client sets them.
+
+**Gateway route map** (`api-gateway/application.yml`): `/api/auth/**`→8081, `/api/student/**`→8082, `/api/assessment/**`→8083, `/api/recommendation/**`→8084, `/api/notification/**`→8085, `/api/organization/**`→8087, `/api/roadmap/**`→8088, `/api/prs/**`→8089, `/api/recruiter/**`→8090, `/api/resume/**`→8091, `/api/ai-coach/**`→8092, `/api/payment/**`→8093.
+
+**Public paths** (no token needed, and no identity headers forwarded at all): `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`, `/actuator/**`, `/api/recommendation/careers`, `/api/payment/plans`, `/swagger-ui.html`, `/swagger-ui/**`, `/api-docs/**`, `/webjars/**`. Everything else needs a valid JWT.
+
+### auth-service (8081)
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| POST | `/api/auth/register` | — (public) | `{firstName, lastName, email, password (8-72 chars), role?, organizationId?}` — `role` defaults `STUDENT` if omitted | 201 `AuthResponse{accessToken, refreshToken, tokenType, userId, email, role, organizationId}` |
+| POST | `/api/auth/login` | — (public) | `{email, password}` | 200 `AuthResponse` (same shape) |
+| POST | `/api/auth/refresh` | — (public) | `{refreshToken}` | 200 `AuthResponse` |
+| POST | `/api/auth/logout` | Bearer (protected, not public) | `{refreshToken}` | 204 |
+| GET | `/api/auth/admin/users` | `X-User-Role`, `X-User-Org-Id?` | — (`?role=` optional filter, string) | 200 `List<UserSummaryResponse>` |
+| GET | `/api/auth/admin/users/{userId}` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `UserSummaryResponse` |
+| PATCH | `/api/auth/admin/users/{userId}/role` | `X-User-Role`, `X-User-Id` | `{role}` (string, validated against enum in service) | 200 `UserSummaryResponse` |
+| PATCH | `/api/auth/admin/users/{userId}/deactivate` | `X-User-Role`, `X-User-Id`, `X-User-Org-Id?` | — | 200 `UserSummaryResponse` |
+| PATCH | `/api/auth/admin/users/{userId}/activate` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `UserSummaryResponse` |
+| GET | `/api/auth/admin/stats` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `AdminStatsResponse` |
+
+`Role` enum: `STUDENT, ORG_ADMIN, PLACEMENT_OFFICER, RECRUITER, MENTOR, SUPER_ADMIN`.
+
+### organization-service (8087) — `/api/organization` (singular)
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| POST | `/api/organization` | `X-User-Role` | `{name, type, contactEmail?, contactPhone?, address?, city?, state?}` — **`type` is required**, no `domain` field exists | 201 `OrganizationResponse{id, name, type, contactEmail, contactPhone, address, city, state, isActive, createdAt, departments[]}` |
+| GET | `/api/organization` | `X-User-Role` | — | 200 `List<OrganizationResponse>` (SUPER_ADMIN only — ORG_ADMIN gets 403, not a narrowed list) |
+| GET | `/api/organization/{id}` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `OrganizationResponse` |
+| PUT | `/api/organization/{id}` | `X-User-Role`, `X-User-Org-Id?` | `UpdateOrganizationRequest` — all fields optional, null = leave unchanged | 200 `OrganizationResponse` |
+| DELETE | `/api/organization/{id}` | `X-User-Role` | — | 204 (soft delete, SUPER_ADMIN only) |
+| POST | `/api/organization/{id}/departments` | `X-User-Role`, `X-User-Org-Id?` | `{name, description?}` | 201 `DepartmentResponse` |
+| GET | `/api/organization/{id}/departments` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `List<DepartmentResponse>` |
+
+**There is no "add member" endpoint.** Org membership is set once, at registration, via `organizationId` in `POST /api/auth/register` — not a separate call after the org exists.
+
+### student-service (8082) — `/api/student` (singular)
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| GET | `/api/student/profile` | `X-User-Id` | — | 200 `StudentProfileResponse{id, userId, firstName, lastName, email, phone, bio, city, state, country, linkedinUrl, githubUrl, portfolioUrl, resumeUrl, profileCompletionPercentage, isPublic, createdAt, updatedAt, educations[], skills[], projects[], certificates[]}` |
+| PUT | `/api/student/profile` | `X-User-Id` | `StudentProfileRequest{firstName, lastName, phone?, bio?, city?, state?, country?, linkedinUrl?, githubUrl?, portfolioUrl?, isPublic?}` — **full replace: a field left null clears it.** No `skills`/`cgpa`/`branch`/`graduationYear` on this DTO — those don't exist on the schema at all (cgpa/branch/graduationYear) or are added via separate endpoints (skills) | 200 `StudentProfileResponse` |
+| POST | `/api/student/profile/education` | `X-User-Id` | `EducationDto{institution, degree?, fieldOfStudy?, startYear?, endYear?, grade?, description?}` | 201 `EducationDto` |
+| POST | `/api/student/profile/skills` | `X-User-Id` | `SkillDto{skillName, proficiencyLevel?, isCustom?}` (one skill per call) | 201 `SkillDto` |
+| GET | `/api/student/profile/skills/suggestions` | — | — | 200 `List<String>` (autocomplete catalogue) |
+| POST | `/api/student/profile/projects` | `X-User-Id` | `ProjectDto{title, description?, techStack?, projectUrl?, githubUrl?, startDate?, endDate?, isOngoing?}` | 201 `ProjectDto` |
+| POST | `/api/student/profile/certificates` | `X-User-Id` | `CertificateDto{name, issuingOrganization?, issueDate?, expiryDate?, credentialUrl?}` | 201 `CertificateDto` |
+| GET | `/api/student/profiles/public` | `X-User-Role` (RECRUITER/PLACEMENT_OFFICER/ORG_ADMIN/SUPER_ADMIN only) | — | 200 `List<PublicStudentProfileResponse>` |
+
+`ProficiencyLevel` enum: `BEGINNER, INTERMEDIATE, ADVANCED, EXPERT`.
+
+### assessment-service (8083) — `/api/assessment`
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| GET | `/api/assessment/categories` | — | — | 200 `List<CategoryDto>{id, name, description}` |
+| GET | `/api/assessment/questions/{categoryId}` | — | — | 200 `List<QuestionDto>` (no weights) |
+| POST | `/api/assessment/attempt/start` | `X-User-Id` | `{categoryId}` | 201 `AssessmentResponse{attemptId, categoryId, categoryName, status, startedAt, questions[{questionId, questionText, orderIndex, options[{optionId, optionText, orderIndex}]}]}` — 5 random questions, no weights exposed |
+| POST | `/api/assessment/attempt/submit` | `X-User-Id` | `SubmitAnswerRequest{attemptId, answers: [{questionId, selectedOptionId}]}` | 200 `AssessmentResultDto{attemptId, userId, categoryName, rawScore, maxPossibleScore, categoryScorePercentage, topCareerPath, careerMatchPercentage, allCareerScores{}, calculatedAt}` |
+| GET | `/api/assessment/result/{attemptId}` | `X-User-Id` | — | 200 `AssessmentResultDto` |
+
+**Admin sub-controller** `/api/assessment/admin` (SUPER_ADMIN/ORG_ADMIN only, `X-User-Role`):
+
+| Method | Path | Request body | Response |
+|---|---|---|---|
+| GET | `/questions` (`?categoryId=` optional) | — | 200 `List<AdminQuestionResponse>` (includes weights + inactive questions) |
+| GET | `/questions/{id}` | — | 200 `AdminQuestionResponse` |
+| POST | `/questions` | `AdminQuestionRequest{text, categoryId, orderIndex (1-based), isActive?, options: [{text, weight (0-3)}] (2-4 items)}` | 201 `AdminQuestionResponse` |
+| PUT | `/questions/{id}` | Same shape as POST (full option replace) | 200 `AdminQuestionResponse` |
+| PATCH | `/questions/{id}/activate` | — | 204 |
+| PATCH | `/questions/{id}/deactivate` | — | 204 (soft retire only, no DELETE exists) |
+
+### recommendation-service (8084) — `/api/recommendation`
+
+Read-only; recommendations are created only by the `recommendation.generated`... actually by consuming `assessment.completed` — no POST anywhere in this service.
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| GET | `/api/recommendation/my` | `X-User-Id` | 200 `RecommendationResponse`, 404 until an assessment is completed |
+| GET | `/api/recommendation/history` | `X-User-Id` | 200 `List<RecommendationResponse>` (empty list, not 404, when none) |
+| GET | `/api/recommendation/careers` | — (public path) | 200 `List<CareerPathDto>{name, description, requiredSkills}` — 7 careers |
+| GET | `/api/recommendation/{recommendationId}` | `X-User-Id` | 200 `RecommendationResponse`, 404 if not the caller's own |
+
+### notification-service (8085) — `/api/notification` (singular)
+
+Read-only; notifications are created only by RabbitMQ consumers, never HTTP.
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| GET | `/api/notification/my` | `X-User-Id` | 200 `List<NotificationResponse>{id (Mongo ObjectId hex), userId, recommendationId, title, message, isRead, notificationType, createdAt, readAt}` |
+| GET | `/api/notification/unread-count` | `X-User-Id` | 200 `UnreadCountResponse{userId, unreadCount}` |
+| PATCH | `/api/notification/{notificationId}/read` | `X-User-Id` | 200 `NotificationResponse` — `notificationId` is a String (Mongo hex), not a Long |
+
+### roadmap-service (8088) — `/api/roadmap`
+
+**No endpoint creates a roadmap.** The only path into existence is the `recommendation.generated` consumer — a student cannot request one for a career their assessment didn't recommend.
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| GET | `/api/roadmap/my` | `X-User-Id` | 200 `RoadmapResponse{id, studentId, careerName, status, totalMilestones, completedMilestones, completionPercentage, startedAt, completedAt, milestones[{id, title, description, orderIndex, estimatedDays, resourceUrl, isCompleted, completedAt}]}` — returns newest regardless of status, never filtered to IN_PROGRESS |
+| PATCH | `/api/roadmap/milestone/{milestoneId}/complete` | `X-User-Id` | 200 `RoadmapResponse` (recomputed) |
+| GET | `/api/roadmap/templates` | `X-User-Role` | 200 `List<RoadmapTemplateResponse>` |
+
+### prs-service (8089) — `/api/prs` (singular). Fully read-only.
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| GET | `/api/prs/my` | `X-User-Id` | 200 `PrsResponse{studentId, assessmentScore, roadmapScore, profileScore, resumeScore, totalScore, grade, breakdown{...weights/contributions...}, lastUpdatedAt}` |
+| GET | `/api/prs/{studentId}` | `X-User-Id`, `X-User-Role` | 200 `PrsResponse` (admin only) |
+| GET | `/api/prs/leaderboard` | `X-User-Role`, `X-User-Org-Id?` | 200 `List<PrsLeaderboardEntry>{rank, studentId, totalScore, grade}` — SUPER_ADMIN sees global, ORG_ADMIN sees own org only, everyone else 403 |
+
+### recruiter-service (8090) — `/api/recruiter`. Four controllers.
+
+**Companies** (`/api/recruiter/companies`):
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| POST | (root) | `X-User-Id`, `X-User-Role` | `{name, industry, website?, description?, logoUrl?}` | 201 `CompanyResponse` |
+| GET | `/my` | `X-User-Id`, `X-User-Role` | — | 200 `List<CompanyResponse>` |
+| GET | `/{id}` | — | — | 200 `CompanyResponse` |
+| PUT | `/{id}` | `X-User-Id`, `X-User-Role` | `UpdateCompanyRequest` (all optional, partial update) | 200 `CompanyResponse` |
+
+**Jobs** (`/api/recruiter/jobs`):
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| POST | (root) | `X-User-Id`, `X-User-Role` | `CreateJobRequest{companyId, title, description, requiredSkills? (comma-separated string, not array), location?, workMode (REMOTE/HYBRID/ON_SITE), jobType (FULL_TIME/PART_TIME/INTERNSHIP/CONTRACT), salaryMin?, salaryMax?, applicationDeadline? (LocalDate, key is applicationDeadline not deadline)}` | 201 `JobResponse` |
+| GET | (root) | — | — | 200 `List<JobSummaryResponse>` (public job board) |
+| GET | `/my` | `X-User-Id`, `X-User-Role` | — | 200 `List<JobSummaryResponse>` |
+| GET | `/{id}` | — | — | 200 `JobResponse` |
+| PUT | `/{id}` | `X-User-Id`, `X-User-Role` | `UpdateJobRequest` (no companyId, partial update) | 200 `JobResponse` |
+| PATCH | `/{id}/deactivate` | `X-User-Id`, `X-User-Role` | — | 204 |
+| DELETE | `/{id}` | `X-User-Id`, `X-User-Role` | — | 204 (refused with 400 if any application exists — use deactivate instead) |
+
+**Applications, offers, candidates, interviews** (`/api/recruiter/...`):
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| POST | `/jobs/{jobId}/apply` | `X-User-Id`, `X-User-Role` | `{coverLetter?}` | 201 `JobApplicationResponse{id, jobId, jobTitle, studentId, status, offeredCtc, offerDate, offerOutcome, appliedAt, updatedAt}` |
+| GET | `/applications/my` | `X-User-Id`, `X-User-Role` | — | 200 `List<JobApplicationResponse>` |
+| GET | `/jobs/{jobId}/applications` | `X-User-Id`, `X-User-Role` | — | 200 `List<JobApplicationResponse>` |
+| GET | `/applications/org` | `X-User-Role`, `X-User-Org-Id?` | — | 200 `List<JobApplicationResponse>` (fails closed to `[]` on missing org id, never widens) |
+| PATCH | `/applications/{applicationId}/status` | `X-User-Id`, `X-User-Role` | `{status}` — enum `APPLIED/SHORTLISTED/INTERVIEWED/OFFERED/REJECTED` | 200 `JobApplicationResponse` |
+| PATCH | `/applications/{applicationId}/offer` | `X-User-Id`, `X-User-Role` (RECRUITER, owns job) | `ExtendOfferRequest{offeredCtc}` (BigDecimal, LPA, > 0) — **no `offerStatus` field**, the endpoint itself is the transition | 200 `JobApplicationResponse` (status→OFFERED) |
+| PATCH | `/applications/{applicationId}/offer/respond` | `X-User-Id`, `X-User-Role` (STUDENT, owns application) | `OfferResponseRequest{outcome}` — enum `ACCEPTED`/`DECLINED` only (no WITHDRAWN) | 200 `JobApplicationResponse` |
+| GET | `/candidates` | `X-User-Role` | — (`?skills=`, `?minScore=`, `?maxScore=` optional query params) | 200 `List<CandidateResponse>{studentId, firstName, lastName, email, skills[], prsScore (-1.0 = unavailable), profileCompletionPercentage, profileUrl}` — no careerPath filter exists |
+| POST | `/applications/{applicationId}/interview` | `X-User-Id`, `X-User-Role` | `ScheduleInterviewRequest{scheduledDate, timeSlot, mode (ONLINE/IN_PERSON), meetingLink? (required only if ONLINE, enforced in service)}` | 201 `InterviewResponse` — requires application status SHORTLISTED or INTERVIEWED |
+| GET | `/interviews/my` | `X-User-Id`, `X-User-Role` | — | 200 `List<InterviewResponse>` |
+| PATCH | `/interviews/{interviewId}` | `X-User-Id`, `X-User-Role` | `UpdateInterviewRequest` (all optional; `status` enum `SCHEDULED/COMPLETED/CANCELLED`) | 200 `InterviewResponse` |
+
+**Placement stats** (`/api/recruiter/stats`):
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| GET | `/placement` | `X-User-Role`, `X-User-Org-Id?` | 200 `PlacementStatsResponse{totalStudentsInScope, totalApplications, offersExtended, offersAccepted, offersDeclined, placementRate, averageCtc (null if none), highestCtc (null if none), topCompanies[]}` — ORG_ADMIN/SUPER_ADMIN, fails closed to zeros if prs-service is down |
+| GET | `/my` | `X-User-Id`, `X-User-Role` | Same shape, scoped to the caller's own jobs, zero cross-service calls |
+
+### resume-service (8091) — `/api/resume` (singular)
+
+| Method | Path | Headers | Response |
+|---|---|---|---|
+| POST | `/api/resume/generate` | `X-User-Id`, `X-User-Role` | 201 `ResumeResponse{id, studentId, fileName, fileUrl, version, atsScore, isDefault, generatedAt}` — ATS score is inline, no separate endpoint |
+| GET | `/api/resume/my` | `X-User-Id`, `X-User-Role` | 200 `List<ResumeResponse>` (metadata only, no PDF bytes) |
+| GET | `/api/resume/{id}` | `X-User-Id`, `X-User-Role` | 200 `ResumeResponse` |
+| GET | `/api/resume/download/{id}` | `X-User-Id`, `X-User-Role` | 200 raw `application/pdf` bytes, `Content-Disposition: attachment; filename="..."` |
+| DELETE | `/api/resume/{id}` | `X-User-Id`, `X-User-Role` | 204 |
+| GET | `/api/resume/student/{studentId}` | `X-User-Role` | 200 `List<ResumeResponse>` |
+
+### payment-service (8093) — `/api/payment`
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| GET | `/api/payment/plans` | — (public, reads no headers at all) | — | 200 `List<PlanResponse>{id, planName, description, price, currency, billingCycle, features[]}` — 4 plans: `FREE` (₹0, not `STUDENT_FREE`), `STUDENT_PREMIUM` (₹199), `COLLEGE_BASIC` (₹4999), `COLLEGE_PRO` (₹9999) |
+| POST | `/api/payment/orders` | `X-User-Id`, `X-User-Role` | `{planId}` (Long — look up the real id from `/plans`, don't hardcode) | 201 `CreateOrderResponse{paymentId, razorpayOrderId, amountPaise, amount, currency, keyId, planName, planDescription}`; 400 if `planId` is the FREE plan |
+| POST | `/api/payment/verify` | `X-User-Id`, `X-User-Role` | `{razorpayOrderId, razorpayPaymentId, razorpaySignature}` | 200 `PaymentVerifyResponse` |
+| POST | `/api/payment/orders/{razorpayOrderId}/reconcile` | `X-User-Id`, `X-User-Role` | — | 200 `PaymentVerifyResponse` (abandoned-checkout fallback, no signature needed) |
+| GET | `/api/payment/subscription/my` | `X-User-Id`, `X-User-Role` | — | 200 `SubscriptionResponse{id (null if virtual FREE), userId, planName, planDescription, planPrice, billingCycle, startDate, endDate, status, active}` |
+| GET | `/api/payment/payments/my` | `X-User-Id`, `X-User-Role` | — | 200 `List<PaymentResponse>` |
+| GET | `/api/payment/admin/subscriptions` | `X-User-Role` | — | 200 `List<SubscriptionResponse>` |
+
+### ai-coach-service (8092) — `/api/ai-coach`
+
+| Method | Path | Headers | Request body | Response |
+|---|---|---|---|---|
+| GET | `/api/ai-coach/resources` | `X-User-Id`, `X-User-Role` | — | 200 `List<MilestoneResourcesResponse>{milestoneTitle, resources[{title, url, type, platform}]}` — matched against the caller's own roadmap milestones |
+| POST | `/api/ai-coach/resources/refresh` | `X-User-Role` (SUPER_ADMIN) | — | 202 (async catalog rebuild, no body) |
+| POST | `/api/ai-coach/sessions` | `X-User-Id`, `X-User-Role` | — | 201 `ChatSessionResponse{id (Mongo ObjectId hex, not "sessionId"), careerPath, messages[], createdAt}` |
+| GET | `/api/ai-coach/sessions` | `X-User-Id`, `X-User-Role` | — | 200 `List<ChatSessionSummary>` |
+| GET | `/api/ai-coach/sessions/{id}` | `X-User-Id`, `X-User-Role` | — | 200 `ChatSessionResponse` |
+| DELETE | `/api/ai-coach/sessions/{id}` | `X-User-Id`, `X-User-Role` | — | 204 |
+| POST | `/api/ai-coach/sessions/{id}/messages` | `X-User-Id`, `X-User-Role` | `SendMessageRequest{content}` — **field is `content`, not `message`** | 200 `MessageReply{role, content, timestamp}` |
+
+### Known cross-cutting gotchas for anyone hand-writing calls against this list
+
+- Every `X-User-*` header in this table is what the **controller reads after the gateway injects it** — a caller only ever sends `Authorization: Bearer <token>`; never set these headers directly, the gateway strips any client-supplied copy of them.
+- `X-User-Org-Id` is `required = false` everywhere it appears: SUPER_ADMIN and RECRUITER belong to no organization, so the gateway sends no header for them at all.
+- Every service listed above uses **singular** path segments (`/api/organization`, `/api/notification`, `/api/roadmap`, `/api/prs`, `/api/resume`) to match the gateway's exact-segment route predicates — a plural guess 404s.
+- Services with **no create endpoint by design**: recommendation-service (created by consuming `assessment.completed`), notification-service (created by consuming two events), roadmap-service (created by consuming `recommendation.generated`), prs-service (created/updated by consuming four events). Trying to POST to any of these looking for a "generate" action will 405/404 — the trigger is always an upstream event, not an HTTP call.
+
 ## Pending Tasks (Do Not Forget)
 - **notification-service does not consume `assessment.completed`** — scoped out deliberately, not forgotten. Today only recommendation-service consumes it. If an "assessment complete" in-app notification is wanted, add a third queue (`careerbridge.notification.assessment.queue`) with its own binding and single-type listener; do NOT add a second listener to an existing queue.
 - **Migrating any service to Boot 4 requires checking `spring-configuration-metadata.json` for `"deprecation"` entries**, not assuming Boot 3 property names still bind. Entries at `level: error` are silently ignored — no warning, no startup failure, just default behaviour. This cost a debugging session on notification-service's Mongo URI (SEV-2). A `@Value` resolving a property proves only that it exists in the Environment, not that any auto-configuration consumes it.
