@@ -1,6 +1,8 @@
 package com.careerbridge.recruiter.service;
 
+import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
+import com.careerbridge.recruiter.dto.OfferResponseRequest;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
 
 import java.util.List;
@@ -26,4 +28,22 @@ public interface ApplicationService {
     JobApplicationResponse updateApplicationStatus(String callerRole, Long recruiterId,
                                                    Long applicationId,
                                                    UpdateApplicationStatusRequest request);
+
+    /**
+     * RECRUITER only, and only for an application against a job they own. Sets the application to
+     * OFFERED and records the CTC and offer date.
+     *
+     * Re-callable to correct the CTC, but only until the student responds -- see the impl.
+     */
+    JobApplicationResponse extendOffer(String callerRole, Long recruiterId, Long applicationId,
+                                       ExtendOfferRequest request);
+
+    /**
+     * STUDENT only, and only for their own application. Records ACCEPTED or DECLINED, exactly once.
+     *
+     * Deliberately separate from extendOffer and gated on a different role: nobody should be able
+     * to accept a job offer on a student's behalf.
+     */
+    JobApplicationResponse respondToOffer(String callerRole, Long studentId, Long applicationId,
+                                          OfferResponseRequest request);
 }
