@@ -78,20 +78,27 @@ export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
 
 export function Logo({ size = 32 }) {
   return (
-    <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 'none' }}>
-      <img src="/images/logo-monogram.png" alt="CareerBridge" style={{ height: size, width: 'auto' }} />
+    <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 'none' }}>
+      <img src="/images/logo-monogram.png" alt="" style={{ height: size, width: 'auto' }} />
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: size * 0.5, color: 'var(--ink-900)', whiteSpace: 'nowrap' }}>
+        CareerBridge
+      </span>
     </Link>
   );
 }
 
+const badgeTones = {
+  inverse: { background: 'var(--taupe-600)', color: 'var(--bone-50)' },
+  dark: { background: 'var(--ink-800)', color: 'var(--bone-50)' },
+  default: { background: 'var(--taupe-100)', color: 'var(--ink-800)' },
+};
+
 export function Badge({ children, tone = 'default' }) {
-  const toneStyle = tone === 'inverse'
-    ? { background: 'var(--bone-50)', color: 'var(--ink-900)' }
-    : { background: 'var(--taupe-100)', color: 'var(--ink-800)' };
+  const toneStyle = badgeTones[tone] || badgeTones.default;
   return (
     <span
       style={{
-        display: 'inline-flex', alignItems: 'center', padding: '4px 10px',
+        display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', padding: '4px 10px',
         fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase',
         borderRadius: 'var(--radius-pill)', ...toneStyle,
       }}
