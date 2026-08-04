@@ -27,9 +27,9 @@ const SCORE_BREAKDOWN = [
 ];
 
 const DEFAULT_PLANS = [
-  { planName: 'Free', priceDisplay: '$0', billingCycle: 'Forever', buttonVariant: 'secondary' },
-  { planName: 'Student premium', priceDisplay: '$9', billingCycle: 'Per month', buttonVariant: 'primary' },
-  { planName: 'College basic', priceDisplay: '$199', billingCycle: 'Per month', buttonVariant: 'primary' },
+  { planName: 'Free', priceDisplay: '$0', billingCycle: 'Forever' },
+  { planName: 'Student premium', priceDisplay: '$9', billingCycle: 'Per month' },
+  { planName: 'College basic', priceDisplay: '$199', billingCycle: 'Per month' },
 ];
 
 function useReveal() {
@@ -128,7 +128,6 @@ export default function HomePage() {
             planName: (p.planName || '').replace(/_/g, ' ').toLowerCase(),
             priceDisplay: `${p.currency || ''}${p.price}`.trim(),
             billingCycle: p.billingCycle || '',
-            buttonVariant: p.planName === 'FREE' ? 'secondary' : 'primary',
           }));
         if (picked.length) setPlans(picked);
       })
@@ -138,13 +137,14 @@ export default function HomePage() {
 
   const decoratedPlans = plans.map((p, i) => {
     const featured = plans.length === 3 && i === 1;
+    const isThirdTier = plans.length === 3 && i === 2;
     return {
       ...p,
       featured,
-      cardBg: featured ? 'var(--ink-900)' : 'var(--bone-50)',
+      cardBg: featured ? 'var(--ink-900)' : isThirdTier ? 'var(--taupe-100)' : 'var(--bone-50)',
       textColor: featured ? 'var(--bone-50)' : 'var(--ink-900)',
-      mutedColor: 'var(--ink-400)',
-      buttonVariant: featured ? 'quiet' : p.buttonVariant,
+      mutedColor: featured ? 'var(--ink-400)' : 'var(--ink-500)',
+      buttonVariant: featured ? 'quiet' : 'secondary',
     };
   });
 
@@ -233,8 +233,8 @@ export default function HomePage() {
             <Button size="lg" variant="secondary" to="/careers">Explore careers</Button>
           </div>
         </div>
-        <div style={{ position: 'relative', overflow: 'hidden', minHeight: 560 }}>
-          <img src="/images/hero-01.png" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(.92)' }} />
+        <div style={{ position: 'relative', overflow: 'hidden', minHeight: 720, background: 'var(--bone-200)' }}>
+          <img src="/images/hero-01.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', filter: 'saturate(.92)' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, var(--bone-100) 0%, rgba(245,243,239,0) 22%)' }} />
         </div>
       </section>
@@ -339,11 +339,22 @@ export default function HomePage() {
           Start free. Scale when it works.
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', marginTop: 40 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 20, marginTop: 40 }}>
           {decoratedPlans.map((plan) => (
-            <div key={plan.planName} style={{ background: plan.cardBg, padding: '36px 30px', display: 'flex', flexDirection: 'column', gap: 16, position: 'relative' }}>
+            <div
+              key={plan.planName}
+              style={{
+                background: plan.cardBg, padding: '36px 30px', display: 'flex', flexDirection: 'column',
+                gap: 16, position: 'relative', borderRadius: 'var(--radius-md)',
+                border: plan.featured ? 'none' : 'var(--border-hairline)',
+              }}
+            >
               {plan.featured && <Badge tone="inverse">Most popular</Badge>}
-              <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: plan.mutedColor }}>{plan.planName}</span>
+              {plan.featured ? (
+                <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: plan.mutedColor }}>{plan.planName}</span>
+              ) : (
+                <Badge tone="dark">{plan.planName}</Badge>
+              )}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                 <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 40, color: plan.textColor, fontWeight: 400 }}>{plan.priceDisplay}</span>
               </div>
