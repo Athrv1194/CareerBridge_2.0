@@ -76,6 +76,91 @@ public class EmailService {
     }
 
     /**
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendPasswordResetOtpEmail(String toEmail, String firstName, String otp, int expiresInMinutes) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.PASSWORD_RESET_EMAIL_SUBJECT);
+            helper.setText(buildPasswordResetOtpBody(firstName, otp, expiresInMinutes), true);
+
+            mailSender.send(message);
+
+            log.info("Sent password reset OTP email to {}", toEmail);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send password reset OTP email to {}: {}", toEmail, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendPasswordChangedEmail(String toEmail, String firstName) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.PASSWORD_CHANGED_EMAIL_SUBJECT);
+            helper.setText(buildPasswordChangedBody(firstName), true);
+
+            mailSender.send(message);
+
+            log.info("Sent password changed confirmation email to {}", toEmail);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send password changed confirmation email to {}: {}", toEmail, ex.getMessage());
+            return false;
+        }
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildPasswordResetOtpBody(String firstName, String otp, int expiresInMinutes) {
+        String name = (firstName == null || firstName.isBlank()) ? "there" : firstName;
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Reset your password</h2>
+                    <p>Hi %s,</p>
+                    <p>Use this code to reset your CareerBridge password. It expires in %d minutes.</p>
+                    <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1c6ea4; margin: 24px 0;">
+                      %s
+                    </p>
+                    <p>If you didn't request this, you can safely ignore this email -- your password will not change.</p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name, expiresInMinutes, otp);
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildPasswordChangedBody(String firstName) {
+        String name = (firstName == null || firstName.isBlank()) ? "there" : firstName;
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Your password was changed</h2>
+                    <p>Hi %s,</p>
+                    <p>This is a confirmation that your CareerBridge password was just changed.</p>
+                    <p style="font-weight: bold; color: #b71c1c;">
+                      If this wasn't you, please reset your password again immediately and contact support.
+                    </p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name);
+    }
+
+    /**
      * Public so the body can be asserted directly in a test without going through a MimeMessage
      * built on a null Session. (Package-private would be the tighter choice, but every test class
      * in this project lives in the base package com.careerbridge.notification rather than mirroring

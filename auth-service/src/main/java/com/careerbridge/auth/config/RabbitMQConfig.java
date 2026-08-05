@@ -17,6 +17,14 @@ public class RabbitMQConfig {
     public static final String EXCHANGE = "careerbridge.exchange";
     public static final String STUDENT_REGISTERED_ROUTING_KEY = "student.registered";
 
+    /**
+     * Published, deliberately unconsumed by any queue declared here -- notification-service owns
+     * both queues, same one-queue-per-consumer-per-event rule as every other cross-service event
+     * in this project.
+     */
+    public static final String PASSWORD_RESET_REQUESTED_ROUTING_KEY = "password.reset.requested";
+    public static final String PASSWORD_CHANGED_ROUTING_KEY = "password.changed";
+
     /** Consumed from payment-service. This service's first inbound event. */
     public static final String SUBSCRIPTION_QUEUE = "careerbridge.auth.subscription.queue";
     public static final String SUBSCRIPTION_ACTIVATED_ROUTING_KEY = "subscription.activated";

@@ -42,6 +42,16 @@ public class RabbitMQConfig {
         return new Queue(NotificationConstants.STUDENT_QUEUE_NAME, true);
     }
 
+    @Bean
+    public Queue notificationPasswordResetQueue() {
+        return new Queue(NotificationConstants.PASSWORD_RESET_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Queue notificationPasswordChangedQueue() {
+        return new Queue(NotificationConstants.PASSWORD_CHANGED_QUEUE_NAME, true);
+    }
+
     /**
      * durable=true, autoDelete=false must match auth/student/assessment/recommendation exactly. A
      * mismatch is answered with 406 PRECONDITION_FAILED, and because declaration happens
@@ -67,6 +77,22 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationStudentQueue)
                 .to(careerBridgeExchange)
                 .with(NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED);
+    }
+
+    @Bean
+    public Binding passwordResetRequestedBinding(Queue notificationPasswordResetQueue,
+                                                 TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationPasswordResetQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED);
+    }
+
+    @Bean
+    public Binding passwordChangedBinding(Queue notificationPasswordChangedQueue,
+                                          TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationPasswordChangedQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED);
     }
 
     /**

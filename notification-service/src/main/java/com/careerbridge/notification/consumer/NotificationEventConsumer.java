@@ -1,8 +1,11 @@
 package com.careerbridge.notification.consumer;
 
 import com.careerbridge.notification.constants.NotificationConstants;
+import com.careerbridge.notification.event.PasswordChangedEvent;
+import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.service.EmailService;
 import com.careerbridge.notification.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,9 +26,11 @@ public class NotificationEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(NotificationEventConsumer.class);
 
     private final NotificationService notificationService;
+    private final EmailService emailService;
 
-    public NotificationEventConsumer(NotificationService notificationService) {
+    public NotificationEventConsumer(NotificationService notificationService, EmailService emailService) {
         this.notificationService = notificationService;
+        this.emailService = emailService;
     }
 
     /**
@@ -81,6 +86,48 @@ public class NotificationEventConsumer {
             log.error("Failed to handle {} for userId={}: {}",
                     NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED,
                     event == null ? null : event.getUserId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Straight to EmailService, not through NotificationService -- an OTP is not something that
+     * belongs in the in-app notification feed or the NotificationRecord audit trail. There is
+     * nothing durable worth writing about a code that is dead again in ten minutes either way.
+     */
+    @RabbitListener(queues = NotificationConstants.PASSWORD_RESET_QUEUE_NAME)
+    public void onPasswordResetRequested(PasswordResetRequestedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null || event.getOtp() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED, event);
+                return;
+            }
+
+            emailService.sendPasswordResetOtpEmail(
+                    event.getEmail(), event.getFirstName(), event.getOtp(), event.getExpiresInMinutes());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED,
+                    event == null ? null : event.getEmail(),
+                    ex.getMessage());
+        }
+    }
+
+    @RabbitListener(queues = NotificationConstants.PASSWORD_CHANGED_QUEUE_NAME)
+    public void onPasswordChanged(PasswordChangedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED, event);
+                return;
+            }
+
+            emailService.sendPasswordChangedEmail(event.getEmail(), event.getFirstName());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED,
+                    event == null ? null : event.getEmail(),
                     ex.getMessage());
         }
     }
