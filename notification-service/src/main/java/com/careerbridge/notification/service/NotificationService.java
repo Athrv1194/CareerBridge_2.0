@@ -4,6 +4,7 @@ import com.careerbridge.notification.dto.NotificationResponse;
 import com.careerbridge.notification.dto.UnreadCountResponse;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 
 import java.util.List;
 
@@ -24,6 +25,16 @@ public interface NotificationService {
      * This exists only because RecommendationGeneratedEvent carries no address.
      */
     void upsertContact(StudentRegisteredEvent event);
+
+    /**
+     * Emails the user their GST invoice (attached, when payment-service is reachable) and adds a
+     * SUBSCRIPTION notification to their in-app feed.
+     *
+     * Idempotent on (userId, paymentId), best-effort -- see NotificationDocumentRepository. No
+     * NotificationRecord audit row is written for this event type; see the class comment on
+     * NotificationServiceImpl for why.
+     */
+    void processSubscriptionInvoice(SubscriptionActivatedEvent event);
 
     /** The student's in-app feed, newest first. Empty list when they have none. */
     List<NotificationResponse> getMyNotifications(Long userId);

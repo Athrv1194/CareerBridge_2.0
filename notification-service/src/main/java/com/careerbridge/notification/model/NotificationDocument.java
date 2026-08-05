@@ -33,6 +33,14 @@ public class NotificationDocument {
 
     private Long recommendationId;
 
+    /**
+     * Null for every notification type except SUBSCRIPTION. Mongo is schemaless, so adding this
+     * costs no migration and no risk to existing documents -- unlike NotificationRecord's Postgres
+     * schema, whose recommendationId is NOT NULL and half a unique constraint, which is exactly why
+     * subscription-invoice notifications get no Postgres audit row at all.
+     */
+    private Long paymentId;
+
     private String title;
 
     private String message;

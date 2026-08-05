@@ -3,6 +3,7 @@ package com.careerbridge.notification;
 import com.careerbridge.notification.consumer.NotificationEventConsumer;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,6 +30,7 @@ class NotificationEventConsumerTest {
 
     private static final Long USER_ID = 42L;
     private static final Long RECOMMENDATION_ID = 7L;
+    private static final Long PAYMENT_ID = 77L;
 
     @Mock private NotificationService notificationService;
 
@@ -36,6 +38,7 @@ class NotificationEventConsumerTest {
 
     private RecommendationGeneratedEvent recommendationEvent;
     private StudentRegisteredEvent studentEvent;
+    private SubscriptionActivatedEvent subscriptionEvent;
 
     @BeforeEach
     void setUp() {
@@ -56,6 +59,14 @@ class NotificationEventConsumerTest {
                 .role("STUDENT")
                 .organizationId(7L)
                 .registeredAt(LocalDateTime.now())
+                .build();
+
+        subscriptionEvent = SubscriptionActivatedEvent.builder()
+                .userId(USER_ID)
+                .paymentId(PAYMENT_ID)
+                .planName("STUDENT_PREMIUM")
+                .invoiceNumber("CB-INV-000077")
+                .userRole("STUDENT")
                 .build();
     }
 
@@ -125,5 +136,44 @@ class NotificationEventConsumerTest {
         doThrow(new RuntimeException("db down")).when(notificationService).upsertContact(any());
 
         assertDoesNotThrow(() -> consumer.onStudentRegistered(studentEvent));
+    }
+
+    @Test
+    @DisplayName("subscription.activated: delegates to the service")
+    void subscriptionActivatedEvent_DelegatesToTheService() {
+        consumer.onSubscriptionActivated(subscriptionEvent);
+
+        verify(notificationService).processSubscriptionInvoice(subscriptionEvent);
+    }
+
+    @Test
+    @DisplayName("subscription.activated: a payload with no userId is ignored rather than throwing")
+    void subscriptionActivatedEvent_MissingUserId_Ignored() {
+        SubscriptionActivatedEvent malformed = SubscriptionActivatedEvent.builder()
+                .paymentId(PAYMENT_ID).build();
+
+        assertDoesNotThrow(() -> consumer.onSubscriptionActivated(malformed));
+
+        verify(notificationService, never()).processSubscriptionInvoice(any());
+    }
+
+    @Test
+    @DisplayName("subscription.activated: a payload with no paymentId is ignored -- it is the key for the invoice fetch")
+    void subscriptionActivatedEvent_MissingPaymentId_Ignored() {
+        SubscriptionActivatedEvent malformed = SubscriptionActivatedEvent.builder()
+                .userId(USER_ID).build();
+
+        assertDoesNotThrow(() -> consumer.onSubscriptionActivated(malformed));
+
+        verify(notificationService, never()).processSubscriptionInvoice(any());
+    }
+
+    @Test
+    @DisplayName("subscription.activated: a failing service is swallowed, so the listener cannot spin on redelivery")
+    void subscriptionActivatedEvent_ServiceThrows_DoesNotRethrow() {
+        doThrow(new RuntimeException("smtp down"))
+                .when(notificationService).processSubscriptionInvoice(any());
+
+        assertDoesNotThrow(() -> consumer.onSubscriptionActivated(subscriptionEvent));
     }
 }
