@@ -34,7 +34,7 @@ const buttonSizes = {
 
 export function Button({
   children, variant = 'primary', size = 'md', iconAfter, onClick, to,
-  fullWidth = false, style,
+  fullWidth = false, disabled = false, style,
 }) {
   const v = buttonVariants[variant] || buttonVariants.primary;
   const s = buttonSizes[size] || buttonSizes.md;
@@ -47,14 +47,15 @@ export function Button({
   const combined = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: s.gap,
     fontSize: s.fontSize, padding: s.padding, fontWeight: 500, letterSpacing: 0,
-    borderRadius: 'var(--radius-sm)', cursor: 'pointer', transition: 'var(--transition-color)',
+    borderRadius: 'var(--radius-sm)', cursor: disabled ? 'not-allowed' : 'pointer',
+    transition: 'var(--transition-color)', opacity: disabled ? 0.6 : 1,
     width: fullWidth ? '100%' : 'auto', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)',
     ...v, ...style,
   };
-  if (to) {
+  if (to && !disabled) {
     return <Link to={to} style={{ ...combined, textDecoration: 'none', border: v.border }}>{content}</Link>;
   }
-  return <button type="button" onClick={onClick} style={combined}>{content}</button>;
+  return <button type="button" onClick={onClick} disabled={disabled} style={combined}>{content}</button>;
 }
 
 export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
@@ -76,11 +77,16 @@ export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
   );
 }
 
-export function Logo({ size = 32 }) {
+export function Logo({ size = 32, tone = 'default' }) {
+  const inverse = tone === 'inverse';
   return (
     <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 'none' }}>
-      <img src="/images/logo-monogram.png" alt="" style={{ height: size, width: 'auto' }} />
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: size * 0.5, color: 'var(--ink-900)', whiteSpace: 'nowrap' }}>
+      <img
+        src="/images/logo-monogram.png"
+        alt=""
+        style={{ height: size, width: 'auto', filter: inverse ? 'brightness(0) invert(1)' : 'none' }}
+      />
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: size * 0.5, color: inverse ? 'var(--bone-50)' : 'var(--ink-900)', whiteSpace: 'nowrap' }}>
         CareerBridge
       </span>
     </Link>
@@ -167,6 +173,62 @@ export function ScoreRing({ value, grade, size = 'lg', label, caption }) {
         {caption && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 4 }}>{caption}</div>}
       </div>
     </div>
+  );
+}
+
+export function Alert({ tone = 'info', title }) {
+  const toneStyle = tone === 'danger'
+    ? { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }
+    : { background: 'var(--status-info-soft)', color: 'var(--status-info)' };
+  return (
+    <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-sm)', fontSize: 13.5, lineHeight: 1.5, ...toneStyle }}>
+      {title}
+    </div>
+  );
+}
+
+export function Field({ label, hint, error, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{label}</span>
+      {children}
+      {error ? (
+        <span style={{ fontSize: 12, color: 'var(--status-danger)' }}>{error}</span>
+      ) : hint ? (
+        <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>{hint}</span>
+      ) : null}
+    </label>
+  );
+}
+
+export function Input({ type = 'text', placeholder, value, onChange, error }) {
+  return (
+    <input
+      type={type}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      style={{
+        width: '100%', boxSizing: 'border-box', padding: '9px 12px', fontSize: 14,
+        fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+        border: `1px solid ${error ? 'var(--status-danger)' : 'var(--line-hairline)'}`,
+        borderRadius: 'var(--radius-sm)', outline: 'none',
+      }}
+    />
+  );
+}
+
+export function Checkbox({ label, checked, onChange }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--ink-700)', cursor: 'pointer' }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        style={{ marginTop: 2, width: 15, height: 15, accentColor: 'var(--ink-900)', cursor: 'pointer' }}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
