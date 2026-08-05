@@ -30,7 +30,17 @@ public class NotificationConstants {
     /** Literal must equal auth-service's RabbitMQConfig.STUDENT_REGISTERED_ROUTING_KEY. */
     public static final String ROUTING_KEY_STUDENT_REGISTERED = "student.registered";
 
+    /** Own queue, per the same one-queue-per-event-type rule as the two above. */
+    public static final String PASSWORD_RESET_QUEUE_NAME = "careerbridge.notification.password.reset.queue";
+    public static final String PASSWORD_CHANGED_QUEUE_NAME = "careerbridge.notification.password.changed.queue";
+
+    /** Literals must equal auth-service's RabbitMQConfig.PASSWORD_RESET_REQUESTED_ROUTING_KEY / PASSWORD_CHANGED_ROUTING_KEY. */
+    public static final String ROUTING_KEY_PASSWORD_RESET_REQUESTED = "password.reset.requested";
+    public static final String ROUTING_KEY_PASSWORD_CHANGED = "password.changed";
+
     public static final String EMAIL_SUBJECT = "Your Career Recommendation is Ready!";
+    public static final String PASSWORD_RESET_EMAIL_SUBJECT = "Your CareerBridge password reset code";
+    public static final String PASSWORD_CHANGED_EMAIL_SUBJECT = "Your CareerBridge password was changed";
 
     /** NotificationRecord.notificationType -- the delivery channel being audited. */
     public static final String TYPE_EMAIL = "EMAIL";

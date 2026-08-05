@@ -213,6 +213,14 @@ gateway:
     - /api/auth/login
     - /api/auth/register
     - /api/auth/refresh
+    # Forgot-password: a caller with no account can't have a token, same reasoning as
+    # login/register/refresh above. Listed individually, not /api/auth/forgot-password/** -- this
+    # project never uses a wildcard on gateway.public-paths, since a public path strips every
+    # identity header and a future non-public /api/auth/forgot-password/* endpoint would silently
+    # inherit that.
+    - /api/auth/forgot-password
+    - /api/auth/forgot-password/verify-otp
+    - /api/auth/forgot-password/reset
     # Health checks must not need a token.
     - /actuator/**
     # The career catalogue is identical for everyone and is served without a user context.

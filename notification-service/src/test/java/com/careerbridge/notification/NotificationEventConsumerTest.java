@@ -1,8 +1,11 @@
 package com.careerbridge.notification;
 
 import com.careerbridge.notification.consumer.NotificationEventConsumer;
+import com.careerbridge.notification.event.PasswordChangedEvent;
+import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.service.EmailService;
 import com.careerbridge.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +19,8 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,6 +36,7 @@ class NotificationEventConsumerTest {
     private static final Long RECOMMENDATION_ID = 7L;
 
     @Mock private NotificationService notificationService;
+    @Mock private EmailService emailService;
 
     @InjectMocks private NotificationEventConsumer consumer;
 
@@ -125,5 +131,63 @@ class NotificationEventConsumerTest {
         doThrow(new RuntimeException("db down")).when(notificationService).upsertContact(any());
 
         assertDoesNotThrow(() -> consumer.onStudentRegistered(studentEvent));
+    }
+
+    @Test
+    @DisplayName("password.reset.requested: delegates straight to EmailService, not NotificationService")
+    void passwordResetRequestedEvent_DelegatesToEmailService() {
+        PasswordResetRequestedEvent event = PasswordResetRequestedEvent.builder()
+                .email("ada@careerbridge.com").firstName("Ada").otp("1234").expiresInMinutes(10)
+                .build();
+
+        consumer.onPasswordResetRequested(event);
+
+        verify(emailService).sendPasswordResetOtpEmail("ada@careerbridge.com", "Ada", "1234", 10);
+        verify(notificationService, never()).processRecommendationNotification(any());
+    }
+
+    @Test
+    @DisplayName("password.reset.requested: a payload with no otp is ignored")
+    void passwordResetRequestedEvent_MissingOtp_Ignored() {
+        PasswordResetRequestedEvent malformed = PasswordResetRequestedEvent.builder()
+                .email("ada@careerbridge.com").build();
+
+        assertDoesNotThrow(() -> consumer.onPasswordResetRequested(malformed));
+
+        verify(emailService, never()).sendPasswordResetOtpEmail(anyString(), anyString(), anyString(), anyInt());
+    }
+
+    @Test
+    @DisplayName("password.reset.requested: a failing EmailService is swallowed rather than spinning the listener")
+    void passwordResetRequestedEvent_EmailServiceThrows_DoesNotRethrow() {
+        PasswordResetRequestedEvent event = PasswordResetRequestedEvent.builder()
+                .email("ada@careerbridge.com").otp("1234").expiresInMinutes(10).build();
+        doThrow(new RuntimeException("smtp down")).when(emailService)
+                .sendPasswordResetOtpEmail(anyString(), any(), anyString(), anyInt());
+
+        assertDoesNotThrow(() -> consumer.onPasswordResetRequested(event));
+    }
+
+    @Test
+    @DisplayName("password.changed: delegates straight to EmailService")
+    void passwordChangedEvent_DelegatesToEmailService() {
+        PasswordChangedEvent event = PasswordChangedEvent.builder()
+                .email("ada@careerbridge.com").firstName("Ada").changedAt(LocalDateTime.now())
+                .build();
+
+        consumer.onPasswordChanged(event);
+
+        verify(emailService).sendPasswordChangedEmail("ada@careerbridge.com", "Ada");
+    }
+
+    @Test
+    @DisplayName("password.changed: a payload with no email is ignored")
+    void passwordChangedEvent_MissingEmail_Ignored() {
+        PasswordChangedEvent malformed = PasswordChangedEvent.builder()
+                .firstName("Ada").changedAt(LocalDateTime.now()).build();
+
+        assertDoesNotThrow(() -> consumer.onPasswordChanged(malformed));
+
+        verify(emailService, never()).sendPasswordChangedEmail(anyString(), any());
     }
 }
