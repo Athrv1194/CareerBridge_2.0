@@ -3,14 +3,18 @@ package com.careerbridge.payment.controller;
 import com.careerbridge.payment.constants.PaymentConstants;
 import com.careerbridge.payment.dto.CreateOrderRequest;
 import com.careerbridge.payment.dto.CreateOrderResponse;
+import com.careerbridge.payment.dto.InvoiceDownload;
 import com.careerbridge.payment.dto.PaymentResponse;
 import com.careerbridge.payment.dto.PaymentVerifyResponse;
 import com.careerbridge.payment.dto.PlanResponse;
 import com.careerbridge.payment.dto.SubscriptionResponse;
 import com.careerbridge.payment.dto.VerifyPaymentRequest;
+import com.careerbridge.payment.service.InvoiceService;
 import com.careerbridge.payment.service.PaymentService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,9 +39,11 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final InvoiceService invoiceService;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(PaymentService paymentService, InvoiceService invoiceService) {
         this.paymentService = paymentService;
+        this.invoiceService = invoiceService;
     }
 
     /**
@@ -98,5 +104,27 @@ public class PaymentController {
     public ResponseEntity<List<SubscriptionResponse>> getAllSubscriptions(
             @RequestHeader(PaymentConstants.USER_ROLE_HEADER) String role) {
         return ResponseEntity.ok(paymentService.getAllSubscriptions(role));
+    }
+
+    /**
+     * Called both by a browser (through the gateway, with the caller's own token) and internally by
+     * notification-service (forwarding the paying user's real X-User-Id/X-User-Role from the
+     * subscription.activated event, never an elevated role) -- both routes hit the exact same RBAC
+     * check in InvoiceServiceImpl, so there is nothing here that trusts one caller more than the
+     * other. GET /payments/my already lists every payment id with its status, so there is no
+     * separate "list my invoices" endpoint -- the frontend filters SUCCESS and builds this URL.
+     */
+    @GetMapping("/invoices/{paymentId}/download")
+    public ResponseEntity<byte[]> downloadInvoice(
+            @RequestHeader(PaymentConstants.USER_ID_HEADER) Long callerId,
+            @RequestHeader(PaymentConstants.USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long paymentId) {
+        InvoiceDownload download = invoiceService.getInvoice(callerRole, callerId, paymentId);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + download.getFileName() + "\"")
+                .body(download.getContent());
     }
 }

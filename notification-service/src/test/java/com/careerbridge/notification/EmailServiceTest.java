@@ -2,6 +2,7 @@ package com.careerbridge.notification;
 
 import com.careerbridge.notification.constants.NotificationConstants;
 import com.careerbridge.notification.service.EmailService;
+import jakarta.mail.Multipart;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
+
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -119,5 +122,81 @@ class EmailServiceTest {
 
         assertTrue(body.contains("n/a"), body);
         assertTrue(body.contains("Hi there,"), "a missing name falls back to a neutral greeting");
+    }
+
+    @Test
+    @DisplayName("invoice: with PDF bytes, attaches the invoice as a named part")
+    void sendInvoiceEmail_WithBytes_AttachesPdf() throws Exception {
+        stubMimeMessage();
+        byte[] pdf = {'%', 'P', 'D', 'F'};
+
+        boolean sent = emailService.sendInvoiceEmail(
+                TO, "STUDENT_PREMIUM", new BigDecimal("199.00"), "CB-INV-000042", pdf, 42L);
+
+        assertTrue(sent);
+
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        MimeMessage message = captor.getValue();
+
+        assertEquals(NotificationConstants.INVOICE_EMAIL_SUBJECT, message.getSubject());
+        assertTrue(message.getContent() instanceof Multipart, "an attached message must be multipart");
+        Multipart multipart = (Multipart) message.getContent();
+
+        boolean hasAttachment = false;
+        for (int i = 0; i < multipart.getCount(); i++) {
+            if ("CB-INV-000042.pdf".equals(multipart.getBodyPart(i).getFileName())) {
+                hasAttachment = true;
+            }
+        }
+        assertTrue(hasAttachment, "expected an attachment named CB-INV-000042.pdf");
+    }
+
+    /**
+     * A failed fetch from payment-service must not cost the confirmation email entirely -- the
+     * user was genuinely charged and needs to know it, even without the attachment.
+     */
+    @Test
+    @DisplayName("invoice: with null PDF bytes, still sends the email without an attachment")
+    void sendInvoiceEmail_NullBytes_StillSendsWithoutAttachment() throws Exception {
+        stubMimeMessage();
+
+        boolean sent = emailService.sendInvoiceEmail(
+                TO, "STUDENT_PREMIUM", new BigDecimal("199.00"), "CB-INV-000042", null, 42L);
+
+        assertTrue(sent);
+        verify(mailSender).send(any(MimeMessage.class));
+    }
+
+    @Test
+    @DisplayName("invoice: an SMTP failure returns false and is never rethrown")
+    void sendInvoiceEmail_MailSenderThrows_ReturnsFalseAndDoesNotRethrow() {
+        stubMimeMessage();
+        doThrow(new MailSendException("smtp down")).when(mailSender).send(any(MimeMessage.class));
+
+        boolean sent = assertDoesNotThrow(() -> emailService.sendInvoiceEmail(
+                TO, "STUDENT_PREMIUM", new BigDecimal("199.00"), "CB-INV-000042", null, 42L));
+
+        assertFalse(sent);
+    }
+
+    @Test
+    @DisplayName("invoice body: carries the plan, amount and invoice number")
+    void buildInvoiceHtmlBody_CarriesPlanAmountAndInvoiceNumber() {
+        String body = emailService.buildInvoiceHtmlBody(
+                "STUDENT_PREMIUM", new BigDecimal("199.00"), "CB-INV-000042");
+
+        assertTrue(body.contains("STUDENT_PREMIUM"), body);
+        assertTrue(body.contains("199.00"), body);
+        assertTrue(body.contains("CB-INV-000042"), body);
+    }
+
+    @Test
+    @DisplayName("invoice body: a null amount renders n/a rather than throwing NPE")
+    void buildInvoiceHtmlBody_NullAmount_RendersNaWithoutThrowing() {
+        String body = assertDoesNotThrow(
+                () -> emailService.buildInvoiceHtmlBody("STUDENT_PREMIUM", null, "CB-INV-000042"));
+
+        assertTrue(body.contains("n/a"), body);
     }
 }

@@ -3,6 +3,7 @@ package com.careerbridge.notification.consumer;
 import com.careerbridge.notification.constants.NotificationConstants;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +82,30 @@ public class NotificationEventConsumer {
             log.error("Failed to handle {} for userId={}: {}",
                     NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED,
                     event == null ? null : event.getUserId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * A third queue, not a second listener on either queue above -- see RabbitMQConfig for why.
+     * paymentId is guarded because it is what the internal invoice-download call is keyed on; a
+     * payment.service.url outage inside processSubscriptionInvoice is handled there (fail-soft,
+     * email still sent without an attachment), not here.
+     */
+    @RabbitListener(queues = NotificationConstants.SUBSCRIPTION_QUEUE_NAME)
+    public void onSubscriptionActivated(SubscriptionActivatedEvent event) {
+        try {
+            if (event == null || event.getUserId() == null || event.getPaymentId() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED, event);
+                return;
+            }
+
+            notificationService.processSubscriptionInvoice(event);
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for paymentId={}: {}",
+                    NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED,
+                    event == null ? null : event.getPaymentId(),
                     ex.getMessage());
         }
     }

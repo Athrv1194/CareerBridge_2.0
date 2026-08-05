@@ -43,6 +43,15 @@ public class RabbitMQConfig {
     }
 
     /**
+     * Durable, and its own queue -- a new @RabbitListener on either queue above would create a
+     * second container round-robining against the first, same hazard as the other two.
+     */
+    @Bean
+    public Queue notificationSubscriptionQueue() {
+        return new Queue(NotificationConstants.SUBSCRIPTION_QUEUE_NAME, true);
+    }
+
+    /**
      * durable=true, autoDelete=false must match auth/student/assessment/recommendation exactly. A
      * mismatch is answered with 406 PRECONDITION_FAILED, and because declaration happens
      * asynchronously on the connection callback, the consumers would simply never start rather
@@ -67,6 +76,14 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationStudentQueue)
                 .to(careerBridgeExchange)
                 .with(NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED);
+    }
+
+    @Bean
+    public Binding subscriptionActivatedBinding(Queue notificationSubscriptionQueue,
+                                                TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationSubscriptionQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED);
     }
 
     /**
