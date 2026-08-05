@@ -14,3 +14,16 @@ export async function register({ firstName, lastName, email, password, role }) {
   }
   return res.json();
 }
+
+export async function login({ email, password }) {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Check your email and password and try again.');
+  }
+  return res.json();
+}

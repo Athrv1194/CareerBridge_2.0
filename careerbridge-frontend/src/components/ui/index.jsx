@@ -177,13 +177,14 @@ export function ScoreRing({ value, grade, size = 'lg', label, caption }) {
   );
 }
 
-export function Alert({ tone = 'info', title }) {
+export function Alert({ tone = 'info', title, message }) {
   const toneStyle = tone === 'danger'
     ? { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' }
     : { background: 'var(--status-info-soft)', color: 'var(--status-info)' };
   return (
     <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-sm)', fontSize: 13.5, lineHeight: 1.5, ...toneStyle }}>
-      {title}
+      {message ? <strong style={{ fontWeight: 600 }}>{title}</strong> : title}
+      {message && <div style={{ marginTop: 2 }}>{message}</div>}
     </div>
   );
 }
