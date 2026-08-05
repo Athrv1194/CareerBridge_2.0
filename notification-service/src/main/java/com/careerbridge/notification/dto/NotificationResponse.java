@@ -21,6 +21,9 @@ public class NotificationResponse {
 
     private Long recommendationId;
 
+    /** Null for every notification type except SUBSCRIPTION; lets the feed offer an invoice download link. */
+    private Long paymentId;
+
     private String title;
 
     private String message;

@@ -195,6 +195,11 @@ services:
       # obvious an App Password is required, not the account password. This is where they meet.
       MAIL_USERNAME: ${GMAIL_USERNAME:-}
       MAIL_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      # This service's only synchronous cross-service call (the invoice PDF fetch). No depends_on
+      # needed: RestClient connects lazily, same as every other RestClient-based client in this
+      # project -- a payment-service outage is handled fail-soft at the call site, not by ordering
+      # container startup.
+      PAYMENT_SERVICE_URL: http://payment-service:8093
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8085/actuator/health/liveness || exit 1"]
       interval: 10s

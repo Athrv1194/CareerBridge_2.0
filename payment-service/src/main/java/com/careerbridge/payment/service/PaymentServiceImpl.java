@@ -21,6 +21,7 @@ import com.careerbridge.payment.model.SubscriptionStatus;
 import com.careerbridge.payment.repository.PaymentRepository;
 import com.careerbridge.payment.repository.SubscriptionPlanRepository;
 import com.careerbridge.payment.repository.SubscriptionRepository;
+import com.careerbridge.payment.util.InvoiceNumber;
 import com.careerbridge.payment.util.Money;
 import com.careerbridge.payment.util.RazorpaySignatureVerifier;
 import org.slf4j.Logger;
@@ -213,7 +214,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         payment.setRazorpayPaymentId(request.getRazorpayPaymentId());
-        return completeSubscription(payment);
+        return completeSubscription(payment, callerRole);
     }
 
     @Override
@@ -239,14 +240,17 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info("Reconciled abandoned order={} for userId={} -- Razorpay reports paid",
                 razorpayOrderId, userId);
-        return completeSubscription(payment);
+        return completeSubscription(payment, callerRole);
     }
 
     /**
      * The single place a plan is granted. Both verifyPayment and reconcileOrder route through it,
      * so there is one implementation of "what a successful payment does", not two that can drift.
+     *
+     * callerRole is threaded through only to populate SubscriptionActivatedEvent.userRole -- it
+     * carries no authorization decision here, since requireSubscriber already ran in both callers.
      */
-    private PaymentVerifyResponse completeSubscription(Payment payment) {
+    private PaymentVerifyResponse completeSubscription(Payment payment, String callerRole) {
         LocalDateTime now = LocalDateTime.now();
         SubscriptionPlan plan = payment.getPlan();
 
@@ -291,6 +295,15 @@ public class PaymentServiceImpl implements PaymentService {
                         .planName(plan.getPlanName())
                         .validUntil(subscription.getEndDate())
                         .activatedAt(now)
+                        .paymentId(payment.getId())
+                        .invoiceNumber(InvoiceNumber.forPayment(payment.getId()))
+                        // Display amount from the immutable Payment.amountPaise, never plan.price:
+                        // the plan catalog row can be re-priced later, but what this user was
+                        // actually charged must never change.
+                        .amount(Money.toRupees(payment.getAmountPaise()))
+                        .currency(payment.getCurrency())
+                        .billingCycle(plan.getBillingCycle())
+                        .userRole(callerRole)
                         .build()));
 
         log.info("Activated subscription {} for userId={} plan={} until={}",

@@ -38,9 +38,26 @@ public class NotificationConstants {
     public static final String ROUTING_KEY_PASSWORD_RESET_REQUESTED = "password.reset.requested";
     public static final String ROUTING_KEY_PASSWORD_CHANGED = "password.changed";
 
+    /**
+     * A third queue for the same reason the two above are separate: one more @RabbitListener on
+     * either existing queue would create a second container round-robining against the first,
+     * silently misrouting half of every event. auth-service also binds its own
+     * careerbridge.auth.subscription.queue to this same routing key -- both queues receive every
+     * event, since each is bound independently to the topic exchange.
+     */
+    public static final String SUBSCRIPTION_QUEUE_NAME = "careerbridge.notification.subscription.queue";
+
+    /** Literal must equal payment-service's RabbitMQConfig.SUBSCRIPTION_ACTIVATED_ROUTING_KEY. */
+    public static final String ROUTING_KEY_SUBSCRIPTION_ACTIVATED = "subscription.activated";
+
     public static final String EMAIL_SUBJECT = "Your Career Recommendation is Ready!";
     public static final String PASSWORD_RESET_EMAIL_SUBJECT = "Your CareerBridge password reset code";
     public static final String PASSWORD_CHANGED_EMAIL_SUBJECT = "Your CareerBridge password was changed";
+
+    public static final String INVOICE_EMAIL_SUBJECT = "Your CareerBridge Subscription Invoice";
+
+    /** NotificationDocument.notificationType for a subscription invoice in-app notification. */
+    public static final String TYPE_SUBSCRIPTION = "SUBSCRIPTION";
 
     /** NotificationRecord.notificationType -- the delivery channel being audited. */
     public static final String TYPE_EMAIL = "EMAIL";
