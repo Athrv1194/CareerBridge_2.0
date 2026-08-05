@@ -76,6 +76,15 @@ management:
     mongodb:
       enabled: false
 
+# This service's only synchronous cross-service dependency, added for the invoice PDF fetch.
+# localhost by default so `mvnw spring-boot:run` works on a developer machine; docker-compose
+# overrides PAYMENT_SERVICE_URL to http://payment-service:8093, the compose-network hostname.
+# Connect and read timeouts are set in code (RestClientConfig), not here -- RestClient has no
+# Boot-level timeout properties the way spring.mail.* does.
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8093}
+
 springdoc:
   api-docs:
     path: /api-docs

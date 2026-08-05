@@ -44,11 +44,14 @@ import java.util.stream.Stream;
  * here; and a per-route filter could not cover /actuator/**, which matters because the header
  * stripping below has to apply to every request without exception.
  *
- * Runs at HIGHEST_PRECEDENCE so it wraps outside the gateway's own servlet filters (order 9901 and
- * 10001) and rejects unauthenticated requests before any body buffering happens.
+ * Runs at HIGHEST_PRECEDENCE + 1, one step behind CorsConfig's CorsFilter, so it wraps outside the
+ * gateway's own servlet filters (order 9901 and 10001) and rejects unauthenticated requests before
+ * any body buffering happens. It cannot be first: a CORS preflight is an OPTIONS request with no
+ * Authorization header by definition, and if this filter ran before CorsFilter it would 401 every
+ * preflight before a browser's actual request was ever attempted -- see CorsConfig's class comment.
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);

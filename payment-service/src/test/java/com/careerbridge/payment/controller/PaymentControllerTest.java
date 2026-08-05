@@ -1,11 +1,13 @@
 package com.careerbridge.payment.controller;
 
 import com.careerbridge.payment.dto.CreateOrderResponse;
+import com.careerbridge.payment.dto.InvoiceDownload;
 import com.careerbridge.payment.dto.PaymentVerifyResponse;
 import com.careerbridge.payment.dto.PlanResponse;
 import com.careerbridge.payment.dto.SubscriptionResponse;
 import com.careerbridge.payment.exception.CustomException;
 import com.careerbridge.payment.exception.GlobalExceptionHandler;
+import com.careerbridge.payment.service.InvoiceService;
 import com.careerbridge.payment.service.PaymentService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,8 +46,11 @@ class PaymentControllerTest {
     @Mock
     private PaymentService paymentService;
 
+    @Mock
+    private InvoiceService invoiceService;
+
     private MockMvc mockMvc() {
-        return MockMvcBuilders.standaloneSetup(new PaymentController(paymentService))
+        return MockMvcBuilders.standaloneSetup(new PaymentController(paymentService, invoiceService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(new LocalValidatorFactoryBean())
                 .build();
@@ -241,5 +246,33 @@ class PaymentControllerTest {
     void getAllSubscriptions_MissingRoleHeader_Returns400() throws Exception {
         mockMvc().perform(get("/api/payment/admin/subscriptions"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void downloadInvoice_Valid_ReturnsPdfWithContentDisposition() throws Exception {
+        when(invoiceService.getInvoice("STUDENT", 21L, 42L)).thenReturn(
+                InvoiceDownload.builder()
+                        .fileName("CB-INV-000042.pdf")
+                        .content(new byte[]{'%', 'P', 'D', 'F'})
+                        .build());
+
+        mockMvc().perform(get("/api/payment/invoices/42/download")
+                        .header(USER_ID_HEADER, "21").header(USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("Content-Type", "application/pdf"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("Content-Disposition",
+                                "attachment; filename=\"CB-INV-000042.pdf\""));
+    }
+
+    @Test
+    void downloadInvoice_NotOwner_Returns404() throws Exception {
+        when(invoiceService.getInvoice("STUDENT", 999L, 42L))
+                .thenThrow(new CustomException("Invoice not found", HttpStatus.NOT_FOUND));
+
+        mockMvc().perform(get("/api/payment/invoices/42/download")
+                        .header(USER_ID_HEADER, "999").header(USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().isNotFound());
     }
 }

@@ -5,6 +5,7 @@ import com.careerbridge.notification.dto.NotificationResponse;
 import com.careerbridge.notification.dto.UnreadCountResponse;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.exception.CustomException;
 import com.careerbridge.notification.model.NotificationDocument;
 import com.careerbridge.notification.model.NotificationRecord;
@@ -17,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -41,15 +43,18 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationDocumentRepository notificationDocumentRepository;
     private final UserContactRepository userContactRepository;
     private final EmailService emailService;
+    private final PaymentServiceClient paymentServiceClient;
 
     public NotificationServiceImpl(NotificationRecordRepository notificationRecordRepository,
                                    NotificationDocumentRepository notificationDocumentRepository,
                                    UserContactRepository userContactRepository,
-                                   EmailService emailService) {
+                                   EmailService emailService,
+                                   PaymentServiceClient paymentServiceClient) {
         this.notificationRecordRepository = notificationRecordRepository;
         this.notificationDocumentRepository = notificationDocumentRepository;
         this.userContactRepository = userContactRepository;
         this.emailService = emailService;
+        this.paymentServiceClient = paymentServiceClient;
     }
 
     /**
@@ -134,6 +139,72 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
+     * Same write order as processRecommendationNotification, for the same reason: Mongo first, so a
+     * mid-flight failure is recoverable by redelivery rather than leaving the in-app record missing
+     * behind a record of success. Fetching the PDF happens between the Mongo write and the email,
+     * since a failed fetch must not stop either of the other two steps.
+     *
+     * No NotificationRecord audit row here, deliberately: that table's recommendationId column is
+     * NOT NULL and half of uk_notification_records_user_recommendation, and altering a populated
+     * table's constraints via ddl-auto is the exact failure mode logged four times already in this
+     * project's incident history (Question.updatedAt, StudentProfile.role,
+     * PlacementReadinessScore.resumeScore, and the earlier of those two). The Mongo document plus
+     * this method's own log line is the record for this event type.
+     */
+    @Override
+    public void processSubscriptionInvoice(SubscriptionActivatedEvent event) {
+        Long userId = event.getUserId();
+        Long paymentId = event.getPaymentId();
+
+        // 1. Fast-path idempotency, best-effort -- races redelivery, same as the recommendation
+        //    path's own fast-path check. Nothing constrains this Mongo collection the way a unique
+        //    Postgres index would.
+        if (notificationDocumentRepository.findByUserIdAndPaymentId(userId, paymentId).isPresent()) {
+            log.info("Subscription invoice notification already processed for userId={} paymentId={}, skipping",
+                    userId, paymentId);
+            return;
+        }
+
+        // 2. Who are we emailing? Absent is an expected state, not an error -- same as the
+        //    recommendation path.
+        Optional<UserContact> contact = userContactRepository.findByUserId(userId);
+
+        // 3. In-app notification.
+        notificationDocumentRepository.save(NotificationDocument.builder()
+                .userId(userId)
+                .paymentId(paymentId)
+                .title(NotificationConstants.INVOICE_EMAIL_SUBJECT)
+                .message(buildInAppInvoiceMessage(event))
+                .notificationType(NotificationConstants.TYPE_SUBSCRIPTION)
+                .createdAt(LocalDateTime.now())
+                .build());
+
+        // 4. Fetch the PDF. Fail-soft -- a payment-service outage must not stop the email, since the
+        //    user was genuinely charged and needs to know it.
+        byte[] invoicePdf = paymentServiceClient.fetchInvoicePdf(paymentId, userId, event.getUserRole());
+
+        // 5. Email, fail-soft in both directions -- no contact, or SMTP refused.
+        boolean sent = false;
+        if (contact.isPresent()) {
+            sent = emailService.sendInvoiceEmail(
+                    contact.get().getEmail(),
+                    event.getPlanName(),
+                    event.getAmount(),
+                    event.getInvoiceNumber(),
+                    invoicePdf,
+                    paymentId);
+        } else {
+            log.warn("No contact record for userId={} (no student.registered event consumed for this user) "
+                            + "-- in-app notification still created for paymentId={}",
+                    userId, paymentId);
+        }
+
+        log.info("Processed subscription invoice notification userId={} paymentId={} attachment={} emailStatus={}",
+                userId, paymentId, invoicePdf != null,
+                sent ? NotificationConstants.STATUS_SENT : NotificationConstants.STATUS_FAILED);
+    }
+
+    /**
      * Read-modify-write rather than student-service's exists-then-skip, on purpose: a corrected
      * re-publish from auth-service (changed email, corrected name) has to actually land, and an
      * identical redelivery is then a harmless no-op overwrite. The unique constraint on userId
@@ -214,11 +285,23 @@ public class NotificationServiceImpl implements NotificationService {
         return (first + " " + last).trim();
     }
 
+    /** amount is null-coalesced the same way EmailService does, so this string never NPEs. */
+    private String buildInAppInvoiceMessage(SubscriptionActivatedEvent event) {
+        String plan = event.getPlanName() == null ? "your plan" : event.getPlanName();
+        BigDecimal amount = event.getAmount();
+        String amountText = amount == null ? "" : " for Rs. " + amount.toPlainString();
+
+        return String.format(Locale.ROOT,
+                "Your payment%s (%s) was successful. Invoice %s is ready to download.",
+                amountText, plan, event.getInvoiceNumber());
+    }
+
     private NotificationResponse toResponse(NotificationDocument document) {
         return NotificationResponse.builder()
                 .id(document.getId())
                 .userId(document.getUserId())
                 .recommendationId(document.getRecommendationId())
+                .paymentId(document.getPaymentId())
                 .title(document.getTitle())
                 .message(document.getMessage())
                 .isRead(document.getIsRead())
