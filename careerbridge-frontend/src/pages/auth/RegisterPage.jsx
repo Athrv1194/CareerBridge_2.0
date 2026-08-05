@@ -67,7 +67,7 @@ export default function RegisterPage() {
       style={{ background: 'var(--bone-100)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}
     >
       <div className="cb-reg-hero" style={{ position: 'relative', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 48px', minHeight: 280 }}>
-        <img src="/images/hero-01.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 30%', filter: 'saturate(.92)' }} />
+        <img src="/images/hero-02.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 25%', filter: 'saturate(.92)' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(27,26,24,.32) 0%, rgba(27,26,24,.10) 38%, rgba(27,26,24,.78) 100%)' }} />
         <div style={{ position: 'relative', alignSelf: 'flex-start' }}>
           <Logo size={46} tone="inverse" />
