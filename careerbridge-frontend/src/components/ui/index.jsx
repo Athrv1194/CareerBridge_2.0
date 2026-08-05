@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
-  LuArrowRight, LuSlidersHorizontal, LuX, LuBuilding2,
+  LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
 } from 'react-icons/lu';
 
@@ -12,6 +12,7 @@ const iconMap = {
   'triangle-alert': LuTriangleAlert,
   route: LuRoute,
   download: LuDownload,
+  'arrow-left': LuArrowLeft,
 };
 
 export function Icon({ name, size = 18, style }) {

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { register } from '../../api/authApi';
+import { Link } from 'react-router-dom';
 import {
-  Alert, Button, Checkbox, Field, Input, Logo,
+  Alert, Button, Checkbox, Field, Icon, Input, Logo,
 } from '../../components/ui';
 import './register.css';
 
@@ -81,7 +82,17 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      <div className="cb-reg-form-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '56px 40px', overflowY: 'auto' }}>
+      <div className="cb-reg-form-wrap" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '56px 40px', overflowY: 'auto' }}>
+        <Link
+          to="/"
+          style={{
+            position: 'absolute', top: 24, right: 32, display: 'inline-flex', alignItems: 'center',
+            gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--ink-600)', border: 'none',
+          }}
+        >
+          <Icon name="arrow-left" size={15} style={{ color: 'var(--ink-600)' }} />
+          Back
+        </Link>
         <div style={{ width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>Create your account</span>
