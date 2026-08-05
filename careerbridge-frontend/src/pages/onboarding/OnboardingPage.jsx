@@ -69,13 +69,69 @@ export default function OnboardingPage() {
   const [profile, setProfile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  // What the backend already had before this page loaded -- Continue must only POST entries
+  // beyond these, or resuming a partially-finished profile just re-submits rows that are already
+  // saved and the backend rejects them (skills have a per-student uniqueness check).
+  const [existingInstitutions, setExistingInstitutions] = useState(new Set());
+  const [existingSkillNames, setExistingSkillNames] = useState(new Set());
 
   useEffect(() => {
     if (!loggedIn) return;
     getSkillSuggestions()
       .then((list) => setSuggestions(Array.isArray(list) && list.length ? list : FALLBACK_SKILLS))
       .catch(() => setSuggestions(FALLBACK_SKILLS));
-    getMyProfileWithRetry().then(setProfile).catch(() => setProfile(null));
+
+    getMyProfileWithRetry().then((p) => {
+      setProfile(p);
+      if (!p) return;
+
+      // Coming back to this page after closing the browser (or navigating here directly once
+      // already onboarded) must show what was actually saved, not a blank form -- otherwise
+      // resubmitting would just create duplicate education/skill rows against the same profile.
+      const hasEducation = (p.educations || []).length > 0;
+      if (hasEducation) {
+        setEducation(p.educations.map((e) => ({
+          institution: e.institution || '',
+          degree: e.degree || '',
+          fieldOfStudy: e.fieldOfStudy || '',
+          graduationYear: e.endYear ? String(e.endYear) : '',
+          grade: e.grade || '',
+        })));
+        setEducationErrors(p.educations.map(() => ({})));
+        setExistingInstitutions(new Set(p.educations.map((e) => (e.institution || '').trim().toLowerCase())));
+      }
+
+      const hasSkills = (p.skills || []).length > 0;
+      if (hasSkills) {
+        setSkills(p.skills.map((s) => ({
+          name: s.skillName, level: s.proficiencyLevel || 'INTERMEDIATE', isCustom: !!s.isCustom,
+        })));
+        setExistingSkillNames(new Set(p.skills.map((s) => (s.skillName || '').trim().toLowerCase())));
+      }
+
+      const hasBasic = ['phone', 'city', 'state', 'country', 'bio', 'linkedinUrl', 'githubUrl', 'portfolioUrl']
+        .some((k) => p[k]);
+      setBasic({
+        phone: p.phone || '',
+        city: p.city || '',
+        state: p.state || '',
+        country: p.country || '',
+        bio: p.bio || '',
+        linkedinUrl: p.linkedinUrl || '',
+        githubUrl: p.githubUrl || '',
+        portfolioUrl: p.portfolioUrl || '',
+        isPublic: p.isPublic ?? true,
+      });
+
+      // Land on the first step that still needs attention, not always step 0 -- someone who
+      // finished education and skills in an earlier session shouldn't have to click through both
+      // again just to reach basic info.
+      let resumeStep = 0;
+      if (hasEducation) resumeStep = 1;
+      if (hasEducation && hasSkills) resumeStep = 2;
+      if (hasEducation && hasSkills && hasBasic) resumeStep = 3;
+      setStep(resumeStep);
+    }).catch(() => setProfile(null));
   }, [loggedIn]);
 
   const addEducationRow = () => {
@@ -116,7 +172,10 @@ export default function OnboardingPage() {
   };
 
   const submitEducation = async () => {
-    const toSend = education.filter((e) => e.institution.trim());
+    // Anything already on the profile (loaded on mount, or from an earlier Continue this
+    // session) must not be re-sent -- re-adding a qualification the student never touched again
+    // just piles up duplicate rows.
+    const toSend = education.filter((e) => e.institution.trim() && !existingInstitutions.has(e.institution.trim().toLowerCase()));
     for (const e of toSend) {
       // eslint-disable-next-line no-await-in-loop
       await addEducation({
@@ -128,14 +187,21 @@ export default function OnboardingPage() {
         grade: e.grade || null,
       });
     }
+    setExistingInstitutions((prev) => new Set([...prev, ...toSend.map((e) => e.institution.trim().toLowerCase())]));
   };
 
   const submitSkills = async () => {
-    for (const s of skills) {
+    // Same reasoning as submitEducation: skip anything already saved. student-service enforces
+    // one row per (student, skillName) anyway, but skipping client-side is what turns "Skill
+    // 'Java' is already on this profile" from a blocking error into a no-op, since re-adding an
+    // unchanged skill you already saved is not something Continue should ever fail on.
+    const toSend = skills.filter((s) => !existingSkillNames.has(s.name.trim().toLowerCase()));
+    for (const s of toSend) {
       const isCustom = suggestions ? !suggestions.includes(s.name) : s.isCustom;
       // eslint-disable-next-line no-await-in-loop
       await addSkill({ skillName: s.name, proficiencyLevel: s.level, isCustom });
     }
+    setExistingSkillNames((prev) => new Set([...prev, ...toSend.map((s) => s.name.trim().toLowerCase())]));
   };
 
   const submitBasicInfo = async () => {
@@ -186,16 +252,21 @@ export default function OnboardingPage() {
 
   const alreadySelected = useMemo(() => new Set(skills.map((sk) => sk.name.toLowerCase())), [skills]);
 
-  const firstEd = education[0] || emptyEducation();
-  const educationDone = step > 0 && !!firstEd.institution.trim();
-  const educationSummary = firstEd.institution.trim()
-    ? [firstEd.degree, firstEd.institution].filter(Boolean).join(' · ')
-    : 'Not added yet';
-  const skillsDone = step > 1 && skills.length > 0;
+  // Reflects what has actually been typed, not which step you've clicked past -- filling in
+  // qualification 2 while still sitting on step 0 must count immediately, not only once Continue
+  // is clicked.
+  const filledEducations = education.filter((e) => e.institution.trim());
+  const educationDone = filledEducations.length > 0;
+  const educationSummary = filledEducations.length === 0
+    ? 'Not added yet'
+    : filledEducations.length === 1
+      ? [filledEducations[0].degree, filledEducations[0].institution].filter(Boolean).join(' · ')
+      : `${filledEducations.length} qualifications added`;
+  const skillsDone = skills.length > 0;
   const skillsSummary = skills.length > 0 ? `${skills.length} skill${skills.length === 1 ? '' : 's'} selected` : 'Not added yet';
   const basicHasAny = Object.entries(basic).some(([k, v]) => k !== 'isPublic' && v);
   const basicSummary = basicHasAny ? ([basic.city, basic.country].filter(Boolean).join(', ') || 'In progress') : 'Not added yet';
-  const doneCount = [educationDone, skillsDone, step > 2 && basicHasAny].filter(Boolean).length;
+  const doneCount = [educationDone, skillsDone, basicHasAny].filter(Boolean).length;
   const completionPct = Math.round((doneCount / 4) * 100);
   const completionGrade = completionPct >= 80 ? 'A' : completionPct >= 60 ? 'B' : completionPct >= 40 ? 'C' : completionPct >= 20 ? 'D' : 'F';
   const prsPreview = completionPct >= 60 ? `${completionPct} · Looking good` : `${completionPct} · Just getting started`;
@@ -203,7 +274,7 @@ export default function OnboardingPage() {
   const checklist = [
     { key: 'education', icon: 'graduation-cap', label: 'Education', summary: educationSummary, done: educationDone },
     { key: 'skills', icon: 'sliders-horizontal', label: 'Skills', summary: skillsSummary, done: skillsDone },
-    { key: 'basic', icon: 'user', label: 'Basic information', summary: basicSummary, done: step > 2 || (step === 2 && basicHasAny) },
+    { key: 'basic', icon: 'user', label: 'Basic information', summary: basicSummary, done: basicHasAny },
     { key: 'assessment', icon: 'chart-no-axes-column', label: 'Assessment', summary: 'Not started', done: false },
   ].map((item, idx) => {
     const isCurrent = idx === step;
@@ -230,9 +301,7 @@ export default function OnboardingPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '8px 0 4px' }}>
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: '#FCFBF9' }}>Your profile summary</span>
-          <div style={{ filter: 'brightness(0) invert(1)' }}>
-            <ScoreRing value={completionPct} grade={completionGrade} size="lg" label="Complete" />
-          </div>
+          <ScoreRing value={completionPct} grade={completionGrade} size="lg" label="Complete" tone="inverse" colorByScore />
           <span style={{ fontSize: 12, color: '#A69E94', textAlign: 'center' }}>{SIDE_COPY[step]}</span>
         </div>
 
@@ -267,14 +336,14 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', padding: '0 56px', overflowY: 'auto' }}>
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, padding: '36px 0 20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 56px', overflowY: 'auto' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, padding: '36px 0 20px', width: '100%', maxWidth: 620 }}>
           <span className="cb-num" style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-300)' }}>
             Step {step + 1} of 4
           </span>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 20, width: '100%', maxWidth: 620 }}>
           {STEP_LABELS.map((label, i) => (
             <button
               key={label}
@@ -293,7 +362,7 @@ export default function OnboardingPage() {
             </button>
           ))}
         </div>
-        <div style={{ height: 1, background: 'var(--line-hairline)', marginBottom: 36 }} />
+        <div style={{ height: 1, background: 'var(--line-hairline)', marginBottom: 36, width: '100%', maxWidth: 620 }} />
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 48, maxWidth: 620, width: '100%' }}>
           <div>
@@ -476,7 +545,7 @@ export default function OnboardingPage() {
         </main>
 
         {step < 3 && (
-          <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 0 48px' }}>
+          <footer style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 0 48px', width: '100%', maxWidth: 620 }}>
             <button
               type="button"
               onClick={onSkip}

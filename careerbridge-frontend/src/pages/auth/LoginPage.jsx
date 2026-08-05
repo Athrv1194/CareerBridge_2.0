@@ -1,19 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { login } from '../../api/authApi';
+import { resolvePostLoginDestination } from '../../utils/postLoginRedirect';
 import {
   Alert, Button, Field, Icon, Input, Logo,
 } from '../../components/ui';
 import './register.css';
-
-const ROLE_REDIRECTS = {
-  STUDENT: '/dashboard',
-  RECRUITER: '/recruiter-console',
-  ORG_ADMIN: '/college-dashboard',
-  PLACEMENT_OFFICER: '/college-dashboard',
-  SUPER_ADMIN: '/dashboard',
-  MENTOR: '/dashboard',
-};
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,7 +35,7 @@ export default function LoginPage() {
       const data = await login({ email, password });
       localStorage.setItem('cb_access_token', data.accessToken);
       localStorage.setItem('cb_refresh_token', data.refreshToken);
-      window.location.href = ROLE_REDIRECTS[data.role] || '/dashboard';
+      window.location.href = await resolvePostLoginDestination(data.role);
     } catch (e) {
       setRequestError(e.message || 'Check your email and password and try again.');
     } finally {
