@@ -53,7 +53,9 @@ export default function RegisterPage() {
       });
       localStorage.setItem('cb_access_token', data.accessToken);
       localStorage.setItem('cb_refresh_token', data.refreshToken);
-      window.location.href = '/dashboard';
+      // Onboarding, not /dashboard: a brand-new account has no education/skills/profile yet,
+      // and student-service's own consumer already created the (empty) profile row this page reads.
+      window.location.href = '/onboarding';
     } catch (e) {
       setRequestError(e.message || 'Something went wrong. Please try again.');
     } finally {
