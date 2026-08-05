@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
+  LuGraduationCap, LuUser, LuPlus, LuCheck,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -14,6 +15,10 @@ const iconMap = {
   route: LuRoute,
   download: LuDownload,
   'arrow-left': LuArrowLeft,
+  'graduation-cap': LuGraduationCap,
+  user: LuUser,
+  plus: LuPlus,
+  check: LuCheck,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -40,10 +45,11 @@ export function Button({
 }) {
   const v = buttonVariants[variant] || buttonVariants.primary;
   const s = buttonSizes[size] || buttonSizes.md;
+  const AfterIcon = iconAfter ? (iconAfter === 'arrow-right' ? LuArrowRight : iconMap[iconAfter]) : null;
   const content = (
     <>
       {children}
-      {iconAfter === 'arrow-right' && <LuArrowRight size={16} />}
+      {AfterIcon && <AfterIcon size={16} />}
     </>
   );
   const combined = {
@@ -232,6 +238,94 @@ export function Checkbox({ label, checked, onChange }) {
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+export function Textarea({ rows = 4, placeholder, value, onChange }) {
+  return (
+    <textarea
+      rows={rows}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      style={{
+        width: '100%', boxSizing: 'border-box', padding: '9px 12px', fontSize: 14,
+        fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+        border: '1px solid var(--line-hairline)', borderRadius: 'var(--radius-sm)',
+        outline: 'none', resize: 'vertical',
+      }}
+    />
+  );
+}
+
+export function Select({ options, value, onChange, style }) {
+  return (
+    <select
+      value={value}
+      onChange={onChange}
+      style={{
+        boxSizing: 'border-box', padding: '9px 10px', fontSize: 13,
+        fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+        border: '1px solid var(--line-hairline)', borderRadius: 'var(--radius-sm)',
+        outline: 'none', cursor: 'pointer', ...style,
+      }}
+    >
+      {options.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt.charAt(0) + opt.slice(1).toLowerCase()}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+export function Switch({ label, checked, onChange }) {
+  return (
+    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--ink-800)', cursor: 'pointer' }}>
+      <span
+        onClick={() => onChange(!checked)}
+        style={{
+          position: 'relative', width: 36, height: 20, borderRadius: 'var(--radius-pill)',
+          background: checked ? 'var(--ink-900)' : 'var(--bone-400)',
+          transition: 'var(--transition-color)', flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute', top: 2, left: checked ? 18 : 2, width: 16, height: 16,
+            borderRadius: '50%', background: 'var(--bone-50)',
+            transition: 'left var(--duration-normal) var(--ease-standard)',
+          }}
+        />
+      </span>
+      {label}
+    </label>
+  );
+}
+
+export function Tag({ children, onRemove }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 12px',
+        fontSize: 13, color: 'var(--ink-900)', background: 'var(--taupe-100)',
+        borderRadius: 'var(--radius-pill)',
+      }}
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${children}`}
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 18, height: 18, border: 'none', background: 'var(--taupe-300)',
+          borderRadius: '50%', cursor: 'pointer', color: 'var(--ink-900)', padding: 0,
+        }}
+      >
+        <LuX size={11} />
+      </button>
+    </span>
   );
 }
 
