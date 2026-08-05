@@ -1,9 +1,9 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
-  LuGraduationCap, LuUser, LuPlus, LuCheck,
+  LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -154,31 +154,63 @@ export function ProgressMeter({ value, max = 100, tone = 'accent' }) {
   );
 }
 
-export function ScoreRing({ value, grade, size = 'lg', label, caption }) {
+// Same 80/60/40/20 breakpoints as the completion grade (A/B/C/D/F) elsewhere in this app, so the
+// ring's color and the letter grade next to it never disagree. The token palette's status colors
+// (--status-danger etc.) are muted/dark, tuned for the light page background -- on this ring's
+// near-black sidebar they'd be low-contrast, so inverse gets the same brighter equivalents the
+// checklist badges already use on this exact background (BADGE_TONE_STYLE's success, for one).
+function scoreToColor(value, inverse) {
+  if (inverse) {
+    if (value >= 80) return '#8FB393';
+    if (value >= 60) return '#7FA8C9';
+    if (value >= 40) return '#E3C77A';
+    return '#D97A66';
+  }
+  if (value >= 80) return 'var(--status-success)';
+  if (value >= 60) return 'var(--status-info)';
+  if (value >= 40) return 'var(--status-warning)';
+  return 'var(--status-danger)';
+}
+
+export function ScoreRing({
+  value, grade, size = 'lg', label, caption, tone = 'default', colorByScore = false,
+}) {
   const px = size === 'lg' ? 176 : 128;
   const stroke = 10;
   const r = (px - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c - (value / 100) * c;
+  const inverse = tone === 'inverse';
+  // Deliberately not a CSS filter (e.g. brightness(0) invert(1)) on the whole graphic: that
+  // zeroes every pixel to black regardless of its original shade, so the light track and the
+  // dark progress arc both end up the exact same white and the fill becomes invisible. Two
+  // separate stroke colors, chosen per tone, is the only way both circles stay distinguishable.
+  const trackStroke = inverse ? 'rgba(255,255,255,.18)' : 'var(--bone-300)';
+  const progressStroke = colorByScore ? scoreToColor(value, inverse) : (inverse ? '#FCFBF9' : 'var(--ink-900)');
+  const valueColor = inverse ? '#FCFBF9' : 'var(--ink-900)';
+  const gradeColor = inverse ? 'rgba(255,255,255,.55)' : 'var(--ink-500)';
+  const labelColor = inverse ? '#FCFBF9' : 'var(--ink-900)';
+  const captionColor = inverse ? 'rgba(255,255,255,.55)' : 'var(--ink-500)';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: 280 }}>
       <div style={{ position: 'relative', width: px, height: px }}>
         <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`}>
-          <circle cx={px / 2} cy={px / 2} r={r} fill="none" stroke="var(--bone-300)" strokeWidth={stroke} />
+          <circle cx={px / 2} cy={px / 2} r={r} fill="none" stroke={trackStroke} strokeWidth={stroke} />
           <circle
-            cx={px / 2} cy={px / 2} r={r} fill="none" stroke="var(--ink-900)" strokeWidth={stroke}
+            cx={px / 2} cy={px / 2} r={r} fill="none" stroke={progressStroke} strokeWidth={stroke}
             strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
             transform={`rotate(-90 ${px / 2} ${px / 2})`}
           />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 44, color: 'var(--ink-900)' }}>{value}</span>
-          <span style={{ fontSize: 12, letterSpacing: '.1em', color: 'var(--ink-500)' }}>GRADE {grade}</span>
+          <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 44, color: valueColor }}>{value}</span>
+          <span style={{ fontSize: 12, letterSpacing: '.1em', color: gradeColor }}>GRADE {grade}</span>
         </div>
       </div>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{label}</div>
-        {caption && <div style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 4 }}>{caption}</div>}
+        <div style={{ fontSize: 14, fontWeight: 600, color: labelColor }}>{label}</div>
+        {caption && <div style={{ fontSize: 13, color: captionColor, marginTop: 4 }}>{caption}</div>}
       </div>
     </div>
   );
@@ -211,19 +243,35 @@ export function Field({ label, hint, error, children }) {
 }
 
 export function Input({ type = 'text', placeholder, value, onChange, error }) {
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === 'password';
+  const inputStyle = {
+    width: '100%', boxSizing: 'border-box', padding: isPassword ? '9px 40px 9px 12px' : '9px 12px',
+    fontSize: 14, fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+    border: `1px solid ${error ? 'var(--status-danger)' : 'var(--line-hairline)'}`,
+    borderRadius: 'var(--radius-sm)', outline: 'none',
+  };
+
+  if (!isPassword) {
+    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} style={inputStyle} />;
+  }
+
   return (
-    <input
-      type={type}
-      placeholder={placeholder}
-      value={value}
-      onChange={onChange}
-      style={{
-        width: '100%', boxSizing: 'border-box', padding: '9px 12px', fontSize: 14,
-        fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
-        border: `1px solid ${error ? 'var(--status-danger)' : 'var(--line-hairline)'}`,
-        borderRadius: 'var(--radius-sm)', outline: 'none',
-      }}
-    />
+    <div style={{ position: 'relative' }}>
+      <input type={revealed ? 'text' : 'password'} placeholder={placeholder} value={value} onChange={onChange} style={inputStyle} />
+      <button
+        type="button"
+        onClick={() => setRevealed((r) => !r)}
+        aria-label={revealed ? 'Hide password' : 'Show password'}
+        style={{
+          position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          border: 'none', background: 'transparent', padding: 4, cursor: 'pointer', color: 'var(--ink-400)',
+        }}
+      >
+        {revealed ? <LuEyeOff size={17} /> : <LuEye size={17} />}
+      </button>
+    </div>
   );
 }
 
