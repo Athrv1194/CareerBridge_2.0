@@ -34,6 +34,15 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register",
                                          "/api/auth/login",
                                          "/api/auth/refresh").permitAll()
+                        // A caller with no account can't have a token either -- same reasoning as
+                        // register/login/refresh above. api-gateway's own public-paths list already
+                        // forwards these with no identity headers; this is the second, independent
+                        // gate that was missed when the endpoints were added, which is why they 401'd
+                        // with Spring Security's own default entry point rather than ever reaching
+                        // AuthController.
+                        .requestMatchers("/api/auth/forgot-password",
+                                         "/api/auth/forgot-password/verify-otp",
+                                         "/api/auth/forgot-password/reset").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
                         // Swagger UI / OpenAPI docs. Without these this filter chain's
                         // .anyRequest().authenticated() blocks /api-docs and /swagger-ui.html
