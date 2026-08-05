@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
@@ -231,6 +232,73 @@ export function Checkbox({ label, checked, onChange }) {
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+export function OtpInput({ length = 4, value, onChange, error, autoFocus = true }) {
+  const digits = value.padEnd(length, ' ').split('').slice(0, length);
+  const refs = useRef([]);
+
+  const setDigit = (index, char) => {
+    const next = digits.slice();
+    next[index] = char;
+    onChange(next.join('').replace(/ /g, ''));
+  };
+
+  const handleChange = (index, raw) => {
+    const char = raw.replace(/\D/g, '').slice(-1);
+    if (!char) return;
+    setDigit(index, char);
+    if (index < length - 1) refs.current[index + 1]?.focus();
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (digits[index] !== ' ' && digits[index] !== '') {
+        setDigit(index, ' ');
+      } else if (index > 0) {
+        refs.current[index - 1]?.focus();
+        setDigit(index - 1, ' ');
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      refs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < length - 1) {
+      refs.current[index + 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
+    if (!pasted) return;
+    e.preventDefault();
+    onChange(pasted.padEnd(length, '').trimEnd());
+    refs.current[Math.min(pasted.length, length - 1)]?.focus();
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 10 }}>
+      {digits.map((digit, index) => (
+        <input
+          // eslint-disable-next-line react/no-array-index-key
+          key={index}
+          ref={(el) => { refs.current[index] = el; }}
+          type="text"
+          inputMode="numeric"
+          maxLength={1}
+          autoFocus={autoFocus && index === 0}
+          value={digit === ' ' ? '' : digit}
+          onChange={(e) => handleChange(index, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(index, e)}
+          onPaste={handlePaste}
+          style={{
+            width: 48, height: 56, textAlign: 'center', fontSize: 22, fontFamily: 'var(--font-numeric)',
+            color: 'var(--ink-900)', background: 'var(--bone-50)',
+            border: `1px solid ${error ? 'var(--status-danger)' : 'var(--line-hairline)'}`,
+            borderRadius: 'var(--radius-sm)', outline: 'none',
+          }}
+        />
+      ))}
+    </div>
   );
 }
 

@@ -120,4 +120,63 @@ class EmailServiceTest {
         assertTrue(body.contains("n/a"), body);
         assertTrue(body.contains("Hi there,"), "a missing name falls back to a neutral greeting");
     }
+
+    @Test
+    @DisplayName("send OTP: delivers an HTML message with the reset-code subject")
+    void sendPasswordResetOtpEmail_Success_SendsHtmlMessageToTheRecipient() throws Exception {
+        stubMimeMessage();
+
+        boolean sent = emailService.sendPasswordResetOtpEmail(TO, "Ada", "1234", 10);
+
+        assertTrue(sent);
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertEquals(NotificationConstants.PASSWORD_RESET_EMAIL_SUBJECT, captor.getValue().getSubject());
+        assertEquals(TO, captor.getValue().getAllRecipients()[0].toString());
+    }
+
+    @Test
+    @DisplayName("send OTP: an SMTP failure returns false and is never rethrown")
+    void sendPasswordResetOtpEmail_MailSenderThrows_ReturnsFalseAndDoesNotRethrow() {
+        stubMimeMessage();
+        doThrow(new MailSendException("smtp down")).when(mailSender).send(any(MimeMessage.class));
+
+        boolean sent = assertDoesNotThrow(
+                () -> emailService.sendPasswordResetOtpEmail(TO, "Ada", "1234", 10));
+
+        assertFalse(sent);
+    }
+
+    @Test
+    @DisplayName("OTP body: carries the name, the code itself, and the expiry")
+    void buildPasswordResetOtpBody_CarriesNameCodeAndExpiry() {
+        String body = emailService.buildPasswordResetOtpBody("Ada", "1234", 10);
+
+        assertTrue(body.contains("Ada"), body);
+        assertTrue(body.contains("1234"), body);
+        assertTrue(body.contains("10 minutes"), body);
+        assertTrue(body.contains("<html>"), "must be HTML, sent with the html flag set");
+    }
+
+    @Test
+    @DisplayName("send changed: delivers an HTML message with the password-changed subject")
+    void sendPasswordChangedEmail_Success_SendsHtmlMessageToTheRecipient() throws Exception {
+        stubMimeMessage();
+
+        boolean sent = emailService.sendPasswordChangedEmail(TO, "Ada");
+
+        assertTrue(sent);
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertEquals(NotificationConstants.PASSWORD_CHANGED_EMAIL_SUBJECT, captor.getValue().getSubject());
+    }
+
+    @Test
+    @DisplayName("changed body: carries the \"if this wasn't you\" warning")
+    void buildPasswordChangedBody_CarriesIfThisWasNotYouWarning() {
+        String body = emailService.buildPasswordChangedBody("Ada");
+
+        assertTrue(body.contains("Ada"), body);
+        assertTrue(body.toLowerCase().contains("wasn't you"), body);
+    }
 }
