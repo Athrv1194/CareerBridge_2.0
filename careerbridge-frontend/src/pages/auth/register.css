@@ -1,0 +1,26 @@
+.cb-reg-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  min-height: 100vh;
+}
+
+@media (max-width: 860px) {
+  .cb-reg-grid {
+    grid-template-columns: 1fr;
+  }
+  .cb-reg-hero {
+    min-height: 320px;
+  }
+  .cb-reg-form-wrap {
+    padding: 40px 24px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .cb-reg-roles {
+    grid-template-columns: 1fr !important;
+  }
+  .cb-reg-fields {
+    grid-template-columns: 1fr !important;
+  }
+}
