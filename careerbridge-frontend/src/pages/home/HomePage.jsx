@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 const NAV_LINKS = [
   { href: '#features', label: 'Features' },
   { href: '#how-it-works', label: 'Roadmap' },
-  { href: '/colleges', label: 'For colleges' },
+  { href: '/register-institution', label: 'For colleges' },
   { href: '/recruiter-console', label: 'For recruiters' },
 ];
 
@@ -314,7 +314,7 @@ export default function HomePage() {
                 <ListRow leading={<Icon name="building-2" />} title="Department-level readiness breakdown" />
                 <ListRow leading={<Icon name="triangle-alert" />} title="At-risk student list, updated daily" />
               </div>
-              <Button variant="secondary" iconAfter="arrow-right" to="/colleges" style={{ marginTop: 8, alignSelf: 'flex-start' }}>See college dashboard</Button>
+              <Button variant="secondary" iconAfter="arrow-right" to="/register-institution" style={{ marginTop: 8, alignSelf: 'flex-start' }}>Register your institution</Button>
             </div>
             <div style={{ background: 'var(--bone-50)', padding: '44px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>For recruiters /</span>
@@ -382,7 +382,7 @@ export default function HomePage() {
             <div style={{ background: 'var(--bone-200)', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Company</span>
               <a href="/about" style={{ fontSize: 13, color: 'var(--ink-700)' }}>About</a>
-              <a href="/colleges" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For colleges</a>
+              <a href="/register-institution" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For colleges</a>
               <a href="/recruiter-console" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For recruiters</a>
               <a href="/pricing" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Pricing</a>
             </div>

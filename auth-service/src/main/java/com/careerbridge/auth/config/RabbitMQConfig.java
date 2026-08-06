@@ -29,10 +29,21 @@ public class RabbitMQConfig {
     public static final String SUBSCRIPTION_QUEUE = "careerbridge.auth.subscription.queue";
     public static final String SUBSCRIPTION_ACTIVATED_ROUTING_KEY = "subscription.activated";
 
+    /** Consumed from organization-service, on approve(). Provisions the ORG_ADMIN user. */
+    public static final String ORGANIZATION_QUEUE = "careerbridge.auth.organization.queue";
+    public static final String ORGANIZATION_REQUEST_APPROVED_ROUTING_KEY = "organization.request.approved";
+
     /**
-     * This service publishes student.registered and consumes subscription.activated. It declares
-     * the exchange plus its OWN queue and binding -- payment-service, the publisher, deliberately
-     * declares no queue, per the project's one-queue-per-consumer-per-event rule.
+     * Published, deliberately unconsumed by any queue declared here -- notification-service owns
+     * the queue, same one-queue-per-consumer-per-event rule as every other cross-service event.
+     */
+    public static final String ORG_ADMIN_INVITED_ROUTING_KEY = "organization.admin.invited";
+
+    /**
+     * This service publishes student.registered and organization.admin.invited, and consumes
+     * subscription.activated and organization.request.approved. It declares the exchange plus its
+     * OWN queues and bindings for what it consumes -- the publishers of those events deliberately
+     * declare no queue, per the project's one-queue-per-consumer-per-event rule.
      */
     @Bean
     public TopicExchange careerBridgeExchange() {
@@ -56,6 +67,24 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(authSubscriptionQueue)
                 .to(careerBridgeExchange)
                 .with(SUBSCRIPTION_ACTIVATED_ROUTING_KEY);
+    }
+
+    /**
+     * A second queue, never a second @RabbitListener on authSubscriptionQueue above -- two
+     * containers on one queue make RabbitMQ round-robin between them, misrouting roughly half of
+     * each event type.
+     */
+    @Bean
+    public Queue authOrganizationQueue() {
+        return new Queue(ORGANIZATION_QUEUE, true);
+    }
+
+    @Bean
+    public Binding organizationRequestApprovedBinding(Queue authOrganizationQueue,
+                                                       TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(authOrganizationQueue)
+                .to(careerBridgeExchange)
+                .with(ORGANIZATION_REQUEST_APPROVED_ROUTING_KEY);
     }
 
     /** JacksonJson (Jackson 3), not the deprecated Jackson2 variant -- Boot 4 ships tools.jackson. */

@@ -85,6 +85,11 @@ payment:
   service:
     url: ${PAYMENT_SERVICE_URL:http://localhost:8093}
 
+# Backs the "Set Password & Access Portal" link in the org admin invite email. Vite's dev port by
+# default; docker-compose and any real deployment override FRONTEND_URL to the actual origin.
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+
 springdoc:
   api-docs:
     path: /api-docs

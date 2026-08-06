@@ -49,7 +49,7 @@ class JwtAuthenticationFilterTest {
         GatewayProperties properties = new GatewayProperties(
                 SECRET,
                 List.of("/api/auth/login", "/api/auth/register", "/api/auth/refresh",
-                        "/actuator/**", "/api/recommendation/careers"));
+                        "/actuator/**", "/api/recommendation/careers", "/api/organization/apply"));
         filter = new JwtAuthenticationFilter(new JwtUtil(properties), properties);
     }
 
@@ -525,5 +525,40 @@ class JwtAuthenticationFilterTest {
 
         assertEquals(200, response.getStatus());
         assertNotNull(chain.getRequest(), "refresh is called because the access token expired");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // INSTITUTION ONBOARDING: /api/organization/apply is public, /api/organization/requests is not.
+    // isPublicPath matches on path only, with no notion of HTTP method -- these two tests are the
+    // regression guard for keeping the two paths distinct rather than folding the public submit
+    // under /api/organization/requests, which would also make the SUPER_ADMIN approval queue public.
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("institution apply is public, and a spoofed role header is stripped")
+    void filter_OrganizationApply_IsPublicAndStripsSpoofedRole() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/organization/apply");
+        request.addHeader(GatewayConstants.USER_ROLE_HEADER, "SUPER_ADMIN");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest(), "the public submit must reach the chain with no token");
+        assertNull(forwardedRole(chain), "a client-supplied role must not survive on a public path");
+    }
+
+    @Test
+    @DisplayName("the SUPER_ADMIN approval queue is NOT public, even though it shares a path prefix")
+    void filter_OrganizationRequests_IsNotPublic() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/organization/requests");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(401, response.getStatus());
+        assertNull(chain.getRequest(), "the approval queue must require a token");
     }
 }
