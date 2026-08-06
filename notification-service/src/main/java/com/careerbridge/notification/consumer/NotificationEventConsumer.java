@@ -1,6 +1,7 @@
 package com.careerbridge.notification.consumer;
 
 import com.careerbridge.notification.constants.NotificationConstants;
+import com.careerbridge.notification.event.OrgAdminInvitedEvent;
 import com.careerbridge.notification.event.PasswordChangedEvent;
 import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
@@ -153,6 +154,31 @@ public class NotificationEventConsumer {
             log.error("Failed to handle {} for paymentId={}: {}",
                     NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED,
                     event == null ? null : event.getPaymentId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * A sixth queue, not a second listener on any queue above -- see RabbitMQConfig for why. Straight
+     * to EmailService, not through NotificationService: an admin invite is not something that belongs
+     * in the in-app feed, and the recipient has no session yet to read a feed with anyway -- same
+     * reasoning as onPasswordResetRequested.
+     */
+    @RabbitListener(queues = NotificationConstants.ORG_ADMIN_QUEUE_NAME)
+    public void onOrgAdminInvited(OrgAdminInvitedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null || event.getResetToken() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED, event);
+                return;
+            }
+
+            emailService.sendOrgAdminInviteEmail(event.getEmail(), event.getFirstName(),
+                    event.getOrganizationName(), event.getResetToken(), event.getExpiresInHours());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED,
+                    event == null ? null : event.getEmail(),
                     ex.getMessage());
         }
     }
