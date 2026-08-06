@@ -36,6 +36,7 @@ class EmailServiceTest {
 
     private static final String FROM = "atharva.pawar.cmfeb26@gmail.com";
     private static final String TO = "ada@careerbridge.com";
+    private static final String FRONTEND_URL = "http://localhost:5173";
 
     @Mock private JavaMailSender mailSender;
 
@@ -43,9 +44,9 @@ class EmailServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Constructed by hand rather than @InjectMocks: the second constructor argument is a
-        // @Value-injected String, not a mock, and this is also what pins the From address.
-        emailService = new EmailService(mailSender, FROM);
+        // Constructed by hand rather than @InjectMocks: the second and third constructor arguments
+        // are @Value-injected Strings, not mocks, and this is also what pins the From address.
+        emailService = new EmailService(mailSender, FROM, FRONTEND_URL);
     }
 
     /** Fresh message per test; stubbed only in the tests that actually send. */
@@ -257,5 +258,54 @@ class EmailServiceTest {
                 () -> emailService.buildInvoiceHtmlBody("STUDENT_PREMIUM", null, "CB-INV-000042"));
 
         assertTrue(body.contains("n/a"), body);
+    }
+
+    @Test
+    @DisplayName("org admin invite: delivers an HTML message with the invite subject")
+    void sendOrgAdminInviteEmail_Success_SendsHtmlMessageToTheRecipient() throws Exception {
+        stubMimeMessage();
+
+        boolean sent = emailService.sendOrgAdminInviteEmail(TO, "Sharma", "COEP", "tok-123", 24);
+
+        assertTrue(sent);
+        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(mailSender).send(captor.capture());
+        assertEquals(NotificationConstants.ORG_ADMIN_INVITE_EMAIL_SUBJECT, captor.getValue().getSubject());
+        assertEquals(TO, captor.getValue().getAllRecipients()[0].toString());
+    }
+
+    @Test
+    @DisplayName("org admin invite: an SMTP failure returns false and is never rethrown")
+    void sendOrgAdminInviteEmail_MailSenderThrows_ReturnsFalseAndDoesNotRethrow() {
+        stubMimeMessage();
+        doThrow(new MailSendException("smtp down")).when(mailSender).send(any(MimeMessage.class));
+
+        boolean sent = assertDoesNotThrow(
+                () -> emailService.sendOrgAdminInviteEmail(TO, "Sharma", "COEP", "tok-123", 24));
+
+        assertFalse(sent);
+    }
+
+    @Test
+    @DisplayName("org admin invite body: carries the name, org, token and expiry, and links to the frontend")
+    void buildOrgAdminInviteBody_CarriesNameOrgTokenAndExpiry() {
+        String body = emailService.buildOrgAdminInviteBody("Sharma", "COEP", TO, "tok-123", 24);
+
+        assertTrue(body.contains("Sharma"), body);
+        assertTrue(body.contains("COEP"), body);
+        assertTrue(body.contains("tok-123"), body);
+        assertTrue(body.contains("24 hours"), body);
+        assertTrue(body.contains(FRONTEND_URL + "/set-password"), body);
+        assertTrue(body.contains("<html>"), "must be HTML, sent with the html flag set");
+    }
+
+    @Test
+    @DisplayName("org admin invite body: a missing name and org fall back to neutral text rather than throwing")
+    void buildOrgAdminInviteBody_MissingNameAndOrg_FallsBackWithoutThrowing() {
+        String body = assertDoesNotThrow(
+                () -> emailService.buildOrgAdminInviteBody(null, null, TO, "tok-123", 24));
+
+        assertTrue(body.contains("Hi there,"), body);
+        assertTrue(body.contains("your institution"), body);
     }
 }

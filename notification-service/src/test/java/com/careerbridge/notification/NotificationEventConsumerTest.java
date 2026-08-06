@@ -1,6 +1,7 @@
 package com.careerbridge.notification;
 
 import com.careerbridge.notification.consumer.NotificationEventConsumer;
+import com.careerbridge.notification.event.OrgAdminInvitedEvent;
 import com.careerbridge.notification.event.PasswordChangedEvent;
 import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
@@ -239,5 +240,41 @@ class NotificationEventConsumerTest {
                 .when(notificationService).processSubscriptionInvoice(any());
 
         assertDoesNotThrow(() -> consumer.onSubscriptionActivated(subscriptionEvent));
+    }
+
+    @Test
+    @DisplayName("organization.admin.invited: delegates straight to EmailService, not NotificationService")
+    void orgAdminInvitedEvent_DelegatesToEmailService() {
+        OrgAdminInvitedEvent event = OrgAdminInvitedEvent.builder()
+                .email("tpo@coep.ac.in").firstName("Sharma").organizationName("COEP")
+                .resetToken("tok-123").expiresInHours(24)
+                .build();
+
+        consumer.onOrgAdminInvited(event);
+
+        verify(emailService).sendOrgAdminInviteEmail("tpo@coep.ac.in", "Sharma", "COEP", "tok-123", 24);
+        verify(notificationService, never()).processRecommendationNotification(any());
+    }
+
+    @Test
+    @DisplayName("organization.admin.invited: a payload with no resetToken is ignored")
+    void orgAdminInvitedEvent_MissingResetToken_Ignored() {
+        OrgAdminInvitedEvent malformed = OrgAdminInvitedEvent.builder()
+                .email("tpo@coep.ac.in").build();
+
+        assertDoesNotThrow(() -> consumer.onOrgAdminInvited(malformed));
+
+        verify(emailService, never()).sendOrgAdminInviteEmail(anyString(), any(), any(), anyString(), anyInt());
+    }
+
+    @Test
+    @DisplayName("organization.admin.invited: a failing EmailService is swallowed rather than spinning the listener")
+    void orgAdminInvitedEvent_EmailServiceThrows_DoesNotRethrow() {
+        OrgAdminInvitedEvent event = OrgAdminInvitedEvent.builder()
+                .email("tpo@coep.ac.in").resetToken("tok-123").expiresInHours(24).build();
+        doThrow(new RuntimeException("smtp down")).when(emailService)
+                .sendOrgAdminInviteEmail(anyString(), any(), any(), anyString(), anyInt());
+
+        assertDoesNotThrow(() -> consumer.onOrgAdminInvited(event));
     }
 }

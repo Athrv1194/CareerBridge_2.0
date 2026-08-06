@@ -57,9 +57,11 @@ spring:
               uri: ${ORG_SERVICE_URI:http://localhost:8087}
               predicates:
                 # Singular, matching organization-service's @RequestMapping("/api/organization").
-                # Nothing here is in gateway.public-paths: every organization endpoint needs a
-                # valid token, because the service authorizes on the X-User-Role and X-User-Org-Id
-                # this gateway injects, and a public path forwards neither.
+                # POST /api/organization/apply IS in gateway.public-paths below -- the public
+                # institution application form. Every other endpoint here, including
+                # /api/organization/requests, needs a valid token: the service authorizes on the
+                # X-User-Role and X-User-Org-Id this gateway injects, and a public path forwards
+                # neither.
                 - Path=/api/organization/**
             - id: roadmap-service
               uri: ${ROADMAP_SERVICE_URI:http://localhost:8088}
@@ -231,6 +233,13 @@ gateway:
     # path deliberately strips. payment-service's getPlans() reads no headers at all for the same
     # reason: a required header on a public path 400s every request instead of being public.
     - /api/payment/plans
+    # The public "register your institution" form. Exactly this one path, never
+    # /api/organization/** and never /api/organization/requests -- isPublicPath matches on path
+    # only, with no notion of HTTP method, so making the requests path public would expose the
+    # SUPER_ADMIN approval queue (every applicant's name, email and phone) to any unauthenticated
+    # caller. organization-service's submit() reads no headers at all, same reason as
+    # payment-service's getPlans() above.
+    - /api/organization/apply
     # Swagger UI itself: springdoc's static resources, the UI page, its generated OpenAPI JSON, and
     # the webjars bundle it loads them from (swagger-ui bootstrap CSS/JS). Without these the browser
     # would 401 loading the page before a token could ever be attached.

@@ -62,6 +62,17 @@ public class RabbitMQConfig {
     }
 
     /**
+     * A sixth queue, same one-queue-per-event-type reasoning as the others. auth-service also binds
+     * its own careerbridge.auth.organization.queue to organization.request.approved -- a different
+     * routing key from this one (organization.admin.invited), which auth-service publishes after it
+     * provisions the user.
+     */
+    @Bean
+    public Queue notificationOrgAdminQueue() {
+        return new Queue(NotificationConstants.ORG_ADMIN_QUEUE_NAME, true);
+    }
+
+    /**
      * durable=true, autoDelete=false must match auth/student/assessment/recommendation exactly. A
      * mismatch is answered with 406 PRECONDITION_FAILED, and because declaration happens
      * asynchronously on the connection callback, the consumers would simply never start rather
@@ -110,6 +121,14 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationSubscriptionQueue)
                 .to(careerBridgeExchange)
                 .with(NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED);
+    }
+
+    @Bean
+    public Binding orgAdminInvitedBinding(Queue notificationOrgAdminQueue,
+                                          TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationOrgAdminQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED);
     }
 
     /**
