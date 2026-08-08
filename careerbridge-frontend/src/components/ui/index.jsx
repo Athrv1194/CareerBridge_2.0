@@ -4,6 +4,7 @@ import {
   LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
   LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
+  LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -19,6 +20,12 @@ const iconMap = {
   user: LuUser,
   plus: LuPlus,
   check: LuCheck,
+  sparkles: LuSparkles,
+  briefcase: LuBriefcase,
+  award: LuAward,
+  'refresh-cw': LuRefreshCw,
+  'file-text': LuFileText,
+  users: LuUsers,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -40,30 +47,50 @@ const buttonSizes = {
 };
 
 export function Button({
-  children, variant = 'primary', size = 'md', iconAfter, onClick, to,
+  children, variant = 'primary', size = 'md', icon, iconAfter, onClick, to,
   fullWidth = false, disabled = false, style,
 }) {
+  const [hovered, setHovered] = useState(false);
   const v = buttonVariants[variant] || buttonVariants.primary;
   const s = buttonSizes[size] || buttonSizes.md;
+  const BeforeIcon = icon ? iconMap[icon] : null;
   const AfterIcon = iconAfter ? (iconAfter === 'arrow-right' ? LuArrowRight : iconMap[iconAfter]) : null;
   const content = (
     <>
+      {BeforeIcon && <BeforeIcon size={16} />}
       {children}
       {AfterIcon && <AfterIcon size={16} />}
     </>
   );
+
+  const hoverStyles = {
+    primary: { background: 'var(--ink-700)', border: '1px solid var(--ink-700)' },
+    secondary: { background: 'var(--ink-900)', color: 'var(--bone-50)', border: '1px solid var(--ink-900)' },
+    ghost: { background: 'var(--bone-200)', border: '1px solid var(--bone-200)' },
+    quiet: { background: 'var(--bone-200)', border: '1px solid var(--bone-200)' },
+  };
+  const h = hoverStyles[variant] || {};
+
   const combined = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: s.gap,
     fontSize: s.fontSize, padding: s.padding, fontWeight: 500, letterSpacing: 0,
     borderRadius: 'var(--radius-sm)', cursor: disabled ? 'not-allowed' : 'pointer',
     transition: 'var(--transition-color)', opacity: disabled ? 0.6 : 1,
     width: fullWidth ? '100%' : 'auto', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)',
-    ...v, ...style,
+    ...v,
+    ...(hovered && !disabled ? h : {}),
+    ...style,
   };
+
+  const handlers = {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+  };
+
   if (to && !disabled) {
-    return <Link to={to} style={{ ...combined, textDecoration: 'none', border: v.border }}>{content}</Link>;
+    return <Link to={to} style={{ ...combined, textDecoration: 'none', border: combined.border }} {...handlers}>{content}</Link>;
   }
-  return <button type="button" onClick={onClick} disabled={disabled} style={combined}>{content}</button>;
+  return <button type="button" onClick={onClick} disabled={disabled} style={combined} {...handlers}>{content}</button>;
 }
 
 export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
@@ -104,6 +131,7 @@ export function Logo({ size = 32, tone = 'default' }) {
 const badgeTones = {
   inverse: { background: 'var(--taupe-600)', color: 'var(--bone-50)' },
   dark: { background: 'var(--ink-800)', color: 'var(--bone-50)' },
+  accent: { background: 'var(--taupe-300)', color: 'var(--ink-900)' },
   default: { background: 'var(--taupe-100)', color: 'var(--ink-800)' },
 };
 
@@ -440,6 +468,30 @@ export function OtpInput({ length = 4, value, onChange, error, autoFocus = true 
           }}
         />
       ))}
+    </div>
+  );
+}
+
+export function Skeleton({ height = 40 }) {
+  return (
+    <div
+      style={{
+        width: '100%', height, borderRadius: 'var(--radius-sm)',
+        background: 'linear-gradient(90deg, var(--bone-200) 25%, var(--bone-300) 37%, var(--bone-200) 63%)',
+        backgroundSize: '400% 100%', animation: 'cbSkeletonShimmer 1.4s ease infinite',
+      }}
+    />
+  );
+}
+
+export function MatchScore({ value, size = 'sm' }) {
+  const lg = size === 'lg';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, width: 70, flex: 'none' }}>
+      <span className="cb-num" style={{ fontSize: lg ? 18 : 14, color: 'var(--ink-900)' }}>{value}%</span>
+      <div style={{ width: '100%', height: lg ? 4 : 3, background: 'var(--bone-300)', borderRadius: 'var(--radius-pill)', overflow: 'hidden' }}>
+        <div style={{ width: `${Math.max(0, Math.min(100, value))}%`, height: '100%', background: 'var(--taupe-700)' }} />
+      </div>
     </div>
   );
 }

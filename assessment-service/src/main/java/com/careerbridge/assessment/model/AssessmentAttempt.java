@@ -36,6 +36,15 @@ public class AssessmentAttempt {
     @Column(nullable = false)
     private Long categoryId;
 
+    /**
+     * Which fixed section (AssessmentSection name) this attempt was started for -- e.g. "APTITUDE".
+     * Nullable: adding a NOT NULL column to a populated table without a DEFAULT fails ddl-auto's
+     * ALTER silently (the Question.updatedAt incident, twice more since). Needed because categoryId
+     * alone no longer tells you the section's target size or display name once Domain Knowledge can
+     * be backed by any of 3 different categories -- see AssessmentConstants.SECTION_CATEGORY_POOL.
+     */
+    private String section;
+
     // STRING, not the JPA default ordinal: reordering AttemptStatus would otherwise silently
     // remap every existing row to a different status.
     @Builder.Default
