@@ -26,25 +26,30 @@ import java.util.List;
 /**
  * One student's personal copy of a RoadmapTemplate.
  *
- * A student may hold several of these at once: every assessment they complete produces its own
- * recommendation and therefore its own roadmap, and older ones stay IN_PROGRESS as history rather
- * than being closed behind their back. That is why StudentRoadmapRepository's status finder returns
- * a List, not an Optional -- an Optional finder throws IncorrectResultSizeDataAccessException the
- * moment a student takes a second assessment. Same shape recommendation-service settled on for
- * findByUserIdAndIsActiveTrue.
+ * A student may hold several of these at once -- one per career they've chosen to build a roadmap
+ * for, via POST /api/roadmap. That is why StudentRoadmapRepository's finders return a List, not an
+ * Optional where more than one is possible.
  *
- * The unique constraint on (student_id, recommendation_id) is the real idempotency guarantee, not
- * the existence check in RoadmapServiceImpl.generateRoadmap. RabbitMQ is at-least-once, so a
- * redelivered recommendation.generated can race that check; the constraint turns the loser into a
- * DataIntegrityViolationException the consumer's fail-soft catch discards. Same design as
- * student_profiles.userId in student-service.
+ * The unique constraint on (student_id, career_name) is the real idempotency guarantee, not the
+ * existence check in RoadmapServiceImpl.buildRoadmap: it's what makes "build" safe to call twice for
+ * the same career and get the same roadmap back rather than a duplicate. One roadmap per student per
+ * career, persisting across retaken assessments -- a new recommendation does not reset progress on a
+ * roadmap the student already started. Same idempotency shape as student_profiles.userId in
+ * student-service.
+ *
+ * ponytail: no recommendationId anymore. Roadmaps used to be created only by consuming
+ * recommendation.generated, tied 1:1 to the recommendation that produced them; now they're built
+ * on-demand for whichever career the student clicks, so that link no longer exists and nothing else
+ * ever read the column. If provenance ("which recommendation led to this") becomes worth tracking
+ * again, add it back as a nullable column, not a NOT NULL one -- see the Question.updatedAt incident
+ * pattern documented elsewhere in this project for why.
  */
 @Entity
 @Table(
         name = "student_roadmaps",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_student_roadmap_recommendation",
-                columnNames = {"student_id", "recommendation_id"}))
+                name = "uk_student_roadmap_career",
+                columnNames = {"student_id", "career_name"}))
 @Data
 @Builder
 @NoArgsConstructor
@@ -57,9 +62,6 @@ public class StudentRoadmap {
 
     @Column(nullable = false)
     private Long studentId;
-
-    @Column(nullable = false)
-    private Long recommendationId;
 
     // TEXT, not @Lob -- see RoadmapTemplate.careerName. Denormalised from the template on purpose:
     // the roadmap must keep naming the career it was generated for even if the template is renamed.

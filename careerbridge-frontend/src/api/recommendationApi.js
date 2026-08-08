@@ -13,3 +13,19 @@ export async function getMyRecommendation() {
   if (!res.ok) throw new Error('Could not check your recommendation status.');
   return res.json();
 }
+
+// Empty list, not 404, when the student has no history yet.
+export async function getRecommendationHistory() {
+  const res = await fetch(`${API_BASE}/recommendation/history`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) throw new Error('Could not load your recommendation history.');
+  return res.json();
+}
+
+// No id field on CareerPathDto -- keyed by name, the only stable identifier the backend gives it.
+export async function getCareerCatalog() {
+  const res = await fetch(`${API_BASE}/recommendation/careers`);
+  if (!res.ok) throw new Error('Could not load the career catalogue.');
+  return res.json();
+}
