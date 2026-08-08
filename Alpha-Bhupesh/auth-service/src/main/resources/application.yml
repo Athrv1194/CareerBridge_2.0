@@ -1,0 +1,44 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  profiles:
+    # Defaults to the gitignored application-local.yml; AWS sets SPRING_PROFILES_ACTIVE=prod.
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  autoconfigure:
+    # No formLogin/httpBasic here, so Boot's generated in-memory user is unreachable
+    # dead weight -- excluded to stop it logging a fake "generated security password".
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  datasource:
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_auth;), unlike the MySQL JDBC URL flag this replaced.
+    url: jdbc:postgresql://localhost:5432/careerbridge_auth
+    username: root
+    password: root
+    driver-class-name: org.postgresql.Driver
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}
+  access-token-expiry: 900000
+  refresh-token-expiry: 604800000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
