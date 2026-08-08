@@ -1,0 +1,70 @@
+server:
+  # 8089. 8086 is unused and is not a gap -- organization-service took 8087, roadmap-service 8088.
+  port: 8089
+
+spring:
+  application:
+    name: prs-service
+  profiles:
+    # Defaults to the gitignored application-local.yml; docker-compose sets SPRING_PROFILES_ACTIVE=docker.
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_prs;). docker/init.sql creates it for the compose stack, but
+    # only on a FRESH postgres volume; an existing one needs the CREATE DATABASE run by hand.
+    url: jdbc:postgresql://localhost:5432/careerbridge_prs
+    username: postgres
+    # Defaulted rather than bare ${DB_PASSWORD}: an unresolvable placeholder fails startup outright,
+    # which would break `mvnw spring-boot:run` for anyone who has not exported the variable. The real
+    # value comes from the gitignored application-local.yml, or SPRING_DATASOURCE_PASSWORD in Docker.
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # No defer-datasource-initialization here, deliberately. That flag only orders a data.sql or
+    # schema.sql against ddl-auto, and this service has neither -- there is nothing to seed, since
+    # every row is created by the student.registered consumer. Setting it would be inert.
+
+  # No spring.autoconfigure.exclude. auth-service excludes UserDetailsServiceAutoConfiguration
+  # because it carries the security starter; with no security on this classpath that class does not
+  # exist, and naming an absent class here fails startup outright.
+
+# The only synchronous cross-service dependency in CareerBridge. localhost by default so
+# `mvnw spring-boot:run` works on a developer machine; docker-compose overrides STUDENT_SERVICE_URL
+# to http://student-service:8082, the compose-network hostname. A Docker-only default would make
+# every profile fetch fail with UnknownHostException outside Docker.
+# Connect and read timeouts are set in code (StudentClientConfig), not here -- RestClient has no
+# Boot-level timeout properties the way spring.mail.* does.
+student:
+  service:
+    url: ${STUDENT_SERVICE_URL:http://localhost:8082}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  # No management.health.rabbit.enabled entry: the RabbitMQ indicator is enabled by default, so
+  # writing `true` would be inert -- and Boot 4 renamed at least one indicator id (mongo -> mongodb),
+  # so a default value under a possibly stale key is risk for no effect. Note /actuator/health does
+  # aggregate RabbitMQ and returns 503 while the broker is down; healthchecks and the ALB must point
+  # at /actuator/health/liveness instead.
