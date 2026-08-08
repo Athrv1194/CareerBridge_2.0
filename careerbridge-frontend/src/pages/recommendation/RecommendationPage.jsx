@@ -30,7 +30,11 @@ function formatDate(iso) {
 // re-click after "Built" just re-confirms rather than erroring.
 function RoadmapButton({ careerName, status, onBuild, size = 'sm' }) {
   if (status === 'built') {
-    return <Badge tone="accent">Roadmap built</Badge>;
+    return (
+      <Link to="/roadmap" style={{ border: 0 }}>
+        <Badge tone="accent">Roadmap built</Badge>
+      </Link>
+    );
   }
   return (
     <Button

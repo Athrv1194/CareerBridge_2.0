@@ -5,7 +5,8 @@ import {
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
   LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
-  LuSun, LuHistory, LuChevronRight,
+  LuSun, LuHistory, LuChevronRight, LuChevronDown, LuExternalLink,
+  LuBell, LuSearch,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -30,6 +31,10 @@ const iconMap = {
   sun: LuSun,
   history: LuHistory,
   'chevron-right': LuChevronRight,
+  'chevron-down': LuChevronDown,
+  'external-link': LuExternalLink,
+  bell: LuBell,
+  search: LuSearch,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -139,18 +144,23 @@ const badgeTones = {
   dark: { background: 'var(--ink-800)', color: 'var(--bone-50)' },
   accent: { background: 'var(--taupe-300)', color: 'var(--ink-900)' },
   default: { background: 'var(--taupe-100)', color: 'var(--ink-800)' },
+  success: { background: 'var(--status-success-soft)', color: 'var(--status-success)' },
+  warning: { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' },
+  info: { background: 'var(--status-info-soft)', color: 'var(--status-info)' },
 };
 
-export function Badge({ children, tone = 'default' }) {
+export function Badge({ children, tone = 'default', icon }) {
   const toneStyle = badgeTones[tone] || badgeTones.default;
+  const IconComp = icon ? iconMap[icon] : null;
   return (
     <span
       style={{
-        display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', padding: '4px 10px',
+        display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', padding: '4px 10px',
         fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase',
         borderRadius: 'var(--radius-pill)', ...toneStyle,
       }}
     >
+      {IconComp && <IconComp size={11} />}
       {children}
     </span>
   );
@@ -173,6 +183,11 @@ export function StatTile({ value, label, tone = 'default' }) {
   );
 }
 
+const METER_TONE_COLOR = {
+  accent: 'var(--taupe-700)', ink: 'var(--ink-900)',
+  success: 'var(--status-success)', warning: 'var(--status-warning)', danger: 'var(--status-danger)',
+};
+
 export function ProgressMeter({ value, max = 100, tone = 'accent' }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
@@ -180,7 +195,7 @@ export function ProgressMeter({ value, max = 100, tone = 'accent' }) {
       <div
         style={{
           height: '100%', width: `${pct}%`,
-          background: tone === 'accent' ? 'var(--taupe-700)' : 'var(--ink-900)',
+          background: METER_TONE_COLOR[tone] || METER_TONE_COLOR.accent,
           transition: 'width var(--duration-normal) var(--ease-standard)',
         }}
       />
@@ -393,24 +408,27 @@ export function Tag({ children, onRemove }) {
   return (
     <span
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 12px',
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: onRemove ? '6px 8px 6px 12px' : '6px 12px',
         fontSize: 13, color: 'var(--ink-900)', background: 'var(--taupe-100)',
         borderRadius: 'var(--radius-pill)',
       }}
     >
       {children}
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Remove ${children}`}
-        style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 18, height: 18, border: 'none', background: 'var(--taupe-300)',
-          borderRadius: '50%', cursor: 'pointer', color: 'var(--ink-900)', padding: 0,
-        }}
-      >
-        <LuX size={11} />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${children}`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 18, height: 18, border: 'none', background: 'var(--taupe-300)',
+            borderRadius: '50%', cursor: 'pointer', color: 'var(--ink-900)', padding: 0,
+          }}
+        >
+          <LuX size={11} />
+        </button>
+      )}
     </span>
   );
 }
