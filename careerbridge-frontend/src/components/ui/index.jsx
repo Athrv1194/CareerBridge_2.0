@@ -6,7 +6,7 @@ import {
   LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
   LuSun, LuHistory, LuChevronRight, LuChevronDown, LuExternalLink,
-  LuBell, LuSearch,
+  LuBell, LuSearch, LuBookmark,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -35,6 +35,7 @@ const iconMap = {
   'external-link': LuExternalLink,
   bell: LuBell,
   search: LuSearch,
+  bookmark: LuBookmark,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -147,6 +148,7 @@ const badgeTones = {
   success: { background: 'var(--status-success-soft)', color: 'var(--status-success)' },
   warning: { background: 'var(--status-warning-soft)', color: 'var(--status-warning)' },
   info: { background: 'var(--status-info-soft)', color: 'var(--status-info)' },
+  danger: { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' },
 };
 
 export function Badge({ children, tone = 'default', icon }) {
@@ -404,13 +406,15 @@ export function Switch({ label, checked, onChange }) {
   );
 }
 
-export function Tag({ children, onRemove }) {
+export function Tag({ children, onRemove, selected }) {
   return (
     <span
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
         padding: onRemove ? '6px 8px 6px 12px' : '6px 12px',
-        fontSize: 13, color: 'var(--ink-900)', background: 'var(--taupe-100)',
+        fontSize: 13,
+        color: selected ? 'var(--bone-50)' : 'var(--ink-900)',
+        background: selected ? 'var(--ink-900)' : 'var(--taupe-100)',
         borderRadius: 'var(--radius-pill)',
       }}
     >
