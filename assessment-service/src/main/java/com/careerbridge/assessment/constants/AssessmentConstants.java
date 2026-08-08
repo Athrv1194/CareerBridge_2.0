@@ -1,5 +1,8 @@
 package com.careerbridge.assessment.constants;
 
+import java.util.List;
+import java.util.Map;
+
 public class AssessmentConstants {
 
     /**
@@ -13,13 +16,19 @@ public class AssessmentConstants {
     public static final int MIN_QUESTIONS_PER_CATEGORY = 5;
 
     /**
-     * How many questions each attempt draws from the category, at random.
-     *
-     * Equal to the category minimum, so every startable category can fill an attempt. This is also
-     * the score denominator (x MAX_OPTION_WEIGHT) and the cap on how many answers a submit accepts
-     * -- change it and both move together.
+     * Which real Category row(s) can back each fixed section. startAttempt picks one at random from
+     * the section's pool every time, so a retake can genuinely land on a different underlying
+     * category -- the client only ever sees the section's display name, never which pool member won.
+     * Aptitude and Soft Skills have no pre-existing content to draw from, so their pools are a single
+     * category; Domain Knowledge deliberately reuses the two pre-existing programming-topic
+     * categories alongside its own, so a retake has real variety instead of showing the same 10
+     * questions every time.
      */
-    public static final int QUESTIONS_PER_ATTEMPT = MIN_QUESTIONS_PER_CATEGORY;
+    public static final Map<AssessmentSection, List<String>> SECTION_CATEGORY_POOL = Map.of(
+            AssessmentSection.APTITUDE, List.of("Aptitude"),
+            AssessmentSection.DOMAIN_KNOWLEDGE,
+            List.of("Domain Knowledge", "Programming Fundamentals", "Database & SQL"),
+            AssessmentSection.SOFT_SKILLS, List.of("Soft Skills"));
 
     public static final int TOP_CAREERS_TO_RECOMMEND = 3;
 

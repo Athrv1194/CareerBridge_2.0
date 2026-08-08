@@ -53,22 +53,25 @@ class ScoringEngineTest {
     }
 
     @Test
-    @DisplayName("career match: a career naming the category in requiredSkills scores at full weight")
+    @DisplayName("career match: relevance is graduated by how much of the career's own skill list "
+            + "the category covers, not a flat full weight for any match")
     void calculateCareerMatches_RelevantCareer_GetsFullWeight() {
+        // 1 of 2 skill tokens ("logical reasoning") matches -- relevance = 0.3 + 0.7*(1/2) = 0.65.
         List<CareerPath> careers = List.of(career("Data Scientist", "Python, Logical Reasoning"));
 
         Map<String, Double> scores =
                 ScoringEngine.calculateCareerMatches("Logical Reasoning", 80.0, careers);
 
-        assertEquals(80.0, scores.get("Data Scientist"));
+        assertEquals(52.0, scores.get("Data Scientist"));
         // Matching is case-insensitive, so seed data casing cannot silently downgrade a career.
-        assertEquals(80.0,
+        assertEquals(52.0,
                 ScoringEngine.calculateCareerMatches("logical reasoning", 80.0, careers)
                         .get("Data Scientist"));
     }
 
     @Test
-    @DisplayName("career match: an unrelated career is damped to 30%, and null skills do not blow up")
+    @DisplayName("career match: an unrelated career is damped to the 30% floor, null skills do not "
+            + "blow up, and two careers tied on relevance still get different displayed percentages")
     void calculateCareerMatches_IrrelevantCareer_GetsPartialWeight() {
         List<CareerPath> careers = List.of(
                 career("Chef", "Cooking, Plating"),
@@ -77,8 +80,11 @@ class ScoringEngineTest {
         Map<String, Double> scores =
                 ScoringEngine.calculateCareerMatches("Logical Reasoning", 80.0, careers);
 
+        // Both are equally irrelevant (0.3 floor), so both would compute the same raw 24.0 --
+        // the deterministic per-rank tiebreak (alphabetical: Chef before Unseeded) is what keeps
+        // them from displaying as an exact duplicate.
         assertEquals(24.0, scores.get("Chef"));
-        assertEquals(24.0, scores.get("Unseeded"));
+        assertEquals(23.0, scores.get("Unseeded"));
     }
 
     @Test

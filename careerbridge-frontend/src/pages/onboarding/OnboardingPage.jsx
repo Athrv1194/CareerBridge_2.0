@@ -537,7 +537,7 @@ export default function OnboardingPage() {
                 Progress is saved as you go. Leaving mid-way keeps the attempt open; it is only scored once you submit.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', paddingTop: 8 }}>
-                <Button size="lg" iconAfter="arrow-right" to="/assessment" style={{ width: '100%', justifyContent: 'center' }}>Start my assessment</Button>
+                <Button size="lg" iconAfter="arrow-right" to="/assessment" style={{ width: '100%', justifyContent: 'center' }}>GO TO ASSESSMENT</Button>
                 <Button size="lg" variant="secondary" iconAfter="arrow-right" to="/dashboard" style={{ width: '100%', justifyContent: 'center' }}>Do this later</Button>
               </div>
             </div>

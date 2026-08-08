@@ -33,7 +33,11 @@
       "Bash(git pull *)",
       "Bash(docker exec *)",
       "Bash(python -c ' *)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(git log *)",
+      "PowerShell(docker compose down 2>&1)",
+      "PowerShell(tail -5)",
+      "PowerShell(docker compose down)"
     ]
   }
 }

@@ -5,6 +5,7 @@ import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import SetPasswordPage from './pages/auth/SetPasswordPage';
 import OnboardingPage from './pages/onboarding/OnboardingPage';
+import AssessmentPage from './pages/assessment/AssessmentPage';
 import RegisterInstitutionPage from './pages/institution/RegisterInstitutionPage';
 import CollegeDashboardPage from './pages/institution/CollegeDashboardPage';
 
@@ -18,6 +19,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/assessment" element={<AssessmentPage />} />
         <Route path="/register-institution" element={<RegisterInstitutionPage />} />
         <Route path="/college-dashboard" element={<CollegeDashboardPage />} />
       </Routes>

@@ -189,3 +189,167 @@ INSERT INTO options (question_id, option_text, weight, order_index) VALUES
 ((SELECT id FROM questions WHERE question_text='What is database sharding?'), 'Encrypting database data', 0, 2),
 ((SELECT id FROM questions WHERE question_text='What is database sharding?'), 'Creating database backups', 0, 3),
 ((SELECT id FROM questions WHERE question_text='What is database sharding?'), 'A type of database index', 1, 4) ON CONFLICT DO NOTHING;
+
+-- ==========================================================================================
+-- Career-readiness assessment: Aptitude / Domain Knowledge / Soft Skills.
+-- These 3 categories back the fixed 3-section flow driven by AssessmentSection -- the client
+-- never requests a categoryId directly for this flow, only a section name, and the section
+-- resolves to one of a pool of categories (see AssessmentConstants.SECTION_CATEGORY_POOL).
+-- Domain Knowledge's pool also includes Programming Fundamentals and Database & SQL above, so
+-- a retake can land on any of the three -- this new category is simply a third option sized to
+-- match (10 questions), keeping the "20 questions total" invariant true regardless of which
+-- pool member gets picked.
+-- ==========================================================================================
+INSERT INTO categories (name, description, created_at) VALUES
+('Aptitude', 'Logic, numbers and pattern recognition under time pressure', NOW()),
+('Domain Knowledge', 'General technical and analytical domain knowledge', NOW()),
+('Soft Skills', 'How you handle ambiguity, disagreement and stakeholders', NOW()) ON CONFLICT DO NOTHING;
+
+-- Aptitude Questions (5 questions)
+INSERT INTO questions (category_id, question_text, order_index, created_at) VALUES
+((SELECT id FROM categories WHERE name='Aptitude'), 'A dataset of 5,000 rows has 12% missing values in one column. What do you do first?', 1, NOW()),
+((SELECT id FROM categories WHERE name='Aptitude'), 'Revenue grew 8% while orders grew 20%. What most likely happened?', 2, NOW()),
+((SELECT id FROM categories WHERE name='Aptitude'), 'Which SQL clause filters rows after aggregation?', 3, NOW()),
+((SELECT id FROM categories WHERE name='Aptitude'), 'A dashboard loads in 40 seconds. Where do you look first?', 4, NOW()),
+((SELECT id FROM categories WHERE name='Aptitude'), 'You have 90 seconds to pick the odd one out: 3, 8, 15, 24, 36. Which is it?', 5, NOW()) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A dataset of 5,000 rows has 12% missing values in one column. What do you do first?'), 'Check whether the missingness correlates with another column', 3, 1),
+((SELECT id FROM questions WHERE question_text='A dataset of 5,000 rows has 12% missing values in one column. What do you do first?'), 'Drop every row with a missing value', 1, 2),
+((SELECT id FROM questions WHERE question_text='A dataset of 5,000 rows has 12% missing values in one column. What do you do first?'), 'Fill the gaps with the column mean', 2, 3),
+((SELECT id FROM questions WHERE question_text='A dataset of 5,000 rows has 12% missing values in one column. What do you do first?'), 'Ignore the column entirely', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Revenue grew 8% while orders grew 20%. What most likely happened?'), 'Average order value fell', 3, 1),
+((SELECT id FROM questions WHERE question_text='Revenue grew 8% while orders grew 20%. What most likely happened?'), 'Margins improved', 0, 2),
+((SELECT id FROM questions WHERE question_text='Revenue grew 8% while orders grew 20%. What most likely happened?'), 'Customer count fell', 1, 3),
+((SELECT id FROM questions WHERE question_text='Revenue grew 8% while orders grew 20%. What most likely happened?'), 'Prices rose', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Which SQL clause filters rows after aggregation?'), 'WHERE', 0, 1),
+((SELECT id FROM questions WHERE question_text='Which SQL clause filters rows after aggregation?'), 'GROUP BY', 0, 2),
+((SELECT id FROM questions WHERE question_text='Which SQL clause filters rows after aggregation?'), 'HAVING', 3, 3),
+((SELECT id FROM questions WHERE question_text='Which SQL clause filters rows after aggregation?'), 'ORDER BY', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A dashboard loads in 40 seconds. Where do you look first?'), 'The query behind it', 3, 1),
+((SELECT id FROM questions WHERE question_text='A dashboard loads in 40 seconds. Where do you look first?'), 'The chart library', 0, 2),
+((SELECT id FROM questions WHERE question_text='A dashboard loads in 40 seconds. Where do you look first?'), 'The browser', 1, 3),
+((SELECT id FROM questions WHERE question_text='A dashboard loads in 40 seconds. Where do you look first?'), 'The colour palette', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='You have 90 seconds to pick the odd one out: 3, 8, 15, 24, 36. Which is it?'), '36', 3, 1),
+((SELECT id FROM questions WHERE question_text='You have 90 seconds to pick the odd one out: 3, 8, 15, 24, 36. Which is it?'), '24', 0, 2),
+((SELECT id FROM questions WHERE question_text='You have 90 seconds to pick the odd one out: 3, 8, 15, 24, 36. Which is it?'), '15', 0, 3),
+((SELECT id FROM questions WHERE question_text='You have 90 seconds to pick the odd one out: 3, 8, 15, 24, 36. Which is it?'), '8', 0, 4) ON CONFLICT DO NOTHING;
+
+-- Domain Knowledge Questions (10 questions)
+INSERT INTO questions (category_id, question_text, order_index, created_at) VALUES
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'A metric moved from 4.2 to 4.8 week over week. What do you report first?', 1, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'What does a primary key guarantee on a table?', 2, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'An A/B test shows a 2% lift with a p-value of 0.18. What do you do?', 3, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'Which term describes data collected without random assignment?', 4, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'A join is returning more rows than either source table. Most likely cause?', 5, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'What does "statistically significant" actually tell you?', 6, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'Which best separates correlation from causation?', 7, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'A KPI dashboard is used by execs weekly. What matters most in its design?', 8, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'What is the main risk of survivorship bias in a churn analysis?', 9, NOW()),
+((SELECT id FROM categories WHERE name='Domain Knowledge'), 'Two teams report different values for "active users." First move?', 10, NOW()) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A metric moved from 4.2 to 4.8 week over week. What do you report first?'), 'The size of the move and what changed underneath it', 3, 1),
+((SELECT id FROM questions WHERE question_text='A metric moved from 4.2 to 4.8 week over week. What do you report first?'), 'That it went up', 1, 2),
+((SELECT id FROM questions WHERE question_text='A metric moved from 4.2 to 4.8 week over week. What do you report first?'), 'A forecast for next week', 0, 3),
+((SELECT id FROM questions WHERE question_text='A metric moved from 4.2 to 4.8 week over week. What do you report first?'), 'Nothing until month end', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='What does a primary key guarantee on a table?'), 'Every row is uniquely identifiable', 3, 1),
+((SELECT id FROM questions WHERE question_text='What does a primary key guarantee on a table?'), 'Every column is indexed', 0, 2),
+((SELECT id FROM questions WHERE question_text='What does a primary key guarantee on a table?'), 'The table has no duplicates in any column', 0, 3),
+((SELECT id FROM questions WHERE question_text='What does a primary key guarantee on a table?'), 'Queries run faster', 1, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='An A/B test shows a 2% lift with a p-value of 0.18. What do you do?'), 'Treat it as inconclusive and extend the test', 3, 1),
+((SELECT id FROM questions WHERE question_text='An A/B test shows a 2% lift with a p-value of 0.18. What do you do?'), 'Ship it, 2% is 2%', 0, 2),
+((SELECT id FROM questions WHERE question_text='An A/B test shows a 2% lift with a p-value of 0.18. What do you do?'), 'Kill the test immediately', 0, 3),
+((SELECT id FROM questions WHERE question_text='An A/B test shows a 2% lift with a p-value of 0.18. What do you do?'), 'Re-run with half the sample', 1, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Which term describes data collected without random assignment?'), 'Observational', 3, 1),
+((SELECT id FROM questions WHERE question_text='Which term describes data collected without random assignment?'), 'Experimental', 0, 2),
+((SELECT id FROM questions WHERE question_text='Which term describes data collected without random assignment?'), 'Longitudinal', 1, 3),
+((SELECT id FROM questions WHERE question_text='Which term describes data collected without random assignment?'), 'Synthetic', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A join is returning more rows than either source table. Most likely cause?'), 'A one-to-many relationship fanning out', 3, 1),
+((SELECT id FROM questions WHERE question_text='A join is returning more rows than either source table. Most likely cause?'), 'A missing WHERE clause', 1, 2),
+((SELECT id FROM questions WHERE question_text='A join is returning more rows than either source table. Most likely cause?'), 'A corrupted index', 0, 3),
+((SELECT id FROM questions WHERE question_text='A join is returning more rows than either source table. Most likely cause?'), 'Too many columns selected', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='What does "statistically significant" actually tell you?'), 'The result is unlikely to be due to chance alone', 3, 1),
+((SELECT id FROM questions WHERE question_text='What does "statistically significant" actually tell you?'), 'The effect is large', 0, 2),
+((SELECT id FROM questions WHERE question_text='What does "statistically significant" actually tell you?'), 'The result will replicate', 0, 3),
+((SELECT id FROM questions WHERE question_text='What does "statistically significant" actually tell you?'), 'The sample was random', 1, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Which best separates correlation from causation?'), 'A controlled experiment with random assignment', 3, 1),
+((SELECT id FROM questions WHERE question_text='Which best separates correlation from causation?'), 'A larger sample size', 1, 2),
+((SELECT id FROM questions WHERE question_text='Which best separates correlation from causation?'), 'A higher correlation coefficient', 0, 3),
+((SELECT id FROM questions WHERE question_text='Which best separates correlation from causation?'), 'More decimal places', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A KPI dashboard is used by execs weekly. What matters most in its design?'), 'A stable definition they can trust over time', 3, 1),
+((SELECT id FROM questions WHERE question_text='A KPI dashboard is used by execs weekly. What matters most in its design?'), 'The widest possible set of charts', 0, 2),
+((SELECT id FROM questions WHERE question_text='A KPI dashboard is used by execs weekly. What matters most in its design?'), 'Real-time refresh', 1, 3),
+((SELECT id FROM questions WHERE question_text='A KPI dashboard is used by execs weekly. What matters most in its design?'), 'Matching brand colours', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='What is the main risk of survivorship bias in a churn analysis?'), 'You only study customers still around to be studied', 3, 1),
+((SELECT id FROM questions WHERE question_text='What is the main risk of survivorship bias in a churn analysis?'), 'The sample is too large', 0, 2),
+((SELECT id FROM questions WHERE question_text='What is the main risk of survivorship bias in a churn analysis?'), 'The data is too recent', 1, 3),
+((SELECT id FROM questions WHERE question_text='What is the main risk of survivorship bias in a churn analysis?'), 'The metric is mislabeled', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Two teams report different values for "active users." First move?'), 'Compare their definitions before comparing their numbers', 3, 1),
+((SELECT id FROM questions WHERE question_text='Two teams report different values for "active users." First move?'), 'Trust the larger number', 0, 2),
+((SELECT id FROM questions WHERE question_text='Two teams report different values for "active users." First move?'), 'Trust the more recent report', 1, 3),
+((SELECT id FROM questions WHERE question_text='Two teams report different values for "active users." First move?'), 'Average the two', 0, 4) ON CONFLICT DO NOTHING;
+
+-- Soft Skills Questions (5 questions)
+INSERT INTO questions (category_id, question_text, order_index, created_at) VALUES
+((SELECT id FROM categories WHERE name='Soft Skills'), 'A stakeholder disputes your numbers in a meeting. You:', 1, NOW()),
+((SELECT id FROM categories WHERE name='Soft Skills'), 'A deadline is at risk because a dependency slipped. You:', 2, NOW()),
+((SELECT id FROM categories WHERE name='Soft Skills'), 'Two colleagues disagree on an approach in front of you. You:', 3, NOW()),
+((SELECT id FROM categories WHERE name='Soft Skills'), 'You receive blunt, critical feedback on work you were proud of. You:', 4, NOW()),
+((SELECT id FROM categories WHERE name='Soft Skills'), 'A new teammate keeps asking questions you consider basic. You:', 5, NOW()) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A stakeholder disputes your numbers in a meeting. You:'), 'Ask which number they expected and reconcile after', 3, 1),
+((SELECT id FROM questions WHERE question_text='A stakeholder disputes your numbers in a meeting. You:'), 'Defend the figure immediately', 0, 2),
+((SELECT id FROM questions WHERE question_text='A stakeholder disputes your numbers in a meeting. You:'), 'Agree to recheck and move on', 1, 3),
+((SELECT id FROM questions WHERE question_text='A stakeholder disputes your numbers in a meeting. You:'), 'Escalate to your manager', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A deadline is at risk because a dependency slipped. You:'), 'Flag it early with a revised plan', 3, 1),
+((SELECT id FROM questions WHERE question_text='A deadline is at risk because a dependency slipped. You:'), 'Work nights to absorb the slip quietly', 1, 2),
+((SELECT id FROM questions WHERE question_text='A deadline is at risk because a dependency slipped. You:'), 'Wait to see if it resolves itself', 0, 3),
+((SELECT id FROM questions WHERE question_text='A deadline is at risk because a dependency slipped. You:'), 'Blame the dependency owner publicly', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='Two colleagues disagree on an approach in front of you. You:'), 'Ask each to state the tradeoff they care about most', 3, 1),
+((SELECT id FROM questions WHERE question_text='Two colleagues disagree on an approach in front of you. You:'), 'Pick a side to end the discussion', 0, 2),
+((SELECT id FROM questions WHERE question_text='Two colleagues disagree on an approach in front of you. You:'), 'Stay silent and let them settle it', 1, 3),
+((SELECT id FROM questions WHERE question_text='Two colleagues disagree on an approach in front of you. You:'), 'Suggest a manager decide', 0, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='You receive blunt, critical feedback on work you were proud of. You:'), 'Ask for specifics and separate the useful parts', 3, 1),
+((SELECT id FROM questions WHERE question_text='You receive blunt, critical feedback on work you were proud of. You:'), 'Explain why the criticism is wrong', 0, 2),
+((SELECT id FROM questions WHERE question_text='You receive blunt, critical feedback on work you were proud of. You:'), 'Redo everything without asking why', 0, 3),
+((SELECT id FROM questions WHERE question_text='You receive blunt, critical feedback on work you were proud of. You:'), 'Let it go without acting on it', 1, 4) ON CONFLICT DO NOTHING;
+
+INSERT INTO options (question_id, option_text, weight, order_index) VALUES
+((SELECT id FROM questions WHERE question_text='A new teammate keeps asking questions you consider basic. You:'), 'Answer clearly and point them to where to self-serve next time', 3, 1),
+((SELECT id FROM questions WHERE question_text='A new teammate keeps asking questions you consider basic. You:'), 'Answer but show visible impatience', 1, 2),
+((SELECT id FROM questions WHERE question_text='A new teammate keeps asking questions you consider basic. You:'), 'Redirect them to someone else', 0, 3),
+((SELECT id FROM questions WHERE question_text='A new teammate keeps asking questions you consider basic. You:'), 'Ignore the questions until they stop asking', 0, 4) ON CONFLICT DO NOTHING;

@@ -1,6 +1,7 @@
 package com.careerbridge.assessment;
 
 import com.careerbridge.assessment.constants.AssessmentConstants;
+import com.careerbridge.assessment.constants.AssessmentSection;
 import com.careerbridge.assessment.dto.AnswerDto;
 import com.careerbridge.assessment.dto.AssessmentRequest;
 import com.careerbridge.assessment.dto.AssessmentResponse;
@@ -75,15 +76,26 @@ class AssessmentServiceTest {
 
     @InjectMocks private AssessmentServiceImpl assessmentService;
 
+    // Soft Skills' pool has exactly one member ("Soft Skills" itself), so its random pool-pick is
+    // deterministic -- and it's the FINAL section, the only one that publishes assessment.completed
+    // (see publishIfFinalSection), which is what most of these tests need to exercise.
+    private static final AssessmentSection SECTION = AssessmentSection.SOFT_SKILLS;
+
     private Category category;
 
     @BeforeEach
     void setUp() {
         category = Category.builder()
                 .id(CATEGORY_ID)
-                .name("Logical Reasoning")
+                .name(SECTION.getDisplayName())
                 .description("Pattern and deduction questions")
                 .build();
+    }
+
+    private AssessmentRequest sectionRequest() {
+        AssessmentRequest request = new AssessmentRequest();
+        request.setSection(SECTION.name());
+        return request;
     }
 
     /** N questions, each with two options weighted 3 and 1. Option ids are questionId * 10 + n. */
@@ -101,7 +113,7 @@ class AssessmentServiceTest {
     }
 
     private List<Question> fiveQuestions() {
-        return questions(AssessmentConstants.QUESTIONS_PER_ATTEMPT);
+        return questions(SECTION.getTargetSize());
     }
 
     private List<Option> optionsFor(List<Question> questions) {
@@ -120,6 +132,7 @@ class AssessmentServiceTest {
                 .id(ATTEMPT_ID)
                 .userId(USER_ID)
                 .categoryId(CATEGORY_ID)
+                .section(SECTION.name())
                 .status(AttemptStatus.IN_PROGRESS)
                 .build();
     }
@@ -143,13 +156,12 @@ class AssessmentServiceTest {
     void startAttempt_ValidCategory_ReturnsQuestionsWithoutWeights() {
         // Category holds more questions than an attempt uses, so the subset is observable.
         List<Question> pool = questions(8);
-        AssessmentRequest request = new AssessmentRequest();
-        request.setCategoryId(CATEGORY_ID);
+        AssessmentRequest request = sectionRequest();
 
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByName(SECTION.getDisplayName())).thenReturn(Optional.of(category));
         when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(8);
-        when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
-                USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(attemptRepository.findByUserIdAndSectionAndStatus(
+                USER_ID, SECTION.name(), AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(attemptRepository.save(any(AssessmentAttempt.class))).thenReturn(inProgressAttempt());
         when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(pool);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
@@ -158,10 +170,10 @@ class AssessmentServiceTest {
         AssessmentResponse response = assessmentService.startAttempt(USER_ID, request);
 
         assertEquals(ATTEMPT_ID, response.getAttemptId());
-        assertEquals("Logical Reasoning", response.getCategoryName());
+        assertEquals(SECTION.getDisplayName(), response.getCategoryName());
         assertEquals(AttemptStatus.IN_PROGRESS, response.getStatus());
         // Exactly the subset, not all 8 that exist in the category.
-        assertEquals(AssessmentConstants.QUESTIONS_PER_ATTEMPT, response.getQuestions().size());
+        assertEquals(SECTION.getTargetSize(), response.getQuestions().size());
 
         QuestionDto first = response.getQuestions().get(0);
         assertEquals(2, first.getOptions().size());
@@ -189,13 +201,12 @@ class AssessmentServiceTest {
     @DisplayName("startAttempt: the drawn questions vary between attempts rather than being fixed")
     void startAttempt_QuestionsAreShuffled_DifferentOrderPossible() {
         List<Question> pool = questions(10);
-        AssessmentRequest request = new AssessmentRequest();
-        request.setCategoryId(CATEGORY_ID);
+        AssessmentRequest request = sectionRequest();
 
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByName(SECTION.getDisplayName())).thenReturn(Optional.of(category));
         when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(10);
-        when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
-                USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
+        when(attemptRepository.findByUserIdAndSectionAndStatus(
+                USER_ID, SECTION.name(), AttemptStatus.IN_PROGRESS)).thenReturn(Optional.empty());
         when(attemptRepository.save(any(AssessmentAttempt.class))).thenReturn(inProgressAttempt());
         when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(pool);
         when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList()))
@@ -218,13 +229,12 @@ class AssessmentServiceTest {
     @Test
     @DisplayName("startAttempt: a second attempt while one is in progress is refused with 409")
     void startAttempt_AlreadyInProgress_ThrowsConflict() {
-        AssessmentRequest request = new AssessmentRequest();
-        request.setCategoryId(CATEGORY_ID);
+        AssessmentRequest request = sectionRequest();
 
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByName(SECTION.getDisplayName())).thenReturn(Optional.of(category));
         when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(5);
-        when(attemptRepository.findByUserIdAndCategoryIdAndStatus(
-                USER_ID, CATEGORY_ID, AttemptStatus.IN_PROGRESS))
+        when(attemptRepository.findByUserIdAndSectionAndStatus(
+                USER_ID, SECTION.name(), AttemptStatus.IN_PROGRESS))
                 .thenReturn(Optional.of(inProgressAttempt()));
 
         CustomException ex = assertThrows(CustomException.class,
@@ -237,10 +247,9 @@ class AssessmentServiceTest {
     @Test
     @DisplayName("startAttempt: a category thinner than the minimum is refused before any attempt is created")
     void startAttempt_TooFewQuestions_ThrowsBadRequest() {
-        AssessmentRequest request = new AssessmentRequest();
-        request.setCategoryId(CATEGORY_ID);
+        AssessmentRequest request = sectionRequest();
 
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByName(SECTION.getDisplayName())).thenReturn(Optional.of(category));
         when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(3);
 
         CustomException ex = assertThrows(CustomException.class,
@@ -263,7 +272,7 @@ class AssessmentServiceTest {
                 .thenReturn(optionsFor(questions));
         when(careerPathRepository.findAll()).thenReturn(List.of(
                 CareerPath.builder().id(1L).name("Data Scientist")
-                        .requiredSkills("Python, Logical Reasoning").build(),
+                        .requiredSkills("Python, " + SECTION.getDisplayName()).build(),
                 CareerPath.builder().id(2L).name("Chef").requiredSkills("Cooking").build()));
         when(resultRepository.save(any(AssessmentResult.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -277,14 +286,16 @@ class AssessmentServiceTest {
         assertEquals(15, result.getRawScore());
         assertEquals(15, result.getMaxPossibleScore());
         assertEquals(100.0, result.getCategoryScorePercentage());
-        // "Data Scientist" lists the category in requiredSkills, so it wins at full relevance.
+        // Data Scientist covers 1 of its 2 skill tokens ("Soft Skills") -- relevance 0.3+0.7*(1/2)=
+        // 0.65 -- so it wins the ranking, but not at a flat full weight for merely matching at all.
         assertEquals(1L, result.getTopCareerPathId());
-        assertEquals(100.0, result.getCareerMatchPercentage());
+        assertEquals(65.0, result.getCareerMatchPercentage());
         assertNotNull(result.getAllCareerScoresJson());
 
         assertEquals("Data Scientist", dto.getTopCareerPath());
-        // Chef does not name the category in requiredSkills, so it is damped: 100.0 x 0.3.
-        assertEquals(30.0, dto.getAllCareerScores().get("Chef"));
+        // Chef ("Cooking") matches nothing -- floor relevance 0.3 -- and ranks below Data Scientist,
+        // so it also picks up a -1.0 tiebreak: 100.0 x 0.3 - 1.0 = 29.0.
+        assertEquals(29.0, dto.getAllCareerScores().get("Chef"));
 
         // weightEarned is read from the stored option, never from the payload.
         @SuppressWarnings("unchecked")
@@ -315,7 +326,7 @@ class AssessmentServiceTest {
         // Five careers against TOP_CAREERS_TO_RECOMMEND = 3, so "all" and "top N" cannot coincide.
         when(careerPathRepository.findAll()).thenReturn(List.of(
                 CareerPath.builder().id(1L).name("Data Scientist")
-                        .requiredSkills("Python, Logical Reasoning").build(),
+                        .requiredSkills("Python, " + SECTION.getDisplayName()).build(),
                 CareerPath.builder().id(2L).name("Chef").requiredSkills("Cooking").build(),
                 CareerPath.builder().id(3L).name("Barista").requiredSkills("Espresso").build(),
                 CareerPath.builder().id(4L).name("Sommelier").requiredSkills("Wine").build(),
@@ -335,9 +346,12 @@ class AssessmentServiceTest {
         assertTrue(allScores.keySet().containsAll(
                 List.of("Data Scientist", "Chef", "Barista", "Sommelier", "Florist")));
 
-        // Relevance is unchanged: the career naming the category scores full, the rest are damped.
-        assertEquals(100.0, allScores.get("Data Scientist"));
-        assertEquals(30.0, allScores.get("Florist"));
+        // Data Scientist covers 1 of 2 skill tokens -- relevance 0.65, rank 0, no tiebreak: 65.0.
+        // The other four all sit at the 0.3 floor (no match at all) and tie on relevance, so they're
+        // ranked alphabetically and separated by the -1.0-per-rank tiebreak: Barista(29) is rank 1,
+        // Chef(28) rank 2, Florist(27) rank 3, Sommelier(26) rank 4.
+        assertEquals(65.0, allScores.get("Data Scientist"));
+        assertEquals(27.0, allScores.get("Florist"));
 
         // The HTTP DTO stays capped at the top N -- only the event carries the full field.
         assertEquals(AssessmentConstants.TOP_CAREERS_TO_RECOMMEND, dto.getAllCareerScores().size());
@@ -345,7 +359,101 @@ class AssessmentServiceTest {
 
         // Scalars still agree with the winner.
         assertEquals("Data Scientist", event.getTopCareerPath());
-        assertEquals(100.0, event.getCareerMatchPercentage());
+        assertEquals(65.0, event.getCareerMatchPercentage());
+    }
+
+    @Test
+    @DisplayName("submitAttempt: a non-final section (Aptitude, Domain Knowledge) never publishes -- "
+            + "only the final section triggers a recommendation")
+    void submitAttempt_NonFinalSection_DoesNotPublish() {
+        AssessmentSection nonFinal = AssessmentSection.APTITUDE;
+        List<Question> questions = questions(nonFinal.getTargetSize());
+        Category aptitudeCategory = Category.builder()
+                .id(CATEGORY_ID).name(nonFinal.getDisplayName()).build();
+        AssessmentAttempt attempt = AssessmentAttempt.builder()
+                .id(ATTEMPT_ID).userId(USER_ID).categoryId(CATEGORY_ID)
+                .section(nonFinal.name()).status(AttemptStatus.IN_PROGRESS).build();
+
+        when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID)).thenReturn(Optional.of(attempt));
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(aptitudeCategory));
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
+        when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList())).thenReturn(optionsFor(questions));
+        when(careerPathRepository.findAll()).thenReturn(List.of());
+        when(resultRepository.save(any(AssessmentResult.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assessmentService.submitAttempt(USER_ID, submitAll(questions, 1));
+
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class));
+        // Submitting Aptitude must not even look up prior sections -- there's nothing to aggregate yet.
+        verify(attemptRepository, never()).findTopByUserIdAndSectionAndStatusOrderByCompletedAtDesc(
+                any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("submitAttempt: the final section (Soft Skills) publishes ONE event averaging all 3 "
+            + "sections -- not just its own 5-question score")
+    void submitAttempt_FinalSection_AggregatesAllThreeSections() {
+        List<Question> questions = fiveQuestions();
+
+        when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
+                .thenReturn(Optional.of(inProgressAttempt()));
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
+        when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList())).thenReturn(optionsFor(questions));
+        // "A" names Soft Skills in its requiredSkills (full relevance); "B" does not (damped 0.3).
+        when(careerPathRepository.findAll()).thenReturn(List.of(
+                CareerPath.builder().id(1L).name("A").requiredSkills("Soft Skills").build(),
+                CareerPath.builder().id(2L).name("B").requiredSkills("Cooking").build()));
+        when(resultRepository.save(any(AssessmentResult.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // Aptitude (5 Qs, max 15) at 20%, Domain Knowledge (10 Qs, max 30) at 60% -- sized like the
+        // real sections, so this also exercises that the blend is raw/max-weighted, not a flat
+        // 3-way average of percentages (which would under-weight the 10-question section).
+        AssessmentAttempt aptitudeAttempt = AssessmentAttempt.builder().id(201L).build();
+        AssessmentResult aptitudeResult = AssessmentResult.builder()
+                .rawScore(3).maxPossibleScore(15).categoryScorePercentage(20.0)
+                .allCareerScoresJson("{\"A\":20.0,\"B\":20.0}").build();
+        AssessmentAttempt domainAttempt = AssessmentAttempt.builder().id(202L).build();
+        AssessmentResult domainResult = AssessmentResult.builder()
+                .rawScore(18).maxPossibleScore(30).categoryScorePercentage(60.0)
+                .allCareerScoresJson("{\"A\":60.0,\"B\":100.0}").build();
+
+        when(attemptRepository.findTopByUserIdAndSectionAndStatusOrderByCompletedAtDesc(
+                USER_ID, AssessmentSection.APTITUDE.name(), AttemptStatus.COMPLETED))
+                .thenReturn(Optional.of(aptitudeAttempt));
+        when(resultRepository.findByAttemptId(201L)).thenReturn(Optional.of(aptitudeResult));
+        when(attemptRepository.findTopByUserIdAndSectionAndStatusOrderByCompletedAtDesc(
+                USER_ID, AssessmentSection.DOMAIN_KNOWLEDGE.name(), AttemptStatus.COMPLETED))
+                .thenReturn(Optional.of(domainAttempt));
+        when(resultRepository.findByAttemptId(202L)).thenReturn(Optional.of(domainResult));
+
+        // Every question answered with the weight-3 option: this section's own raw score is 15/15
+        // (100%). A's one skill token ("Soft Skills") fully matches -- relevance 1.0 -- so its own
+        // score is 100.0. B ("Cooking") matches nothing -- floor relevance 0.3, and ranks below A,
+        // picking up a -1.0 tiebreak: 100.0 x 0.3 - 1.0 = 29.0.
+        AssessmentResultDto dto = assessmentService.submitAttempt(USER_ID, submitAll(questions, 1));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(rabbitTemplate).convertAndSend(anyString(), eq("assessment.completed"), payload.capture());
+        AssessmentCompletedEvent event = (AssessmentCompletedEvent) payload.getValue();
+
+        // (3 + 18 + 15) / (15 + 30 + 15) x 100 = 36/60 x 100 = 60.0
+        assertEquals("Overall", event.getCategoryName());
+        assertEquals(60.0, event.getCategoryScorePercentage());
+        // A: (100+20+60)/3 = 60.0, B: (29+20+100)/3 = 49.666... rounded to 49.67 -- A wins.
+        assertEquals(60.0, event.getAllCareerScores().get("A"));
+        assertEquals(49.67, event.getAllCareerScores().get("B"));
+        assertEquals("A", event.getTopCareerPath());
+        assertEquals(60.0, event.getCareerMatchPercentage());
+
+        // The HTTP response the frontend renders must agree with the event exactly -- this is what
+        // was previously broken: the site showed a different (client-derived) number than the email.
+        assertEquals("Overall", dto.getCategoryName());
+        assertEquals(60.0, dto.getCategoryScorePercentage());
+        assertEquals("A", dto.getTopCareerPath());
+        assertEquals(60.0, dto.getCareerMatchPercentage());
+        assertEquals(36, dto.getRawScore());
+        assertEquals(60, dto.getMaxPossibleScore());
     }
 
     @Test
@@ -499,14 +607,15 @@ class AssessmentServiceTest {
         when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID))
                 .thenReturn(Optional.of(inProgressAttempt()));
         when(resultRepository.findByAttemptId(ATTEMPT_ID)).thenReturn(Optional.of(stored));
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        // No categoryRepository stub: getResult resolves the display name from attempt.getSection()
+        // whenever it's set, so the category-lookup fallback path is never reached here.
         when(careerPathRepository.findById(1L)).thenReturn(Optional.of(
                 CareerPath.builder().id(1L).name("Data Scientist").build()));
 
         AssessmentResultDto dto = assessmentService.getResult(USER_ID, ATTEMPT_ID);
 
         assertEquals(ATTEMPT_ID, dto.getAttemptId());
-        assertEquals("Logical Reasoning", dto.getCategoryName());
+        assertEquals(SECTION.getDisplayName(), dto.getCategoryName());
         assertEquals(12, dto.getRawScore());
         assertEquals(80.0, dto.getCategoryScorePercentage());
         assertEquals("Data Scientist", dto.getTopCareerPath());
@@ -567,11 +676,10 @@ class AssessmentServiceTest {
         // A category holding 6 questions of which only 3 are active must fail the >= 5 guard. If the
         // count ignored isActive it would pass here, then draw a 3-question pool and score the
         // student against the fixed maxPossibleScore of 15 -- a silent 60% ceiling.
-        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(category));
+        when(categoryRepository.findByName(SECTION.getDisplayName())).thenReturn(Optional.of(category));
         when(questionRepository.countByCategoryIdAndIsActiveTrue(CATEGORY_ID)).thenReturn(3);
 
-        AssessmentRequest request = new AssessmentRequest();
-        request.setCategoryId(CATEGORY_ID);
+        AssessmentRequest request = sectionRequest();
 
         CustomException ex = assertThrows(CustomException.class,
                 () -> assessmentService.startAttempt(USER_ID, request));
