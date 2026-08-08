@@ -5,7 +5,6 @@ import com.careerbridge.roadmap.dto.MilestoneResponse;
 import com.careerbridge.roadmap.dto.MilestoneTemplateResponse;
 import com.careerbridge.roadmap.dto.RoadmapResponse;
 import com.careerbridge.roadmap.dto.RoadmapTemplateResponse;
-import com.careerbridge.roadmap.event.RecommendationGeneratedEvent;
 import com.careerbridge.roadmap.event.RoadmapUpdatedEvent;
 import com.careerbridge.roadmap.exception.CustomException;
 import com.careerbridge.roadmap.model.MilestoneTemplate;
@@ -26,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class RoadmapServiceImpl implements RoadmapService {
@@ -58,53 +58,33 @@ public class RoadmapServiceImpl implements RoadmapService {
     }
 
     /**
-     * Called only from RoadmapEventConsumer. @Transactional is safe alongside that listener's
-     * fail-soft catch because the transaction opens and closes inside this proxied call -- by the
-     * time an exception reaches the consumer it has already rolled back, so the catch is not
-     * swallowing a still-open rollback-only transaction.
+     * Build-or-return: idempotent so a double-click, or the student clicking "Build my roadmap" for
+     * a career they already built, returns the same roadmap rather than erroring or duplicating.
+     * There's no separate "already exists" error response -- the fast path below and the unique
+     * constraint on (student_id, career_name) together make this safe under a race, and the caller
+     * never has to distinguish "just built" from "already had one".
      */
     @Override
     @Transactional
-    public void generateRoadmap(RecommendationGeneratedEvent event) {
-        if (event == null || event.getUserId() == null || event.getRecommendationId() == null) {
-            log.warn("Ignoring {} with no userId or recommendationId",
-                    RabbitMQConfig.RECOMMENDATION_GENERATED_ROUTING_KEY);
-            return;
+    public RoadmapResponse buildRoadmap(Long studentId, String careerName) {
+        Optional<StudentRoadmap> existing =
+                studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(studentId, careerName);
+        if (existing.isPresent()) {
+            return toResponse(existing.get());
         }
 
-        Long studentId = event.getUserId();
-        Long recommendationId = event.getRecommendationId();
-
-        // Fast path only. The unique constraint on (student_id, recommendation_id) is the real
-        // guarantee: RabbitMQ is at-least-once, so a redelivery can race this check, and the loser
-        // surfaces as a DataIntegrityViolationException the consumer discards.
-        if (studentRoadmapRepository.findByStudentIdAndRecommendationId(studentId, recommendationId).isPresent()) {
-            log.info("Roadmap already exists for studentId={} recommendationId={}, skipping",
-                    studentId, recommendationId);
-            return;
-        }
-
-        // Fail-soft, not an exception: a career with no seeded template must not take the listener
-        // down for every other student. The most likely cause is a career renamed in
-        // recommendation-service's CareerCatalog without the matching edit to RoadmapDataSeeder,
-        // which this WARN is the only signal of.
         RoadmapTemplate template = roadmapTemplateRepository
-                .findByCareerNameIgnoreCaseAndIsActiveTrue(event.getTopCareerName())
-                .orElse(null);
-        if (template == null) {
-            log.warn("No active roadmap template for career '{}' (studentId={}); no roadmap generated",
-                    event.getTopCareerName(), studentId);
-            return;
-        }
+                .findByCareerNameIgnoreCaseAndIsActiveTrue(careerName)
+                .orElseThrow(() -> new CustomException(
+                        "No roadmap template for career '" + careerName + "'", HttpStatus.NOT_FOUND));
 
         List<MilestoneTemplate> steps =
                 milestoneTemplateRepository.findByRoadmapTemplateIdOrderByOrderIndexAsc(template.getId());
 
         StudentRoadmap roadmap = StudentRoadmap.builder()
                 .studentId(studentId)
-                .recommendationId(recommendationId)
-                // From the template, not the event: the event's name is what matched, but the
-                // template's is the canonical spelling.
+                // From the template, not the caller's spelling of careerName, so the roadmap keeps
+                // the canonical name even if the request came in with different casing.
                 .careerName(template.getCareerName())
                 .status(STATUS_IN_PROGRESS)
                 // Counted from the rows actually copied, not template.getTotalMilestones(), so the
@@ -128,8 +108,10 @@ public class RoadmapServiceImpl implements RoadmapService {
 
         StudentRoadmap saved = studentRoadmapRepository.save(roadmap);
 
-        log.info("Generated roadmap id={} for studentId={} career='{}' with {} milestones",
+        log.info("Built roadmap id={} for studentId={} career='{}' with {} milestones",
                 saved.getId(), studentId, saved.getCareerName(), steps.size());
+
+        return toResponse(saved);
     }
 
     /**

@@ -5,6 +5,7 @@ import {
   LuTriangleAlert, LuRoute, LuDownload, LuChartColumn,
   LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
+  LuSun, LuHistory, LuChevronRight,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -26,6 +27,9 @@ const iconMap = {
   'refresh-cw': LuRefreshCw,
   'file-text': LuFileText,
   users: LuUsers,
+  sun: LuSun,
+  history: LuHistory,
+  'chevron-right': LuChevronRight,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -93,7 +97,7 @@ export function Button({
   return <button type="button" onClick={onClick} disabled={disabled} style={combined} {...handlers}>{content}</button>;
 }
 
-export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
+export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle }) {
   const IconComp = iconMap[icon] || LuSlidersHorizontal;
   const v = buttonVariants[variant] || buttonVariants.ghost;
   return (
@@ -107,12 +111,12 @@ export function IconButton({ icon, label, onClick, variant = 'ghost' }) {
         ...v,
       }}
     >
-      <IconComp size={20} />
+      <IconComp size={20} style={iconStyle} />
     </button>
   );
 }
 
-export function Logo({ size = 32, tone = 'default' }) {
+export function Logo({ size = 32, tone = 'default', showText = true }) {
   const inverse = tone === 'inverse';
   return (
     <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, border: 'none' }}>
@@ -121,9 +125,11 @@ export function Logo({ size = 32, tone = 'default' }) {
         alt=""
         style={{ height: size, width: 'auto', filter: inverse ? 'brightness(0) invert(1)' : 'none' }}
       />
-      <span style={{ fontFamily: 'var(--font-display)', fontSize: size * 0.5, color: inverse ? 'var(--bone-50)' : 'var(--ink-900)', whiteSpace: 'nowrap' }}>
-        CareerBridge
-      </span>
+      {showText && (
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: size * 0.5, color: inverse ? 'var(--bone-50)' : 'var(--ink-900)', whiteSpace: 'nowrap' }}>
+          CareerBridge
+        </span>
+      )}
     </Link>
   );
 }
@@ -200,11 +206,13 @@ function scoreToColor(value, inverse) {
   return 'var(--status-danger)';
 }
 
+const SCORE_RING_PX = { lg: 176, md: 128, sm: 64 };
+
 export function ScoreRing({
   value, grade, size = 'lg', label, caption, tone = 'default', colorByScore = false,
 }) {
-  const px = size === 'lg' ? 176 : 128;
-  const stroke = 10;
+  const px = SCORE_RING_PX[size] || SCORE_RING_PX.md;
+  const stroke = size === 'sm' ? 6 : 10;
   const r = (px - stroke) / 2;
   const c = 2 * Math.PI * r;
   const offset = c - (value / 100) * c;
@@ -221,7 +229,7 @@ export function ScoreRing({
   const captionColor = inverse ? 'rgba(255,255,255,.55)' : 'var(--ink-500)';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, maxWidth: 280 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: size === 'sm' ? 0 : 16, maxWidth: 280 }}>
       <div style={{ position: 'relative', width: px, height: px }}>
         <svg width={px} height={px} viewBox={`0 0 ${px} ${px}`}>
           <circle cx={px / 2} cy={px / 2} r={r} fill="none" stroke={trackStroke} strokeWidth={stroke} />
@@ -232,14 +240,16 @@ export function ScoreRing({
           />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 44, color: valueColor }}>{value}</span>
-          <span style={{ fontSize: 12, letterSpacing: '.1em', color: gradeColor }}>GRADE {grade}</span>
+          <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: size === 'sm' ? 16 : 44, color: valueColor }}>{value}</span>
+          {grade && <span style={{ fontSize: 12, letterSpacing: '.1em', color: gradeColor }}>GRADE {grade}</span>}
         </div>
       </div>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: labelColor }}>{label}</div>
-        {caption && <div style={{ fontSize: 13, color: captionColor, marginTop: 4 }}>{caption}</div>}
-      </div>
+      {(label || caption) && (
+        <div style={{ textAlign: 'center' }}>
+          {label && <div style={{ fontSize: 14, fontWeight: 600, color: labelColor }}>{label}</div>}
+          {caption && <div style={{ fontSize: 13, color: captionColor, marginTop: 4 }}>{caption}</div>}
+        </div>
+      )}
     </div>
   );
 }

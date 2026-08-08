@@ -75,10 +75,19 @@ public class ScoringEngine {
                         .thenComparing(r -> r.career().getName()))
                 .toList();
 
+        // If every career landed on the exact same relevance (the category name shares no keyword
+        // with ANY career's requiredSkills -- true for "Aptitude"/"Soft Skills" and sometimes
+        // "Domain Knowledge"), there is zero real signal here. Applying the per-rank tie-break in
+        // that case doesn't disambiguate a coincidental near-tie -- it manufactures a fake ranking
+        // out of alphabetical name order, and since that's deterministic, it silently pushed the
+        // same career (whichever sorts first) to the top for nearly every student regardless of
+        // their answers. Only apply the tie-break when relevance actually varies across careers.
+        boolean hasRealSignal = ranked.stream().map(Ranked::relevance).distinct().count() > 1;
+
         Map<String, Double> careerScores = new LinkedHashMap<>();
         for (int rank = 0; rank < ranked.size(); rank++) {
             Ranked r = ranked.get(rank);
-            double tieBreak = rank * 1.0;
+            double tieBreak = hasRealSignal ? rank * 1.0 : 0.0;
             double matchScore = Math.max(0.0, Math.round(
                     (categoryScorePercentage * r.relevance() - tieBreak) * 100.0) / 100.0);
             careerScores.put(r.career().getName(), matchScore);
