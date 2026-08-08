@@ -1,0 +1,272 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  cloud:
+    gateway:
+      # server.webmvc, NOT the bare spring.cloud.gateway.routes. Spring Cloud Gateway 5 moved the
+      # route properties per server flavour: GatewayMvcProperties binds
+      # spring.cloud.gateway.server.webmvc, and the old flat key (correct for SCG <= 4.1, and still
+      # shown in most examples online) binds to NOTHING here -- the app starts clean, logs no
+      # warning, and every /api/** returns 404. Logged SEV-2 in ai_incident_log.md.
+      #
+      # There is deliberately no `filters:` entry on any route. Authentication is a single global
+      # servlet OncePerRequestFilter (JwtAuthenticationFilter) rather than a per-route filter, so
+      # that /actuator/** is covered too and no request can reach a downstream service carrying a
+      # client-supplied X-User-Id.
+      #
+      # Each uri is a ${...} placeholder rather than a literal, so docker-compose can retarget it
+      # at a container name while the localhost default keeps `mvnw spring-boot:run` working
+      # unchanged. The placeholder is deliberate and must not be "simplified" back to a literal:
+      # the obvious alternative -- setting SPRING_CLOUD_GATEWAY_SERVER_WEBMVC_ROUTES_0_URI in the
+      # environment -- silently destroys this block. Spring's IndexedElementsBinder binds a list
+      # from the FIRST property source that supplies any element and then stops; collections are
+      # never merged across sources. One route uri arriving from the environment therefore makes
+      # the environment the sole source for the whole list, and every id and predicates entry
+      # below vanishes -- routes that match nothing, no warning, healthy app, 404 on every
+      # /api/**. Same failure signature as the spring.cloud.gateway prefix bug above.
+      server:
+        webmvc:
+          routes:
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/auth/**
+            - id: student-service
+              uri: ${STUDENT_SERVICE_URI:http://localhost:8082}
+              predicates:
+                - Path=/api/student/**
+            - id: assessment-service
+              uri: ${ASSESSMENT_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/assessment/**
+            - id: recommendation-service
+              uri: ${RECOMMENDATION_SERVICE_URI:http://localhost:8084}
+              predicates:
+                - Path=/api/recommendation/**
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8085}
+              predicates:
+                # Singular, matching notification-service's @RequestMapping("/api/notification").
+                - Path=/api/notification/**
+            - id: organization-service
+              uri: ${ORG_SERVICE_URI:http://localhost:8087}
+              predicates:
+                # Singular, matching organization-service's @RequestMapping("/api/organization").
+                # Nothing here is in gateway.public-paths: every organization endpoint needs a
+                # valid token, because the service authorizes on the X-User-Role and X-User-Org-Id
+                # this gateway injects, and a public path forwards neither.
+                - Path=/api/organization/**
+            - id: roadmap-service
+              uri: ${ROADMAP_SERVICE_URI:http://localhost:8088}
+              predicates:
+                # Singular, matching roadmap-service's @RequestMapping("/api/roadmap").
+                # Nothing here is in gateway.public-paths: /my and the milestone PATCH key off the
+                # X-User-Id this gateway injects, and /templates authorizes on X-User-Role -- a
+                # public path forwards neither.
+                - Path=/api/roadmap/**
+            - id: prs-service
+              uri: ${PRS_SERVICE_URI:http://localhost:8089}
+              predicates:
+                # Singular, matching prs-service's @RequestMapping("/api/prs").
+                # Nothing here is in gateway.public-paths: /my keys off the X-User-Id this gateway
+                # injects, and /{studentId} and /leaderboard authorize on X-User-Role -- a public
+                # path forwards neither.
+                - Path=/api/prs/**
+            - id: recruiter-service
+              uri: ${RECRUITER_SERVICE_URI:http://localhost:8090}
+              predicates:
+                # Singular, matching recruiter-service's @RequestMapping("/api/recruiter").
+                # Nothing here is in gateway.public-paths, including the GET /api/recruiter/jobs
+                # job board: every endpoint authorizes on the X-User-Role this gateway injects, and
+                # a public path forwards no identity headers at all -- it would arrive with no role
+                # and 400 on the required header rather than being usefully public.
+                - Path=/api/recruiter/**
+            - id: resume-service
+              uri: ${RESUME_SERVICE_URI:http://localhost:8091}
+              predicates:
+                # Singular, matching resume-service's @RequestMapping("/api/resume").
+                # Nothing here is in gateway.public-paths: every endpoint authorizes on X-User-Id
+                # and/or X-User-Role this gateway injects, including /download/{id} -- a resume PDF
+                # is not public content, and a public path would forward it with no identity at all.
+                - Path=/api/resume/**
+            - id: ai-coach-service
+              uri: ${AI_COACH_SERVICE_URI:http://localhost:8092}
+              predicates:
+                # Singular, matching ai-coach-service's @RequestMapping("/api/ai-coach").
+                # Nothing here is in gateway.public-paths: every endpoint authorizes on X-User-Id
+                # and/or X-User-Role this gateway injects. This service introduces no new trusted
+                # header, so MANAGED_HEADERS in JwtAuthenticationFilter is unchanged.
+                - Path=/api/ai-coach/**
+            - id: payment-service
+              uri: ${PAYMENT_SERVICE_URI:http://localhost:8093}
+              predicates:
+                # Singular, matching payment-service's @RequestMapping("/api/payment").
+                # GET /api/payment/plans IS in gateway.public-paths below -- the pricing page is
+                # shown to visitors before login. Every other endpoint here authorizes on the
+                # X-User-Id and X-User-Role this gateway injects.
+                - Path=/api/payment/**
+            # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
+            # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
+            # 5 routes above, the incoming and target paths differ, and this gateway's default
+            # webmvc routing forwards the ORIGINAL incoming path unchanged (there is no implicit
+            # path-merging with a uri's own path component; confirmed against this project's
+            # existing routes, which rely on exactly that passthrough behavior).
+            - id: auth-service-docs
+              uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api-docs/auth
+              filters:
+                - RewritePath=/api-docs/auth,/api-docs
+            - id: student-service-docs
+              uri: ${STUDENT_SERVICE_URI:http://localhost:8082}
+              predicates:
+                - Path=/api-docs/student
+              filters:
+                - RewritePath=/api-docs/student,/api-docs
+            - id: assessment-service-docs
+              uri: ${ASSESSMENT_SERVICE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api-docs/assessment
+              filters:
+                - RewritePath=/api-docs/assessment,/api-docs
+            - id: recommendation-service-docs
+              uri: ${RECOMMENDATION_SERVICE_URI:http://localhost:8084}
+              predicates:
+                - Path=/api-docs/recommendation
+              filters:
+                - RewritePath=/api-docs/recommendation,/api-docs
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8085}
+              predicates:
+                - Path=/api-docs/notification
+              filters:
+                - RewritePath=/api-docs/notification,/api-docs
+            - id: organization-service-docs
+              uri: ${ORG_SERVICE_URI:http://localhost:8087}
+              predicates:
+                - Path=/api-docs/organization
+              filters:
+                - RewritePath=/api-docs/organization,/api-docs
+            - id: roadmap-service-docs
+              uri: ${ROADMAP_SERVICE_URI:http://localhost:8088}
+              predicates:
+                - Path=/api-docs/roadmap
+              filters:
+                - RewritePath=/api-docs/roadmap,/api-docs
+            - id: prs-service-docs
+              uri: ${PRS_SERVICE_URI:http://localhost:8089}
+              predicates:
+                - Path=/api-docs/prs
+              filters:
+                - RewritePath=/api-docs/prs,/api-docs
+            - id: recruiter-service-docs
+              uri: ${RECRUITER_SERVICE_URI:http://localhost:8090}
+              predicates:
+                - Path=/api-docs/recruiter
+              filters:
+                - RewritePath=/api-docs/recruiter,/api-docs
+            - id: resume-service-docs
+              uri: ${RESUME_SERVICE_URI:http://localhost:8091}
+              predicates:
+                - Path=/api-docs/resume
+              filters:
+                - RewritePath=/api-docs/resume,/api-docs
+            - id: ai-coach-service-docs
+              uri: ${AI_COACH_SERVICE_URI:http://localhost:8092}
+              predicates:
+                - Path=/api-docs/ai-coach
+              filters:
+                - RewritePath=/api-docs/ai-coach,/api-docs
+            - id: payment-service-docs
+              uri: ${PAYMENT_SERVICE_URI:http://localhost:8093}
+              predicates:
+                - Path=/api-docs/payment
+              filters:
+                - RewritePath=/api-docs/payment,/api-docs
+
+gateway:
+  # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
+  # gateway verifies. 49 bytes = 392 bits, so Keys.hmacShaKeyFor selects HS384, NOT HS256, despite
+  # what the literal says. Overriding one service's JWT_SECRET without the other breaks every
+  # request with a signature error.
+  jwt-secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}
+  public-paths:
+    # NOT the whole /api/auth/** surface -- listed individually, and that is load-bearing.
+    #
+    # A public path is forwarded with NO identity headers at all: JwtAuthenticationFilter wraps it
+    # with identityHeaders(null, null, null) to strip any client-supplied copy. So the wildcard made
+    # /api/auth/admin/** unreachable rather than insecure -- every request arrived with no
+    # X-User-Role and 400'd on the required header. Narrowing to these three is what lets the admin
+    # endpoints receive an injected role after JWT validation.
+    #
+    # These three genuinely cannot require an access token:
+    #   /login and /register are how a caller obtains one in the first place;
+    #   /refresh is called precisely because the 15-minute access token has expired, and refresh
+    #   tokens are opaque UUIDs checked against a Postgres table, not JWTs this gateway can verify.
+    #
+    # /api/auth/logout requires a valid token - intentionally protected
+    - /api/auth/login
+    - /api/auth/register
+    - /api/auth/refresh
+    # Health checks must not need a token.
+    - /actuator/**
+    # The career catalogue is identical for everyone and is served without a user context.
+    # Note there is no /api/assessment/careers -- that endpoint does not exist in assessment-service.
+    - /api/recommendation/careers
+    # The pricing page, shown to visitors before they have an account. Exactly this one path, never
+    # /api/payment/** -- every other endpoint in that service needs the identity headers a public
+    # path deliberately strips. payment-service's getPlans() reads no headers at all for the same
+    # reason: a required header on a public path 400s every request instead of being public.
+    - /api/payment/plans
+    # Swagger UI itself: springdoc's static resources, the UI page, its generated OpenAPI JSON, and
+    # the webjars bundle it loads them from (swagger-ui bootstrap CSS/JS). Without these the browser
+    # would 401 loading the page before a token could ever be attached.
+    - /swagger-ui.html
+    - /swagger-ui/**
+    - /api-docs/**
+    - /webjars/**
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: auth-service
+        url: /api-docs/auth
+      - name: student-service
+        url: /api-docs/student
+      - name: assessment-service
+        url: /api-docs/assessment
+      - name: recommendation-service
+        url: /api-docs/recommendation
+      - name: notification-service
+        url: /api-docs/notification
+      - name: organization-service
+        url: /api-docs/organization
+      - name: roadmap-service
+        url: /api-docs/roadmap
+      - name: prs-service
+        url: /api-docs/prs
+      - name: recruiter-service
+        url: /api-docs/recruiter
+      - name: resume-service
+        url: /api-docs/resume
+      - name: ai-coach-service
+        url: /api-docs/ai-coach
+      - name: payment-service
+        url: /api-docs/payment
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

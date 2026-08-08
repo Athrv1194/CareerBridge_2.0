@@ -1,0 +1,79 @@
+server:
+  # 8093. 8086 is unused and is not a gap -- organization took 8087, roadmap 8088, prs 8089,
+  # recruiter 8090, resume 8091, ai-coach 8092.
+  port: 8093
+
+spring:
+  application:
+    name: payment-service
+  profiles:
+    # Defaults to the gitignored application-local.yml; docker-compose sets SPRING_PROFILES_ACTIVE=docker.
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_payment;). docker/init.sql creates it for the compose stack, but
+    # only on a FRESH postgres volume; an existing one needs the CREATE DATABASE run by hand.
+    url: jdbc:postgresql://localhost:5432/careerbridge_payment
+    username: postgres
+    # Defaulted rather than bare ${DB_PASSWORD}: an unresolvable placeholder fails startup outright,
+    # which would break `mvnw spring-boot:run` for anyone who has not exported the variable.
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  rabbitmq:
+    # localhost:5672 with guest/guest, matching every other service. NOT 5673 and NOT the
+    # careerbridge user: 5673 is the port docker-compose PUBLISHES to the host so the stack can run
+    # alongside a developer's own broker, while inside the compose network the containers still talk
+    # on the standard 5672. docker-compose overrides all four via SPRING_RABBITMQ_* env vars, and
+    # uses a non-guest user there because RabbitMQ restricts guest to loopback connections.
+    # A real password must never appear in this tracked file.
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # No spring.autoconfigure.exclude: no Spring Security on the classpath, so naming an absent
+  # UserDetailsServiceAutoConfiguration class would fail startup outright.
+  # No spring.jpa.defer-datasource-initialization: no data.sql -- the four plans are seeded by
+  # PlanDataSeeder, a CommandLineRunner that runs after ddl-auto has finished.
+  # No management.health.rabbit.enabled: that is already the default.
+
+razorpay:
+  api:
+    # No SDK. This is called with RestClient + HTTP Basic auth (keyId as username, keySecret as
+    # password), the same SimpleClientHttpRequestFactory pattern every other outbound client uses.
+    url: ${RAZORPAY_API_URL:https://api.razorpay.com/v1}
+  key:
+    # Blank defaults so a fresh clone compiles and contextLoads without sandbox keys. The client
+    # checks for a blank key before calling out and answers 503 rather than sending an empty
+    # Authorization header and getting an opaque upstream 401.
+    # keyId is PUBLIC -- it is returned to the browser so Checkout.js can open the modal.
+    # keySecret is NEVER returned, never logged, and never appears in an exception message.
+    id: ${RAZORPAY_KEY_ID:}
+    secret: ${RAZORPAY_KEY_SECRET:}
+
+springdoc:
+  # /api-docs, NOT /v3/api-docs. The gateway's payment-service-docs route rewrites
+  # /api-docs/payment -> /api-docs, so springdoc must serve the spec at that exact path or the
+  # aggregated Swagger dropdown entry 404s.
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+# Note /actuator/health aggregates RabbitMQ and returns 503 while the broker is down; the
+# docker-compose healthcheck and any load balancer must point at /actuator/health/liveness instead.
