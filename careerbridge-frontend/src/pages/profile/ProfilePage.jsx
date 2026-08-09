@@ -14,6 +14,7 @@ import {
   deleteProjectCover,
 } from '../../api/studentApi';
 import { getMyResumes, generateResume, deleteResume, downloadResume } from '../../api/resumeApi';
+import { getUnreadCount } from '../../api/notificationApi';
 import './profile.css';
 
 const NAV_ITEMS = [
@@ -187,6 +188,7 @@ const EMPTY_CERT = { name: '', issuingOrganization: '', issueDate: '', expiryDat
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fadeIn, setFadeIn] = useState(false);
@@ -266,6 +268,7 @@ export default function ProfilePage() {
   }, [showToast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {}); }, []);
   useEffect(() => () => { clearTimeout(toastTimerRef.current); clearTimeout(blurTimerRef.current); }, []);
 
   useEffect(() => {
@@ -603,7 +606,14 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
+          <div style={{ position: 'relative', display: 'flex' }}>
+            <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 15, height: 15, padding: '0 3px', borderRadius: '50%', background: 'var(--status-danger)', color: '#FCFBF9', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
