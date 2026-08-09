@@ -132,13 +132,15 @@ class RoadmapServiceTest {
         StudentRoadmap existing = roadmap(1L, 2, 0);
         when(studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(1L, "Backend Developer"))
                 .thenReturn(Optional.of(existing));
+        when(studentRoadmapRepository.save(any(StudentRoadmap.class))).thenAnswer(inv -> inv.getArgument(0));
         when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
                 .thenReturn(List.of());
 
         var response = roadmapService.buildRoadmap(1L, "Backend Developer");
 
+        // Same row, not a duplicate -- save() now fires to reactivate it (see
+        // buildRoadmap_AlreadyExists_Reactivates), but a brand-new template lookup must not.
         assertEquals(1L, response.getId());
-        verify(studentRoadmapRepository, never()).save(any());
         verify(roadmapTemplateRepository, never()).findByCareerNameIgnoreCaseAndIsActiveTrue(anyString());
     }
 
@@ -165,7 +167,7 @@ class RoadmapServiceTest {
     @DisplayName("returns the newest roadmap with ordered milestones")
     void getMyRoadmap_ValidStudent_ReturnsRoadmap() {
         StudentRoadmap active = roadmap(1L, 2, 0);
-        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L))
+        when(studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(1L))
                 .thenReturn(List.of(active));
         when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
                 .thenReturn(List.of(milestone(200L, 1L, false, active)));
@@ -179,7 +181,7 @@ class RoadmapServiceTest {
     @Test
     @DisplayName("no roadmap at all is a 404")
     void getMyRoadmap_NoRoadmap_Throws404() {
-        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L)).thenReturn(List.of());
+        when(studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(1L)).thenReturn(List.of());
 
         CustomException ex = assertThrows(CustomException.class, () -> roadmapService.getMyRoadmap(1L));
 
@@ -195,7 +197,7 @@ class RoadmapServiceTest {
         // test could have caught it, since a stubbed repository returns whatever it is told.
         StudentRoadmap finished = roadmap(1L, 2, 2);
         finished.setStatus("COMPLETED");
-        when(studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(1L)).thenReturn(List.of(finished));
+        when(studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(1L)).thenReturn(List.of(finished));
         when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
                 .thenReturn(List.of(milestone(200L, 1L, true, finished)));
 
@@ -203,6 +205,84 @@ class RoadmapServiceTest {
 
         assertEquals("COMPLETED", response.getStatus());
         assertEquals(100.0, response.getCompletionPercentage());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // getMyRoadmaps / activateRoadmap
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getMyRoadmaps returns every roadmap the student built, active one first")
+    void getMyRoadmaps_MultipleRoadmaps_ReturnsAllActiveFirst() {
+        StudentRoadmap active = roadmap(1L, 2, 0);
+        StudentRoadmap other = roadmap(2L, 2, 0);
+        when(studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(1L))
+                .thenReturn(List.of(active, other));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(anyLong()))
+                .thenReturn(List.of());
+
+        List<com.careerbridge.roadmap.dto.RoadmapResponse> responses = roadmapService.getMyRoadmaps(1L);
+
+        assertEquals(2, responses.size());
+        assertEquals(1L, responses.get(0).getId());
+        assertEquals(2L, responses.get(1).getId());
+    }
+
+    @Test
+    @DisplayName("activateRoadmap sets activatedAt so it becomes what getMyRoadmap returns next")
+    void activateRoadmap_OwnRoadmap_SetsActivatedAt() {
+        StudentRoadmap target = roadmap(2L, 2, 0);
+        when(studentRoadmapRepository.findById(2L)).thenReturn(Optional.of(target));
+        when(studentRoadmapRepository.save(any(StudentRoadmap.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(2L)).thenReturn(List.of());
+
+        roadmapService.activateRoadmap(1L, 2L);
+
+        ArgumentCaptor<StudentRoadmap> saved = ArgumentCaptor.forClass(StudentRoadmap.class);
+        verify(studentRoadmapRepository).save(saved.capture());
+        assertTrue(saved.getValue().getActivatedAt() != null);
+    }
+
+    @Test
+    @DisplayName("activateRoadmap refuses another student's roadmap")
+    void activateRoadmap_WrongStudent_Throws403() {
+        StudentRoadmap target = roadmap(2L, 2, 0); // studentId = 1L in the helper
+        when(studentRoadmapRepository.findById(2L)).thenReturn(Optional.of(target));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> roadmapService.activateRoadmap(99L, 2L));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(studentRoadmapRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("activateRoadmap on an unknown id is a 404")
+    void activateRoadmap_NotFound_Throws404() {
+        when(studentRoadmapRepository.findById(2L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> roadmapService.activateRoadmap(1L, 2L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("re-building a career the student already has reactivates it instead of no-op'ing")
+    void buildRoadmap_AlreadyExists_Reactivates() {
+        StudentRoadmap existingRoadmap = roadmap(5L, 2, 1);
+        when(studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(1L, "Backend Developer"))
+                .thenReturn(Optional.of(existingRoadmap));
+        when(studentRoadmapRepository.save(any(StudentRoadmap.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(5L)).thenReturn(List.of());
+
+        roadmapService.buildRoadmap(1L, "Backend Developer");
+
+        ArgumentCaptor<StudentRoadmap> saved = ArgumentCaptor.forClass(StudentRoadmap.class);
+        verify(studentRoadmapRepository).save(saved.capture());
+        assertTrue(saved.getValue().getActivatedAt() != null);
+        // The idempotent path must never touch the template lookup -- it already has a roadmap.
+        verify(roadmapTemplateRepository, never()).findByCareerNameIgnoreCaseAndIsActiveTrue(anyString());
     }
 
     // -------------------------------------------------------------------------------------------

@@ -16,6 +16,16 @@ public interface RoadmapService {
 
     RoadmapResponse getMyRoadmap(Long studentId);
 
+    /** Every roadmap the student has ever built, active one first (same ordering as getMyRoadmap). */
+    List<RoadmapResponse> getMyRoadmaps(Long studentId);
+
+    /**
+     * Makes this roadmap the one getMyRoadmap (and therefore the Dashboard) shows, without touching
+     * any other roadmap's own progress. 403 if it belongs to another student, matching
+     * completeMilestone's ownership-check shape.
+     */
+    RoadmapResponse activateRoadmap(Long studentId, Long roadmapId);
+
     RoadmapResponse completeMilestone(Long studentId, Long milestoneId);
 
     List<RoadmapTemplateResponse> getAllTemplates(String callerRole);

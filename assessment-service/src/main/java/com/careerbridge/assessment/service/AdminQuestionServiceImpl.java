@@ -38,8 +38,8 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     private final CategoryRepository categoryRepository;
 
     public AdminQuestionServiceImpl(QuestionRepository questionRepository,
-                                    OptionRepository optionRepository,
-                                    CategoryRepository categoryRepository) {
+            OptionRepository optionRepository,
+            CategoryRepository categoryRepository) {
         this.questionRepository = questionRepository;
         this.optionRepository = optionRepository;
         this.categoryRepository = categoryRepository;
@@ -61,7 +61,8 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
                 .categoryId(category.getId())
                 .questionText(request.getText())
                 .orderIndex(request.getOrderIndex())
-                // Null-safe rather than trusting the DTO's @Builder.Default: a JSON body with an
+                // Null-safe rather than trusting the DTO's @Builder.Default: a JSON body with
+                // an
                 // explicit "isActive": null beats the field initialiser.
                 .isActive(request.getIsActive() == null || request.getIsActive())
                 .build());
@@ -75,18 +76,22 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     }
 
     /**
-     * Replaces the question's whole option set rather than diffing it: an admin edit is a
-     * declaration of what the options now are, and matching old rows to new ones would need a stable
+     * Replaces the question's whole option set rather than diffing it: an admin
+     * edit is a
+     * declaration of what the options now are, and matching old rows to new ones
+     * would need a stable
      * client-side identity the request does not carry.
      *
-     * Consequence, and it is deliberate: option ids change on every edit. Nothing references an
-     * option id across time -- AttemptAnswer stores the weight it awarded, not a live FK -- so a
+     * Consequence, and it is deliberate: option ids change on every edit. Nothing
+     * references an
+     * option id across time -- AttemptAnswer stores the weight it awarded, not a
+     * live FK -- so a
      * historical attempt keeps its original score.
      */
     @Override
     @Transactional
     public AdminQuestionResponse editQuestion(String callerRole, Long questionId,
-                                              AdminQuestionRequest request) {
+            AdminQuestionRequest request) {
         requireAdmin(callerRole);
 
         Question question = requireQuestion(questionId);
@@ -101,7 +106,8 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
         }
         Question saved = questionRepository.save(question);
 
-        // Delete then insert. No cascade exists to lean on: Question holds no @OneToMany to Option,
+        // Delete then insert. No cascade exists to lean on: Question holds no
+        // @OneToMany to Option,
         // only a plain question_id column on the Option side.
         optionRepository.deleteByQuestionId(questionId);
         List<Option> options = saveOptions(questionId, request.getOptions());
@@ -128,9 +134,12 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     }
 
     /**
-     * Soft-retires a question. Deliberately does NOT check whether this drops the category below
-     * MIN_QUESTIONS_PER_CATEGORY: blocking the edit would leave an admin unable to retire a wrong
-     * question without first writing a replacement. startAttempt already fails cleanly with
+     * Soft-retires a question. Deliberately does NOT check whether this drops the
+     * category below
+     * MIN_QUESTIONS_PER_CATEGORY: blocking the edit would leave an admin unable to
+     * retire a wrong
+     * question without first writing a replacement. startAttempt already fails
+     * cleanly with
      * "too few questions" in that state, which is the honest outcome.
      */
     @Override
@@ -146,13 +155,14 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
         question.setIsActive(false);
         Question saved = questionRepository.save(question);
 
-        // Warn when the category can no longer start an assessment -- silent otherwise, and an admin
+        // Warn when the category can no longer start an assessment -- silent otherwise,
+        // and an admin
         // would only discover it when a student hit the 400.
         long remaining = safeCount(
                 questionRepository.countByCategoryIdAndIsActiveTrue(saved.getCategoryId()));
         if (remaining < AssessmentConstants.MIN_QUESTIONS_PER_CATEGORY) {
             log.warn("Category {} now has {} active questions, below the minimum of {} -- "
-                            + "startAttempt will refuse it until more are activated",
+                    + "startAttempt will refuse it until more are activated",
                     saved.getCategoryId(), remaining, AssessmentConstants.MIN_QUESTIONS_PER_CATEGORY);
         }
 
@@ -173,8 +183,10 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     }
 
     /**
-     * Three queries total regardless of question count -- questions, categories, options -- then
-     * assembled in memory. The naive shape would be one category lookup and one option lookup per
+     * Three queries total regardless of question count -- questions, categories,
+     * options -- then
+     * assembled in memory. The naive shape would be one category lookup and one
+     * option lookup per
      * question, i.e. 2N+1 round trips across the whole bank.
      */
     @Override
@@ -182,12 +194,14 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     public List<AdminQuestionResponse> listQuestions(String callerRole, Long categoryId) {
         requireAdmin(callerRole);
 
-        // Deliberately unfiltered on isActive: this is the one query in the service that must return
+        // Deliberately unfiltered on isActive: this is the one query in the service
+        // that must return
         // retired questions, since an admin cannot reactivate what they cannot see.
         List<Question> questions = questionRepository.findAllByOrderByCategoryIdAscOrderIndexAsc();
 
         if (categoryId != null) {
-            // Objects.equals, never ==: categoryId is a boxed Long and real ids sit outside the
+            // Objects.equals, never ==: categoryId is a boxed Long and real ids sit outside
+            // the
             // Integer cache, so reference comparison would filter everything out.
             questions = questions.stream()
                     .filter(q -> Objects.equals(q.getCategoryId(), categoryId))
@@ -202,16 +216,17 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
                 .collect(Collectors.toMap(Category::getId, Category::getName));
 
         List<Long> questionIds = questions.stream().map(Question::getId).toList();
-        Map<Long, List<Option>> optionsByQuestion =
-                optionRepository.findByQuestionIdInOrderByOrderIndex(questionIds).stream()
-                        .collect(Collectors.groupingBy(Option::getQuestionId));
+        Map<Long, List<Option>> optionsByQuestion = optionRepository.findByQuestionIdInOrderByOrderIndex(questionIds)
+                .stream()
+                .collect(Collectors.groupingBy(Option::getQuestionId));
 
         List<AdminQuestionResponse> responses = new ArrayList<>(questions.size());
         for (Question question : questions) {
             responses.add(toResponse(
                     question,
                     categoryNames.get(question.getCategoryId()),
-                    // A question with no options is malformed data rather than an error to throw on;
+                    // A question with no options is malformed data rather than an error to throw
+                    // on;
                     // returning it with an empty list is what lets an admin see and fix it.
                     optionsByQuestion.getOrDefault(question.getId(), List.of())));
         }
@@ -233,13 +248,19 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     /**
      * Exactly one option must carry MAX_OPTION_WEIGHT.
      *
-     * Zero would make the question unanswerable at full marks and quietly lower every attempt's
-     * ceiling; more than one would let two different answers both score maximum, which the graded
-     * 0..3 model does not mean. Verified against the seeded bank before being enforced: all 22
-     * existing questions already satisfy it, so no admin edit of pre-existing data trips this.
+     * Zero would make the question unanswerable at full marks and quietly lower
+     * every attempt's
+     * ceiling; more than one would let two different answers both score maximum,
+     * which the graded
+     * 0..3 model does not mean. Verified against the seeded bank before being
+     * enforced: all 22
+     * existing questions already satisfy it, so no admin edit of pre-existing data
+     * trips this.
      *
-     * intValue() against the int constant, never == on the boxed Integer: Integer caches only
-     * -128..127, so reference comparison happens to work for 3 today and would break silently the
+     * intValue() against the int constant, never == on the boxed Integer: Integer
+     * caches only
+     * -128..127, so reference comparison happens to work for 3 today and would
+     * break silently the
      * day MAX_OPTION_WEIGHT rose above 127.
      */
     private void requireExactlyOneMaxWeight(List<AdminOptionRequest> options) {
@@ -262,7 +283,10 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
                         HttpStatus.NOT_FOUND));
     }
 
-    /** Plain findById, not an active-filtered finder: an admin must be able to reach retired rows. */
+    /**
+     * Plain findById, not an active-filtered finder: an admin must be able to reach
+     * retired rows.
+     */
     private Question requireQuestion(Long questionId) {
         return questionRepository.findById(questionId)
                 .orElseThrow(() -> new CustomException("Question not found: " + questionId,
@@ -273,7 +297,10 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
     // Persistence and mapping helpers
     // ---------------------------------------------------------------------------------------------
 
-    /** orderIndex comes from list position, so the stored order always matches what was submitted. */
+    /**
+     * orderIndex comes from list position, so the stored order always matches what
+     * was submitted.
+     */
     private List<Option> saveOptions(Long questionId, List<AdminOptionRequest> requested) {
         List<Option> toSave = new ArrayList<>(requested.size());
         for (int i = 0; i < requested.size(); i++) {
@@ -296,13 +323,16 @@ public class AdminQuestionServiceImpl implements AdminQuestionService {
         return categoryRepository.findById(categoryId).map(Category::getName).orElse(null);
     }
 
-    /** countByCategoryIdAndIsActiveTrue is an Integer, so a null from an empty table reads as zero. */
+    /**
+     * countByCategoryIdAndIsActiveTrue is an Integer, so a null from an empty table
+     * reads as zero.
+     */
     private int safeCount(Integer count) {
         return count == null ? 0 : count;
     }
 
     private AdminQuestionResponse toResponse(Question question, String categoryName,
-                                             List<Option> options) {
+            List<Option> options) {
         return AdminQuestionResponse.builder()
                 .id(question.getId())
                 .categoryId(question.getCategoryId())
