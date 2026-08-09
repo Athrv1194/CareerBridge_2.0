@@ -50,4 +50,10 @@ public class Project {
     @Builder.Default
     @Column(nullable = false)
     private Boolean isOngoing = false;
+
+    // Nullable, added to an already-populated table -- same reasoning as StudentProfile.avatarImage.
+    @Column(columnDefinition = "bytea")
+    private byte[] coverImage;
+
+    private String coverImageContentType;
 }

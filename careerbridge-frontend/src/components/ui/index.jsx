@@ -6,7 +6,7 @@ import {
   LuGraduationCap, LuUser, LuPlus, LuCheck, LuEye, LuEyeOff,
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
   LuSun, LuHistory, LuChevronRight, LuChevronDown, LuExternalLink,
-  LuBell, LuSearch, LuBookmark,
+  LuBell, LuSearch, LuBookmark, LuCamera, LuMapPin, LuPencil, LuTrash2,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -36,6 +36,10 @@ const iconMap = {
   bell: LuBell,
   search: LuSearch,
   bookmark: LuBookmark,
+  camera: LuCamera,
+  'map-pin': LuMapPin,
+  pencil: LuPencil,
+  'trash-2': LuTrash2,
 };
 
 export function Icon({ name, size = 18, style }) {
