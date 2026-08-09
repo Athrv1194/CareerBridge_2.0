@@ -28,4 +28,9 @@ public class CertificateDto {
     private LocalDate expiryDate;
 
     private String credentialUrl;
+
+    /** Whether a credential file is stored -- never the bytes themselves; fetched separately. */
+    private Boolean hasCredentialFile;
+
+    private String credentialFileName;
 }

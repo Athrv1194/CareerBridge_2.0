@@ -29,5 +29,7 @@ public interface ResumeSummary {
 
     Boolean getIsDefault();
 
+    Boolean getIsTailored();
+
     LocalDateTime getGeneratedAt();
 }

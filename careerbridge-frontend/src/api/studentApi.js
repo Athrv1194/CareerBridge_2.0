@@ -93,6 +93,18 @@ export function deleteCertificate(id) {
   return authedFetch(`/student/profile/certificates/${id}`, { method: 'DELETE' });
 }
 
+export function addExperience(payload) {
+  return authedFetch('/student/profile/experience', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateExperience(id, payload) {
+  return authedFetch(`/student/profile/experience/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deleteExperience(id) {
+  return authedFetch(`/student/profile/experience/${id}`, { method: 'DELETE' });
+}
+
 // student-service itself reads no identity for this endpoint, but api-gateway still requires a
 // valid JWT on any path that isn't in its own public-paths list -- this one isn't, so a bare
 // unauthenticated fetch 401s at the gateway before ever reaching student-service.
@@ -152,4 +164,16 @@ export function getProjectCoverBlobUrl(projectId) {
 
 export function deleteProjectCover(projectId) {
   return authedFetch(`/student/profile/projects/${projectId}/cover`, { method: 'DELETE' });
+}
+
+export function uploadCertificateFile(certificateId, file) {
+  return uploadImage(`/student/profile/certificates/${certificateId}/file`, file);
+}
+
+export function getCertificateFileBlobUrl(certificateId) {
+  return fetchImageAsBlobUrl(`/student/profile/certificates/${certificateId}/file`);
+}
+
+export function deleteCertificateFile(certificateId) {
+  return authedFetch(`/student/profile/certificates/${certificateId}/file`, { method: 'DELETE' });
 }

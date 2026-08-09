@@ -1,6 +1,7 @@
 package com.careerbridge.resume.service;
 
 import com.careerbridge.resume.dto.ResumeDownload;
+import com.careerbridge.resume.dto.ResumeGenerateRequest;
 import com.careerbridge.resume.dto.ResumeResponse;
 
 import java.util.List;
@@ -11,8 +12,17 @@ public interface ResumeService {
      * STUDENT only. Fetches the caller's profile, scores it, renders a PDF, stores it as a new
      * version, and publishes resume.generated. Every generation is a new row; nothing is
      * overwritten.
+     *
+     * request may be null (no body at all) -- treated identically to a body with every field
+     * omitted: every include* toggle defaults to true, no summary, no tailoring.
      */
-    ResumeResponse generateResume(String callerRole, Long studentId);
+    ResumeResponse generateResume(String callerRole, Long studentId, ResumeGenerateRequest request);
+
+    /**
+     * STUDENT only, own resumes only. Flips this resume to isDefault=true and every other resume
+     * of this student's to false. 404 if the id does not exist or belongs to another student.
+     */
+    ResumeResponse setDefaultResume(String callerRole, Long studentId, Long resumeId);
 
     /** STUDENT only. The caller's own resumes, newest first. Metadata only, never PDF bytes. */
     List<ResumeResponse> getMyResumes(String callerRole, Long studentId);

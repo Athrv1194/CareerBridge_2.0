@@ -136,9 +136,9 @@ function ScoreRingSmall({ value }) {
           style={{ transition: 'stroke-dashoffset 600ms cubic-bezier(.2,0,.2,1)' }}
         />
       </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 40, color: 'var(--ink-900)' }}>{value}</span>
-        <span style={{ fontSize: 11, letterSpacing: '.08em', color: 'var(--ink-500)' }}>PROFILE COMPLETE</span>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 20px', boxSizing: 'border-box' }}>
+        <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 40, color: 'var(--ink-900)' }}>{value}<span style={{ fontSize: 18, verticalAlign: 'super' }}>%</span></span>
+        <span style={{ fontSize: 9, letterSpacing: '.06em', color: 'var(--ink-500)', textAlign: 'center' }}>PROFILE COMPLETE</span>
       </div>
     </div>
   );

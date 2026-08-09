@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -72,7 +73,7 @@ class ResumeControllerTest {
     @Test
     @DisplayName("POST /api/resume/generate returns 201 with the resume metadata")
     void generateResume_Returns201() throws Exception {
-        when(resumeService.generateResume("STUDENT", 42L)).thenReturn(sample());
+        when(resumeService.generateResume("STUDENT", 42L, null)).thenReturn(sample());
 
         mockMvc().perform(post("/api/resume/generate")
                         .header(USER_ID_HEADER, "42")
@@ -87,7 +88,7 @@ class ResumeControllerTest {
     @Test
     @DisplayName("POST /api/resume/generate surfaces a student-service outage as 503, not 500")
     void generateResume_StudentServiceDown_Returns503() throws Exception {
-        when(resumeService.generateResume("STUDENT", 42L)).thenThrow(new CustomException(
+        when(resumeService.generateResume("STUDENT", 42L, null)).thenThrow(new CustomException(
                 "Unable to fetch your profile right now - please try again in a moment",
                 HttpStatus.SERVICE_UNAVAILABLE));
 
@@ -101,7 +102,7 @@ class ResumeControllerTest {
     @Test
     @DisplayName("POST /api/resume/generate returns 403 for a RECRUITER")
     void generateResume_WrongRole_Returns403() throws Exception {
-        when(resumeService.generateResume("RECRUITER", 42L)).thenThrow(
+        when(resumeService.generateResume("RECRUITER", 42L, null)).thenThrow(
                 new CustomException("Only a STUDENT may generate a resume", HttpStatus.FORBIDDEN));
 
         mockMvc().perform(post("/api/resume/generate")
@@ -188,6 +189,19 @@ class ResumeControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/resume/{id}/default returns 200 with the updated resume")
+    void setDefaultResume_Returns200() throws Exception {
+        when(resumeService.setDefaultResume("STUDENT", 42L, 500L)).thenReturn(sample());
+
+        mockMvc().perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/resume/500/default")
+                        .header(USER_ID_HEADER, "42")
+                        .header(USER_ROLE_HEADER, "STUDENT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(500));
+    }
+
+    @Test
     @DisplayName("GET /api/resume/student/{studentId} returns 200 for a RECRUITER")
     void getResumesByStudent_Returns200() throws Exception {
         when(resumeService.getResumesByStudentId("RECRUITER", 42L)).thenReturn(List.of(sample()));
@@ -205,7 +219,7 @@ class ResumeControllerTest {
         mockMvc().perform(post("/api/resume/generate").header(USER_ID_HEADER, "42"))
                 .andExpect(status().isBadRequest());
 
-        verify(resumeService, never()).generateResume(anyString(), anyLong());
+        verify(resumeService, never()).generateResume(anyString(), anyLong(), any());
     }
 
     /** A non-numeric path variable is MethodArgumentTypeMismatchException: 400, never 500. */
