@@ -11,6 +11,7 @@ import {
 
 const iconMap = {
   'sliders-horizontal': LuSlidersHorizontal,
+  'arrow-right': LuArrowRight,
   x: LuX,
   'chart-no-axes-column': LuChartColumn,
   'building-2': LuBuilding2,
@@ -107,7 +108,7 @@ export function Button({
   return <button type="button" onClick={onClick} disabled={disabled} style={combined} {...handlers}>{content}</button>;
 }
 
-export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle }) {
+export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle, disabled = false }) {
   const IconComp = iconMap[icon] || LuSlidersHorizontal;
   const v = buttonVariants[variant] || buttonVariants.ghost;
   return (
@@ -115,9 +116,11 @@ export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle 
       type="button"
       aria-label={label}
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        width: 40, height: 40, borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+        width: 40, height: 40, borderRadius: 'var(--radius-sm)', cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
         ...v,
       }}
     >
@@ -301,7 +304,7 @@ export function Field({ label, hint, error, children }) {
   );
 }
 
-export function Input({ type = 'text', placeholder, value, onChange, error }) {
+export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength }) {
   const [revealed, setRevealed] = useState(false);
   const isPassword = type === 'password';
   const inputStyle = {
@@ -312,12 +315,12 @@ export function Input({ type = 'text', placeholder, value, onChange, error }) {
   };
 
   if (!isPassword) {
-    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} style={inputStyle} />;
+    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} style={inputStyle} />;
   }
 
   return (
     <div style={{ position: 'relative' }}>
-      <input type={revealed ? 'text' : 'password'} placeholder={placeholder} value={value} onChange={onChange} style={inputStyle} />
+      <input type={revealed ? 'text' : 'password'} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} style={inputStyle} />
       <button
         type="button"
         onClick={() => setRevealed((r) => !r)}
