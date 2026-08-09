@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Icon, IconButton, Input, Logo, Skeleton } from '../../components/ui';
 import { getMyNotifications, markNotificationRead } from '../../api/notificationApi';
 import './notifications.css';
@@ -41,6 +41,7 @@ function delay(ms) { return new Promise((res) => setTimeout(res, ms)); }
 const GROUP_ORDER = [['today', 'Today'], ['thisWeek', 'This week'], ['earlier', 'Earlier']];
 
 export default function NotificationsPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -128,7 +129,7 @@ export default function NotificationsPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
-            <IconButton icon="bell" label="Notifications" variant="secondary" />
+            <IconButton icon="bell" label="Notifications" variant="secondary" onClick={() => navigate(-1)} />
             {unreadCount > 0 && (
               <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 15, height: 15, padding: '0 3px', borderRadius: '50%', background: 'var(--status-danger)', color: '#FCFBF9', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
                 {unreadCount > 9 ? '9+' : unreadCount}
