@@ -61,7 +61,7 @@ const buttonSizes = {
 };
 
 export function Button({
-  children, variant = 'primary', size = 'md', icon, iconAfter, onClick, to,
+  children, variant = 'primary', size = 'md', icon, iconAfter, onClick, to, state,
   fullWidth = false, disabled = false, style,
 }) {
   const [hovered, setHovered] = useState(false);
@@ -102,7 +102,7 @@ export function Button({
   };
 
   if (to && !disabled) {
-    return <Link to={to} style={{ ...combined, textDecoration: 'none', border: combined.border }} {...handlers}>{content}</Link>;
+    return <Link to={to} state={state} style={{ ...combined, textDecoration: 'none', border: combined.border }} {...handlers}>{content}</Link>;
   }
   return <button type="button" onClick={onClick} disabled={disabled} style={combined} {...handlers}>{content}</button>;
 }

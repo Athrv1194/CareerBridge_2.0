@@ -61,4 +61,6 @@ public class StudentProfileResponse {
     private List<ProjectDto> projects;
 
     private List<CertificateDto> certificates;
+
+    private List<ExperienceDto> experiences;
 }

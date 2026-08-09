@@ -2,6 +2,7 @@ package com.careerbridge.student.service;
 
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ExperienceDto;
 import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
@@ -46,6 +47,19 @@ public interface StudentService {
     CertificateDto updateCertificate(Long userId, Long certificateId, CertificateDto dto);
 
     void deleteCertificate(Long userId, Long certificateId);
+
+    /** Overwrites any previous credential file for this certificate. */
+    void uploadCertificateFile(Long userId, Long certificateId, byte[] bytes, String contentType, String fileName);
+
+    ImageBlob getCertificateFile(Long userId, Long certificateId);
+
+    void deleteCertificateFile(Long userId, Long certificateId);
+
+    ExperienceDto addExperience(Long userId, ExperienceDto dto);
+
+    ExperienceDto updateExperience(Long userId, Long experienceId, ExperienceDto dto);
+
+    void deleteExperience(Long userId, Long experienceId);
 
     /** Overwrites any previous avatar. Does not affect profileCompletionPercentage. */
     void uploadAvatar(Long userId, byte[] bytes, String contentType);

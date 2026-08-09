@@ -3,6 +3,7 @@ package com.careerbridge.resume;
 import com.careerbridge.resume.dto.CertificateDto;
 import com.careerbridge.resume.dto.EducationDto;
 import com.careerbridge.resume.dto.ProjectDto;
+import com.careerbridge.resume.dto.ResumeBuildOptions;
 import com.careerbridge.resume.dto.SkillDto;
 import com.careerbridge.resume.dto.StudentProfileDto;
 import com.careerbridge.resume.pdf.ResumePdfBuilder;
@@ -26,6 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ResumePdfBuilderTest {
 
     private final ResumePdfBuilder builder = new ResumePdfBuilder();
+
+    /** Every toggle on, no summary override -- the pre-toggle default behaviour. */
+    private static ResumeBuildOptions defaultOptions() {
+        return ResumeBuildOptions.builder()
+                .includePhone(true).includeEmail(true).includeLinks(true).includeLocation(true)
+                .includeExperience(true).includeSkills(true).includeProjects(true)
+                .includeEducation(true).includeCertificates(true)
+                .build();
+    }
 
     /** Every PDF file begins with the literal bytes "%PDF". Cheapest possible validity check. */
     private static void assertIsPdf(byte[] bytes) {
@@ -72,7 +82,7 @@ class ResumePdfBuilderTest {
     @Test
     @DisplayName("build: a fully populated profile renders a real, non-trivial PDF")
     void build_FullProfile_ProducesValidPdf() throws Exception {
-        byte[] pdf = builder.build(fullProfile());
+        byte[] pdf = builder.build(fullProfile(), defaultOptions());
 
         assertIsPdf(pdf);
         // A header-only PDF is roughly 500 bytes; anything with real sections clears 1000 easily.
@@ -94,7 +104,7 @@ class ResumePdfBuilderTest {
                 .lastName("Student")
                 .build();
 
-        byte[] pdf = assertDoesNotThrow(() -> builder.build(bare));
+        byte[] pdf = assertDoesNotThrow(() -> builder.build(bare, defaultOptions()));
         assertIsPdf(pdf);
     }
 
@@ -111,7 +121,7 @@ class ResumePdfBuilderTest {
                 .certificates(Collections.emptyList())
                 .build();
 
-        byte[] pdf = assertDoesNotThrow(() -> builder.build(empty));
+        byte[] pdf = assertDoesNotThrow(() -> builder.build(empty, defaultOptions()));
         assertIsPdf(pdf);
     }
 
@@ -132,7 +142,7 @@ class ResumePdfBuilderTest {
                 .certificates(Arrays.asList((CertificateDto) null))
                 .build();
 
-        byte[] pdf = assertDoesNotThrow(() -> builder.build(withNulls));
+        byte[] pdf = assertDoesNotThrow(() -> builder.build(withNulls, defaultOptions()));
         assertIsPdf(pdf);
     }
 
@@ -146,7 +156,7 @@ class ResumePdfBuilderTest {
                 .skills(List.of(SkillDto.builder().skillName("Java").build()))
                 .build();
 
-        byte[] pdf = assertDoesNotThrow(() -> builder.build(noContact));
+        byte[] pdf = assertDoesNotThrow(() -> builder.build(noContact, defaultOptions()));
         assertIsPdf(pdf);
     }
 }

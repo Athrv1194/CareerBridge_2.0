@@ -39,4 +39,14 @@ public class Certificate {
     private LocalDate expiryDate;
 
     private String credentialUrl;
+
+    // Nullable, added to an already-populated table -- same reasoning as StudentProfile.avatarImage.
+    // Lets a student attach the actual certificate/offer-letter PDF, separate from credentialUrl
+    // (a plain link).
+    @Column(columnDefinition = "bytea")
+    private byte[] credentialFile;
+
+    private String credentialFileName;
+
+    private String credentialFileContentType;
 }
