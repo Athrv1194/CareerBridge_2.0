@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -57,6 +58,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
         log.warn("Type mismatch for '{}': {}", ex.getName(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, "Invalid value for '" + ex.getName() + "'", null);
+    }
+
+    /**
+     * An avatar or project-cover upload past the configured 5MB limit. Same trap as the two
+     * handlers above: this does not implement ErrorResponse, so without it a too-large file is a
+     * 500 instead of a client-facing 400.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Uploaded file is too large (max 5MB)", null);
     }
 
     @ExceptionHandler(Exception.class)

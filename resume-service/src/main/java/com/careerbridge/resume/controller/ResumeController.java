@@ -1,6 +1,7 @@
 package com.careerbridge.resume.controller;
 
 import com.careerbridge.resume.dto.ResumeDownload;
+import com.careerbridge.resume.dto.ResumeGenerateRequest;
 import com.careerbridge.resume.dto.ResumeResponse;
 import com.careerbridge.resume.service.ResumeService;
 import org.springframework.http.HttpHeaders;
@@ -9,8 +10,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,12 +48,27 @@ public class ResumeController {
         this.resumeService = resumeService;
     }
 
+    /**
+     * Body is optional -- required=false, not a @RequestBody(required=true) with a default-valued
+     * DTO, because Spring MVC 400s on an empty request body even for an all-nullable DTO unless the
+     * parameter is explicitly marked optional. Every existing caller sending no body at all keeps
+     * working exactly as before; see ResumeService.generateResume's null-request handling.
+     */
     @PostMapping("/generate")
     public ResponseEntity<ResumeResponse> generateResume(
             @RequestHeader(USER_ID_HEADER) Long studentId,
-            @RequestHeader(USER_ROLE_HEADER) String callerRole) {
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @RequestBody(required = false) ResumeGenerateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(resumeService.generateResume(callerRole, studentId));
+                .body(resumeService.generateResume(callerRole, studentId, request));
+    }
+
+    @PatchMapping("/{id}/default")
+    public ResponseEntity<ResumeResponse> setDefaultResume(
+            @RequestHeader(USER_ID_HEADER) Long studentId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(resumeService.setDefaultResume(callerRole, studentId, id));
     }
 
     /**

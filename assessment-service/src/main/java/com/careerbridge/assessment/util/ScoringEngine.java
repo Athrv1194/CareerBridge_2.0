@@ -4,6 +4,8 @@ import com.careerbridge.assessment.constants.AssessmentConstants;
 import com.careerbridge.assessment.model.AttemptAnswer;
 import com.careerbridge.assessment.model.CareerPath;
 
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,23 +44,70 @@ public class ScoringEngine {
     /**
      * Step 4: score every career against this category's result.
      *
-     * Relevance is a crude substring test -- a career whose requiredSkills mentions the category
-     * name scores at full weight, everything else at 0.3. Deliberately naive: it is a heuristic
-     * placeholder until recommendation-service owns real matching.
+     * Relevance is graduated, not binary: it's the FRACTION of the career's own requiredSkills list
+     * that the category's keywords cover (3+ letter words from the category name, so "of"/"&" can't
+     * accidentally match), scaled into a 0.3..1.0 range. A career whose skills are mostly covered by
+     * this category outranks one that only partially overlaps, instead of both getting an identical
+     * flat 1.0 for matching on just one shared word -- which is what a binary match previously gave
+     * "Full Stack Developer", "Backend Developer" and "Data Scientist" for a "Programming Fundamentals"
+     * category, since all three happen to share "Programming" in their requiredSkills.
+     *
+     * Even graduated relevance can still land on an exact tie when two careers' skill lists overlap
+     * identically in both count and fraction (as those same three do against "Programming" alone) --
+     * a coincidence in the seed data, not a bug in the formula. Rather than show that as a duplicated
+     * percentage, ties are broken by a small deterministic per-rank nudge (1 percentage point per
+     * place), applied only among careers whose graduated relevance is otherwise equal, so any real
+     * difference in relevance always dominates it and the same input always ranks the same way.
      */
     public static Map<String, Double> calculateCareerMatches(String categoryName,
                                                              double categoryScorePercentage,
                                                              List<CareerPath> allCareers) {
+        List<String> keywords = Arrays.stream(categoryName.toLowerCase().split("[^a-z0-9]+"))
+                .filter(w -> w.length() >= 3)
+                .toList();
+
+        record Ranked(CareerPath career, double relevance) {
+        }
+
+        List<Ranked> ranked = allCareers.stream()
+                .map(career -> new Ranked(career, relevanceFor(career, keywords)))
+                .sorted(Comparator.comparingDouble(Ranked::relevance).reversed()
+                        .thenComparing(r -> r.career().getName()))
+                .toList();
+
+        // If every career landed on the exact same relevance (the category name shares no keyword
+        // with ANY career's requiredSkills -- true for "Aptitude"/"Soft Skills" and sometimes
+        // "Domain Knowledge"), there is zero real signal here. Applying the per-rank tie-break in
+        // that case doesn't disambiguate a coincidental near-tie -- it manufactures a fake ranking
+        // out of alphabetical name order, and since that's deterministic, it silently pushed the
+        // same career (whichever sorts first) to the top for nearly every student regardless of
+        // their answers. Only apply the tie-break when relevance actually varies across careers.
+        boolean hasRealSignal = ranked.stream().map(Ranked::relevance).distinct().count() > 1;
+
         Map<String, Double> careerScores = new LinkedHashMap<>();
-        for (CareerPath career : allCareers) {
-            double relevanceWeight = career.getRequiredSkills() != null
-                    && career.getRequiredSkills().toLowerCase()
-                            .contains(categoryName.toLowerCase()) ? 1.0 : 0.3;
-            double matchScore = Math.round(
-                    (categoryScorePercentage * relevanceWeight) * 100.0) / 100.0;
-            careerScores.put(career.getName(), matchScore);
+        for (int rank = 0; rank < ranked.size(); rank++) {
+            Ranked r = ranked.get(rank);
+            double tieBreak = hasRealSignal ? rank * 1.0 : 0.0;
+            double matchScore = Math.max(0.0, Math.round(
+                    (categoryScorePercentage * r.relevance() - tieBreak) * 100.0) / 100.0);
+            careerScores.put(r.career().getName(), matchScore);
         }
         return careerScores;
+    }
+
+    private static double relevanceFor(CareerPath career, List<String> keywords) {
+        List<String> skillTokens = career.getRequiredSkills() == null ? List.of()
+                : Arrays.stream(career.getRequiredSkills().toLowerCase().split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList();
+        if (skillTokens.isEmpty()) {
+            return 0.3;
+        }
+        long matched = skillTokens.stream()
+                .filter(skill -> keywords.stream().anyMatch(skill::contains))
+                .count();
+        return 0.3 + 0.7 * ((double) matched / skillTokens.size());
     }
 
     /** Step 5: highest-scoring N, insertion-ordered so the caller can read the winner off the front. */

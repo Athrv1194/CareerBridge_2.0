@@ -22,8 +22,8 @@ public class AdminOptionRequest {
      * Graded 0..3, matching Option.weight and AssessmentConstants.MAX_OPTION_WEIGHT -- NOT a binary
      * correct/incorrect flag.
      *
-     * The scoring model is graded on purpose: maxPossibleScore is a fixed
-     * QUESTIONS_PER_ATTEMPT x MAX_OPTION_WEIGHT (15), and the seeded bank uses the full range for
+     * The scoring model is graded on purpose: maxPossibleScore is a section's targetSize x
+     * MAX_OPTION_WEIGHT (see AssessmentSection), and the seeded bank uses the full range for
      * partial credit (best answer 3, partial 2 and 1, wrong 0). An isCorrect flag would collapse
      * that to 3-or-0 for admin-created questions only, leaving two scoring models in one bank and
      * silently changing what a percentage means depending on who wrote the question.

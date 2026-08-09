@@ -80,6 +80,16 @@ public class StudentProfile {
 
     private String resumeUrl;
 
+    // Nullable, no @Builder.Default: same reason as `role` above -- a NOT NULL column with no
+    // DEFAULT fails ddl-auto's ALTER against the already-populated table. bytea, not @Lob: see
+    // resume-service's student_resumes.pdf_content, the same reasoning applies to any binary
+    // column under Hibernate's PostgreSQLDialect. Does not affect profileCompletionPercentage --
+    // ProfileCompletionCalculator has no avatar criterion.
+    @Column(columnDefinition = "bytea")
+    private byte[] avatarImage;
+
+    private String avatarContentType;
+
     @Builder.Default
     @Column(nullable = false)
     private Integer profileCompletionPercentage = 0;

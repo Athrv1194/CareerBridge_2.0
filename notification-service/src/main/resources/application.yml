@@ -76,6 +76,20 @@ management:
     mongodb:
       enabled: false
 
+# This service's only synchronous cross-service dependency, added for the invoice PDF fetch.
+# localhost by default so `mvnw spring-boot:run` works on a developer machine; docker-compose
+# overrides PAYMENT_SERVICE_URL to http://payment-service:8093, the compose-network hostname.
+# Connect and read timeouts are set in code (RestClientConfig), not here -- RestClient has no
+# Boot-level timeout properties the way spring.mail.* does.
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8093}
+
+# Backs the "Set Password & Access Portal" link in the org admin invite email. Vite's dev port by
+# default; docker-compose and any real deployment override FRONTEND_URL to the actual origin.
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+
 springdoc:
   api-docs:
     path: /api-docs

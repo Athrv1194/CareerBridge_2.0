@@ -2,17 +2,17 @@ package com.careerbridge.roadmap.service;
 
 import com.careerbridge.roadmap.dto.RoadmapResponse;
 import com.careerbridge.roadmap.dto.RoadmapTemplateResponse;
-import com.careerbridge.roadmap.event.RecommendationGeneratedEvent;
 
 import java.util.List;
 
 public interface RoadmapService {
 
     /**
-     * Materialises a roadmap from the template matching the event's topCareerName. Idempotent, and
-     * fail-soft on a missing template -- called from a RabbitMQ listener, never from a controller.
+     * Materialises a roadmap from the template matching careerName, or returns the student's
+     * existing one for that career if they already built it. Idempotent by design: a double-click on
+     * "Build my roadmap" must not create a duplicate. 404s if no active template exists for the name.
      */
-    void generateRoadmap(RecommendationGeneratedEvent event);
+    RoadmapResponse buildRoadmap(Long studentId, String careerName);
 
     RoadmapResponse getMyRoadmap(Long studentId);
 

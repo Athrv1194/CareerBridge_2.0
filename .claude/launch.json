@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "careerbridge-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "careerbridge-frontend", "run", "dev"],
+      "port": 5173,
+      "autoPort": true
+    }
+  ]
+}

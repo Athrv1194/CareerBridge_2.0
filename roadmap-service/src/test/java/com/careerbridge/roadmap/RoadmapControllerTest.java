@@ -14,10 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import org.springframework.http.MediaType;
+
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,6 +42,32 @@ class RoadmapControllerTest {
         return MockMvcBuilders.standaloneSetup(new RoadmapController(roadmapService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    @DisplayName("POST /api/roadmap builds a roadmap for the requested career and returns 200")
+    void buildRoadmap_ValidCareer_Returns200() throws Exception {
+        when(roadmapService.buildRoadmap(1L, "Backend Developer")).thenReturn(RoadmapResponse.builder()
+                .id(10L).studentId(1L).careerName("Backend Developer")
+                .status("IN_PROGRESS").totalMilestones(2).completedMilestones(0)
+                .completionPercentage(0.0).milestones(java.util.List.of()).build());
+
+        mockMvc().perform(post("/api/roadmap")
+                        .header(USER_ID_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"careerName\":\"Backend Developer\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.careerName").value("Backend Developer"));
+    }
+
+    @Test
+    @DisplayName("POST /api/roadmap with no careerName is a 400")
+    void buildRoadmap_BlankCareerName_Returns400() throws Exception {
+        mockMvc().perform(post("/api/roadmap")
+                        .header(USER_ID_HEADER, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"careerName\":\"\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

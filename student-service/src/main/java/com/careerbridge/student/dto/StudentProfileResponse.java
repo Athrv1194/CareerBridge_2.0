@@ -43,6 +43,9 @@ public class StudentProfileResponse {
 
     private String resumeUrl;
 
+    /** Whether an avatar photo is stored -- never the bytes themselves; fetched separately. */
+    private Boolean hasAvatar;
+
     private Integer profileCompletionPercentage;
 
     private Boolean isPublic;
@@ -58,4 +61,6 @@ public class StudentProfileResponse {
     private List<ProjectDto> projects;
 
     private List<CertificateDto> certificates;
+
+    private List<ExperienceDto> experiences;
 }

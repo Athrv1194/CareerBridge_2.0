@@ -1,12 +1,16 @@
 package com.careerbridge.roadmap.controller;
 
+import com.careerbridge.roadmap.dto.BuildRoadmapRequest;
 import com.careerbridge.roadmap.dto.RoadmapResponse;
 import com.careerbridge.roadmap.dto.RoadmapTemplateResponse;
 import com.careerbridge.roadmap.service.RoadmapService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,9 +30,11 @@ import java.util.List;
  * predicates match whole segments, so a plural mapping would 404 every request arriving through the
  * gateway.
  *
- * There is no endpoint that creates a roadmap. The only way one comes into existence is the
- * recommendation.generated consumer -- a student cannot ask for a roadmap for a career their
- * assessment did not recommend.
+ * A roadmap is now built explicitly via POST, one per (student, career) -- not auto-created by
+ * consuming recommendation.generated. This endpoint does not check the requested career against the
+ * caller's own recommendation; the only caller is the frontend button next to a career already shown
+ * on that student's own recommendation page, so the risk of requesting an unrecommended career is
+ * negligible and not worth a synchronous call to recommendation-service to guard against.
  */
 @RestController
 @RequestMapping("/api/roadmap")
@@ -41,6 +47,17 @@ public class RoadmapController {
 
     public RoadmapController(RoadmapService roadmapService) {
         this.roadmapService = roadmapService;
+    }
+
+    /**
+     * Idempotent: returns the existing roadmap if the student already built one for this career,
+     * rather than 409ing. 200, not 201, for exactly that reason -- "created" is not always true.
+     */
+    @PostMapping
+    public ResponseEntity<RoadmapResponse> buildRoadmap(
+            @RequestHeader(USER_ID_HEADER) Long studentId,
+            @Valid @RequestBody BuildRoadmapRequest request) {
+        return ResponseEntity.ok(roadmapService.buildRoadmap(studentId, request.getCareerName()));
     }
 
     /** The caller's own active roadmap. studentId comes from the header, never from a parameter. */

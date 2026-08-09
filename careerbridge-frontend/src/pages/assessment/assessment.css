@@ -1,0 +1,41 @@
+.cb-eyebrow {
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+a.cb-ghost {
+  border-bottom: 0;
+}
+
+a.cb-ghost:hover {
+  color: var(--ink-900);
+}
+
+.cb-rule {
+  border: 0;
+  height: 1px;
+}
+
+@keyframes cbOrbitSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes cbOrbitCounter { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+@keyframes cbPulse { 0%, 100% { opacity: .7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.16); } }
+@keyframes cbRiseUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cbBlink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+@keyframes cbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cbSkeletonShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+.cb-orbit-spin { animation: cbOrbitSpin 30s linear infinite; }
+.cb-orbit-counter { animation: cbOrbitCounter 30s linear infinite; }
+.cb-orbit-pulse { animation: cbPulse 2.6s ease-in-out infinite; }
+.cb-rise { opacity: 0; animation: cbRiseUp 520ms cubic-bezier(.2, 0, .2, 1) both; }
+.cb-blink { animation: cbBlink 900ms step-end infinite; }
+.cb-fade { animation: cbFadeIn 420ms cubic-bezier(.2, 0, .2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-orbit-spin, .cb-orbit-counter, .cb-orbit-pulse, .cb-rise, .cb-blink, .cb-fade {
+    animation: none;
+    opacity: 1;
+  }
+}

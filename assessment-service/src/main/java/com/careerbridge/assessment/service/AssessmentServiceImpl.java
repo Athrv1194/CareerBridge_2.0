@@ -1,6 +1,7 @@
 package com.careerbridge.assessment.service;
 
 import com.careerbridge.assessment.constants.AssessmentConstants;
+import com.careerbridge.assessment.constants.AssessmentSection;
 import com.careerbridge.assessment.dto.AnswerDto;
 import com.careerbridge.assessment.dto.AssessmentRequest;
 import com.careerbridge.assessment.dto.AssessmentResponse;
@@ -40,6 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -119,14 +121,21 @@ public class AssessmentServiceImpl implements AssessmentService {
     @Override
     @Transactional
     public AssessmentResponse startAttempt(Long userId, AssessmentRequest request) {
-        Category category = categoryRepository.findById(request.getCategoryId())
+        AssessmentSection section = parseSection(request.getSection());
+
+        // Random pick from the section's pool, every call -- a retake can land on a different
+        // underlying category. The client is never told which pool member won; it only ever sees
+        // the section's own display name below.
+        List<String> pool = AssessmentConstants.SECTION_CATEGORY_POOL.get(section);
+        String categoryName = pool.get(new Random().nextInt(pool.size()));
+        Category category = categoryRepository.findByName(categoryName)
                 .orElseThrow(() -> new CustomException("Category not found", HttpStatus.NOT_FOUND));
 
         // Fail before the student answers anything: a thin category cannot produce a meaningful
         // percentage, and an empty one would divide into a 0% score that looks like a real result.
         // Counts ACTIVE questions only, matching selectQuestionsForAttempt's pool exactly. If this
         // counted retired questions the guard could pass on 6 while the pool served 3, and the fixed
-        // maxPossibleScore of 15 would cap the student at 60% with nothing logged.
+        // maxPossibleScore would cap the student's score with nothing logged.
         int questionCount = safeCount(
                 questionRepository.countByCategoryIdAndIsActiveTrue(category.getId()));
         if (questionCount < AssessmentConstants.MIN_QUESTIONS_PER_CATEGORY) {
@@ -135,30 +144,41 @@ public class AssessmentServiceImpl implements AssessmentService {
                     HttpStatus.BAD_REQUEST);
         }
 
-        attemptRepository.findByUserIdAndCategoryIdAndStatus(
-                        userId, category.getId(), AttemptStatus.IN_PROGRESS)
+        attemptRepository.findByUserIdAndSectionAndStatus(
+                        userId, section.name(), AttemptStatus.IN_PROGRESS)
                 .ifPresent(existing -> {
                     throw new CustomException(
-                            "An assessment for this category is already in progress",
+                            "An assessment for this section is already in progress",
                             HttpStatus.CONFLICT);
                 });
 
         AssessmentAttempt attempt = attemptRepository.save(AssessmentAttempt.builder()
                 .userId(userId)
                 .categoryId(category.getId())
+                .section(section.name())
                 .status(AttemptStatus.IN_PROGRESS)
                 .build());
 
         // Reshuffled per attempt: two students -- or one student retrying -- do not get the same
-        // questions in the same order.
+        // questions in the same order. All active questions in the picked category are served, not
+        // a random subset -- category size IS the section's target size now, see data.sql.
         return AssessmentResponse.builder()
                 .attemptId(attempt.getId())
                 .categoryId(category.getId())
-                .categoryName(category.getName())
+                .categoryName(section.getDisplayName())
                 .status(attempt.getStatus())
                 .startedAt(attempt.getStartedAt())
-                .questions(toQuestionDtos(selectQuestionsForAttempt(category.getId())))
+                .questions(toQuestionDtos(
+                        selectQuestionsForAttempt(category.getId(), section.getTargetSize())))
                 .build();
+    }
+
+    private AssessmentSection parseSection(String raw) {
+        try {
+            return AssessmentSection.valueOf(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new CustomException("Unknown assessment section: " + raw, HttpStatus.BAD_REQUEST);
+        }
     }
 
     @Override
@@ -178,6 +198,15 @@ public class AssessmentServiceImpl implements AssessmentService {
         Category category = categoryRepository.findById(attempt.getCategoryId())
                 .orElseThrow(() -> new CustomException("Category not found", HttpStatus.NOT_FOUND));
 
+        // The section drives both the display name (never the real, possibly-rotated category name)
+        // and the target size used below. Pre-migration attempts have no section on record; falling
+        // back to the category's own name/minimum keeps them scorable rather than throwing.
+        AssessmentSection section = attempt.getSection() == null ? null
+                : AssessmentSection.valueOf(attempt.getSection());
+        String categoryName = section != null ? section.getDisplayName() : category.getName();
+        int targetSize = section != null ? section.getTargetSize()
+                : AssessmentConstants.MIN_QUESTIONS_PER_CATEGORY;
+
         // Two queries for the whole category, then every per-answer check runs in memory.
         // Looking each question and option up individually would be 2 queries per answer.
         List<Question> questions =
@@ -187,20 +216,25 @@ public class AssessmentServiceImpl implements AssessmentService {
         Set<Long> validQuestionIds = questions.stream().map(Question::getId).collect(Collectors.toSet());
 
         List<AttemptAnswer> answers = validateAndScore(request.getAnswers(), validQuestionIds, optionsById,
-                attempt.getId());
+                attempt.getId(), targetSize);
         attemptAnswerRepository.saveAll(answers);
 
         int rawScore = ScoringEngine.calculateRawScore(answers);
         // Denominator is the fixed size of the subset the student was shown -- NOT the whole
-        // category (which is larger since questions are drawn at random, so answering everything
-        // shown would still score well under 100%) and NOT the answer count (which the client
-        // controls, so one perfect answer would be 100%). A partial submission still scores lower,
-        // because unanswered questions earn nothing against a fixed denominator.
-        int maxPossibleScore =
-                ScoringEngine.calculateMaxPossibleScore(AssessmentConstants.QUESTIONS_PER_ATTEMPT);
+        // category (which can be larger, e.g. Programming Fundamentals backing Domain Knowledge, so
+        // answering everything shown would still score well under 100%) and NOT the answer count
+        // (which the client controls, so one perfect answer would be 100%). A partial submission
+        // still scores lower, because unanswered questions earn nothing against a fixed denominator.
+        int maxPossibleScore = ScoringEngine.calculateMaxPossibleScore(targetSize);
         double percentage = ScoringEngine.calculateCategoryScorePercentage(rawScore, maxPossibleScore);
 
         List<CareerPath> allCareers = careerPathRepository.findAll();
+        // Relevance is matched against the REAL picked category (e.g. "Programming Fundamentals"),
+        // not the section's stable display name ("Domain Knowledge") -- career requiredSkills lists
+        // real skill words ("Programming", "Database"), which no section label will ever contain, so
+        // matching on the display name always tied every career at 0.3. This means a retake that
+        // lands on a different Domain Knowledge pool member can legitimately rank careers
+        // differently -- that's real signal from different content, not instability to hide.
         // Kept as its own variable, not inlined into getTopCareers: the full map goes out on the
         // event so recommendation-service can rank every career, while only the top N is persisted
         // and returned over HTTP.
@@ -222,17 +256,40 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .categoryScorePercentage(percentage)
                 .topCareerPathId(topCareerPathId)
                 .careerMatchPercentage(winner == null ? null : winner.getValue())
-                .allCareerScoresJson(toJson(topCareers))
+                // FULL map, not just the top N -- needed so publishIfFinalSection can average every
+                // career's score across all 3 sections once Soft Skills finishes. GET /result still
+                // returns only the top N; it slices this down at read time instead.
+                .allCareerScoresJson(toJson(allCareerScores))
                 .build());
 
         attempt.setStatus(AttemptStatus.COMPLETED);
         attempt.setCompletedAt(LocalDateTime.now());
         attemptRepository.save(attempt);
 
-        publishCompleted(result, category.getName(), winner == null ? null : winner.getKey(),
-                allCareerScores);
+        // Only the final section publishes AND returns the aggregate -- everything else about this
+        // section's own persisted AssessmentResult (rawScore, maxPossibleScore, its own topCareers)
+        // stays exactly as computed above; the aggregate is a presentation-layer combination on top,
+        // not a replacement for the per-section record.
+        if (section == AssessmentSection.SOFT_SKILLS) {
+            AggregateOutcome aggregate = computeAggregate(attempt, result);
+            publishCompleted(result, "Overall", aggregate.categoryScorePercentage(),
+                    aggregate.topCareerPath(), aggregate.careerMatchPercentage(), aggregate.allCareerScores());
+            return AssessmentResultDto.builder()
+                    .attemptId(result.getAttemptId())
+                    .userId(result.getUserId())
+                    .categoryName("Overall")
+                    .rawScore(aggregate.rawScore())
+                    .maxPossibleScore(aggregate.maxPossibleScore())
+                    .categoryScorePercentage(aggregate.categoryScorePercentage())
+                    .topCareerPath(aggregate.topCareerPath())
+                    .careerMatchPercentage(aggregate.careerMatchPercentage())
+                    .allCareerScores(ScoringEngine.getTopCareers(
+                            aggregate.allCareerScores(), AssessmentConstants.TOP_CAREERS_TO_RECOMMEND))
+                    .calculatedAt(result.getCalculatedAt())
+                    .build();
+        }
 
-        return toDto(result, category.getName(), winner == null ? null : winner.getKey(), topCareers);
+        return toDto(result, categoryName, winner == null ? null : winner.getKey(), topCareers);
     }
 
     @Override
@@ -245,11 +302,16 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .orElseThrow(() -> new CustomException(
                         "This attempt has not been submitted yet", HttpStatus.NOT_FOUND));
 
-        String categoryName = categoryRepository.findById(result.getCategoryId())
-                .map(Category::getName)
-                .orElse(null);
+        String categoryName = attempt.getSection() != null
+                ? AssessmentSection.valueOf(attempt.getSection()).getDisplayName()
+                : categoryRepository.findById(result.getCategoryId())
+                        .map(Category::getName)
+                        .orElse(null);
 
-        Map<String, Double> scores = fromJson(result.getAllCareerScoresJson());
+        // allCareerScoresJson now stores the full per-career map (see submitAttempt); this endpoint's
+        // contract has always been top-N only, so slice it down here rather than changing the response.
+        Map<String, Double> scores = ScoringEngine.getTopCareers(
+                fromJson(result.getAllCareerScoresJson()), AssessmentConstants.TOP_CAREERS_TO_RECOMMEND);
         String topCareerPath = result.getTopCareerPathId() == null ? null
                 : careerPathRepository.findById(result.getTopCareerPathId())
                         .map(CareerPath::getName)
@@ -266,14 +328,14 @@ public class AssessmentServiceImpl implements AssessmentService {
     private List<AttemptAnswer> validateAndScore(List<AnswerDto> submitted,
                                                  Set<Long> validQuestionIds,
                                                  Map<Long, Option> optionsById,
-                                                 Long attemptId) {
-        // Caps the numerator against a fixed denominator. The attempt showed exactly
-        // QUESTIONS_PER_ATTEMPT questions, but every question in the category passes the
-        // membership check below -- without this a client could submit all of them and score
-        // far above 100%.
-        if (submitted.size() > AssessmentConstants.QUESTIONS_PER_ATTEMPT) {
+                                                 Long attemptId,
+                                                 int targetSize) {
+        // Caps the numerator against a fixed denominator. The attempt showed exactly targetSize
+        // questions, but every question in the category passes the membership check below --
+        // without this a client could submit all of them and score far above 100%.
+        if (submitted.size() > targetSize) {
             throw new CustomException(
-                    "An attempt accepts at most " + AssessmentConstants.QUESTIONS_PER_ATTEMPT + " answers",
+                    "An attempt accepts at most " + targetSize + " answers",
                     HttpStatus.BAD_REQUEST);
         }
 
@@ -318,13 +380,16 @@ public class AssessmentServiceImpl implements AssessmentService {
         return answers;
     }
 
-    /** Draws QUESTIONS_PER_ATTEMPT questions at random from the category. */
-    private List<Question> selectQuestionsForAttempt(Long categoryId) {
+    /**
+     * Draws targetSize questions at random from the category. For a section's dedicated category
+     * (sized to match exactly) this serves the whole pool; for a shared pool member with more
+     * questions than the target (e.g. Programming Fundamentals backing Domain Knowledge) it also
+     * trims to a random subset, which is extra retake variety on top of the pool-level rotation.
+     */
+    private List<Question> selectQuestionsForAttempt(Long categoryId, int targetSize) {
         List<Question> pool = shuffled(
                 questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(categoryId));
-        return pool.size() <= AssessmentConstants.QUESTIONS_PER_ATTEMPT
-                ? pool
-                : new ArrayList<>(pool.subList(0, AssessmentConstants.QUESTIONS_PER_ATTEMPT));
+        return pool.size() <= targetSize ? pool : new ArrayList<>(pool.subList(0, targetSize));
     }
 
     /**
@@ -385,6 +450,62 @@ public class AssessmentServiceImpl implements AssessmentService {
                 .orElse(null);
     }
 
+    /** categoryScorePercentage/allCareerScores here are already the true 3-section blend, not one section's. */
+    private record AggregateOutcome(int rawScore, int maxPossibleScore, double categoryScorePercentage,
+                                    String topCareerPath, Double careerMatchPercentage,
+                                    Map<String, Double> allCareerScores) {
+    }
+
+    /**
+     * Only called for the final section (Soft Skills) -- gathers the user's latest completed Aptitude
+     * and Domain Knowledge results alongside this one and blends all 3 into a single outcome, used for
+     * BOTH the published event and the HTTP response, so the website and the recommendation email are
+     * never computed from two different numbers again.
+     *
+     * The percentage is rawScore/maxPossibleScore summed across all 3 sections (properly weighted by
+     * each section's real size -- 5/10/5), NOT a flat average of 3 percentages: a flat average would
+     * treat the 10-question Domain Knowledge section as equally important as either 5-question one,
+     * silently under-weighting it relative to what the student actually answered.
+     */
+    private AggregateOutcome computeAggregate(AssessmentAttempt attempt, AssessmentResult softSkillsResult) {
+        List<AssessmentResult> sectionResults = new ArrayList<>();
+        sectionResults.add(softSkillsResult);
+        for (AssessmentSection prior : List.of(AssessmentSection.APTITUDE, AssessmentSection.DOMAIN_KNOWLEDGE)) {
+            attemptRepository.findTopByUserIdAndSectionAndStatusOrderByCompletedAtDesc(
+                            attempt.getUserId(), prior.name(), AttemptStatus.COMPLETED)
+                    .flatMap(a -> resultRepository.findByAttemptId(a.getId()))
+                    .ifPresent(sectionResults::add);
+        }
+
+        int totalRaw = sectionResults.stream().mapToInt(AssessmentResult::getRawScore).sum();
+        int totalMax = sectionResults.stream().mapToInt(AssessmentResult::getMaxPossibleScore).sum();
+        double pct = ScoringEngine.calculateCategoryScorePercentage(totalRaw, totalMax);
+
+        // Average each career's score across however many of the 3 sections were found -- every
+        // section scores the same 7 careers (careerPathRepository.findAll() is shared), so the key
+        // sets agree and this is a plain per-career mean, not a merge of disjoint data.
+        Map<String, Double> sums = new HashMap<>();
+        Map<String, Integer> counts = new HashMap<>();
+        for (AssessmentResult r : sectionResults) {
+            fromJson(r.getAllCareerScoresJson()).forEach((career, score) -> {
+                sums.merge(career, score, Double::sum);
+                counts.merge(career, 1, Integer::sum);
+            });
+        }
+        Map<String, Double> combined = new HashMap<>();
+        sums.forEach((career, sum) -> combined.put(career,
+                Math.round((sum / counts.get(career)) * 100.0) / 100.0));
+
+        Map<String, Double> topCombined = ScoringEngine.getTopCareers(
+                combined, AssessmentConstants.TOP_CAREERS_TO_RECOMMEND);
+        Map.Entry<String, Double> winner = topCombined.entrySet().stream().findFirst().orElse(null);
+
+        return new AggregateOutcome(totalRaw, totalMax, pct,
+                winner == null ? null : winner.getKey(),
+                winner == null ? null : winner.getValue(),
+                combined);
+    }
+
     /**
      * Fail-soft: a broker outage must not cost the student their submitted assessment.
      *
@@ -392,27 +513,28 @@ public class AssessmentServiceImpl implements AssessmentService {
      * point would leave a phantom event. Kept last in submitAttempt to shrink that window; move to
      * @TransactionalEventListener(AFTER_COMMIT) if exactly-once delivery starts mattering.
      */
-    private void publishCompleted(AssessmentResult result, String categoryName, String topCareerPath,
-                                  Map<String, Double> allCareerScores) {
+    private void publishCompleted(AssessmentResult identity, String categoryName,
+                                  Double categoryScorePercentage, String topCareerPath,
+                                  Double careerMatchPercentage, Map<String, Double> allCareerScores) {
         try {
             rabbitTemplate.convertAndSend(
                     AssessmentConstants.EXCHANGE_NAME,
                     AssessmentConstants.ROUTING_KEY_ASSESSMENT_COMPLETED,
                     AssessmentCompletedEvent.builder()
-                            .userId(result.getUserId())
-                            .attemptId(result.getAttemptId())
-                            .categoryId(result.getCategoryId())
+                            .userId(identity.getUserId())
+                            .attemptId(identity.getAttemptId())
+                            .categoryId(identity.getCategoryId())
                             .categoryName(categoryName)
-                            .categoryScorePercentage(result.getCategoryScorePercentage())
+                            .categoryScorePercentage(categoryScorePercentage)
                             .topCareerPath(topCareerPath)
-                            .careerMatchPercentage(result.getCareerMatchPercentage())
+                            .careerMatchPercentage(careerMatchPercentage)
                             .completedAt(LocalDateTime.now())
                             .allCareerScores(allCareerScores)
                             .build());
         } catch (Exception ex) {
             log.error("Failed to publish {} for attemptId={}: {}",
                     AssessmentConstants.ROUTING_KEY_ASSESSMENT_COMPLETED,
-                    result.getAttemptId(), ex.getMessage());
+                    identity.getAttemptId(), ex.getMessage());
         }
     }
 

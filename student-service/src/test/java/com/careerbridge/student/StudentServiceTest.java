@@ -2,6 +2,8 @@ package com.careerbridge.student;
 
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ExperienceDto;
+import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.SkillDto;
 import com.careerbridge.student.dto.StudentProfileRequest;
@@ -9,12 +11,14 @@ import com.careerbridge.student.dto.StudentProfileResponse;
 import com.careerbridge.student.exception.CustomException;
 import com.careerbridge.student.model.Certificate;
 import com.careerbridge.student.model.Education;
+import com.careerbridge.student.model.Experience;
 import com.careerbridge.student.model.ProficiencyLevel;
 import com.careerbridge.student.model.Project;
 import com.careerbridge.student.model.Skill;
 import com.careerbridge.student.model.StudentProfile;
 import com.careerbridge.student.repository.CertificateRepository;
 import com.careerbridge.student.repository.EducationRepository;
+import com.careerbridge.student.repository.ExperienceRepository;
 import com.careerbridge.student.repository.ProjectRepository;
 import com.careerbridge.student.repository.SkillRepository;
 import com.careerbridge.student.repository.StudentProfileRepository;
@@ -34,6 +38,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -54,6 +59,7 @@ class StudentServiceTest {
     @Mock private SkillRepository skillRepository;
     @Mock private ProjectRepository projectRepository;
     @Mock private CertificateRepository certificateRepository;
+    @Mock private ExperienceRepository experienceRepository;
 
     @InjectMocks private StudentServiceImpl studentService;
 
@@ -91,6 +97,8 @@ class StudentServiceTest {
                 Project.builder().id(7L).title("CareerBridge").build()));
         when(certificateRepository.findByStudentProfileId(PROFILE_ID)).thenReturn(List.of(
                 Certificate.builder().id(8L).name("AWS SAA").build()));
+        when(experienceRepository.findByStudentProfileIdOrderByStartDateDesc(PROFILE_ID)).thenReturn(List.of(
+                Experience.builder().id(9L).title("Intern").company("Finzo").build()));
 
         StudentProfileResponse response = studentService.getProfile(USER_ID);
 
@@ -100,6 +108,7 @@ class StudentServiceTest {
         assertEquals("Java", response.getSkills().get(0).getSkillName());
         assertEquals("CareerBridge", response.getProjects().get(0).getTitle());
         assertEquals("AWS SAA", response.getCertificates().get(0).getName());
+        assertEquals("Intern", response.getExperiences().get(0).getTitle());
     }
 
     @Test
@@ -126,6 +135,7 @@ class StudentServiceTest {
         when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
         stubEmptyChildren();
         when(certificateRepository.findByStudentProfileId(PROFILE_ID)).thenReturn(List.of());
+        when(experienceRepository.findByStudentProfileIdOrderByStartDateDesc(PROFILE_ID)).thenReturn(List.of());
 
         studentService.updateProfile(USER_ID, request);
 
@@ -394,5 +404,412 @@ class StudentServiceTest {
         studentService.updateResumeUrl(USER_ID, "/api/resume/download/500");
 
         verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Education: update / delete
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("updateEducation: an owned entry is updated and completion is recalculated")
+    void updateEducation_Owned_UpdatesAndRecalculates() {
+        Education existing = Education.builder().id(3L).studentProfileId(PROFILE_ID).institution("MIT").build();
+        EducationDto dto = EducationDto.builder().institution("Stanford").degree("MSc").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(educationRepository.findByIdAndStudentProfileId(3L, PROFILE_ID)).thenReturn(Optional.of(existing));
+        when(educationRepository.save(any(Education.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubEmptyChildren();
+        when(educationRepository.findByStudentProfileId(PROFILE_ID)).thenReturn(List.of(existing));
+
+        EducationDto result = studentService.updateEducation(USER_ID, 3L, dto);
+
+        assertEquals("Stanford", result.getInstitution());
+        verify(studentProfileRepository).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("updateEducation: an entry belonging to another profile is a 404, not a leak")
+    void updateEducation_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(educationRepository.findByIdAndStudentProfileId(3L, PROFILE_ID)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.updateEducation(USER_ID, 3L, EducationDto.builder().institution("X").build()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(educationRepository, never()).save(any(Education.class));
+    }
+
+    @Test
+    @DisplayName("deleteEducation: deletes the owned row and recalculates completion")
+    void deleteEducation_Owned_DeletesAndRecalculates() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(educationRepository.deleteByIdAndStudentProfileId(3L, PROFILE_ID)).thenReturn(1L);
+        stubEmptyChildren();
+
+        studentService.deleteEducation(USER_ID, 3L);
+
+        verify(studentProfileRepository).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("deleteEducation: zero rows deleted (wrong id or wrong owner) is a 404")
+    void deleteEducation_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(educationRepository.deleteByIdAndStudentProfileId(3L, PROFILE_ID)).thenReturn(0L);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.deleteEducation(USER_ID, 3L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Skill: delete
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("deleteSkill: deletes the owned row and recalculates completion (count-based weight)")
+    void deleteSkill_Owned_DeletesAndRecalculates() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(skillRepository.deleteByIdAndStudentProfileId(6L, PROFILE_ID)).thenReturn(1L);
+        stubEmptyChildren();
+
+        studentService.deleteSkill(USER_ID, 6L);
+
+        verify(studentProfileRepository).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("deleteSkill: zero rows deleted (wrong id or wrong owner) is a 404")
+    void deleteSkill_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(skillRepository.deleteByIdAndStudentProfileId(6L, PROFILE_ID)).thenReturn(0L);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.deleteSkill(USER_ID, 6L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Project: update / delete / cover image
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("updateProject: an owned project is updated and completion is recalculated")
+    void updateProject_Owned_UpdatesAndRecalculates() {
+        Project existing = Project.builder().id(9L).studentProfileId(PROFILE_ID).title("Old").build();
+        ProjectDto dto = ProjectDto.builder().title("New").isOngoing(true).build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.of(existing));
+        when(projectRepository.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+        stubEmptyChildren();
+        when(projectRepository.findByStudentProfileId(PROFILE_ID)).thenReturn(List.of(existing));
+
+        ProjectDto result = studentService.updateProject(USER_ID, 9L, dto);
+
+        assertEquals("New", result.getTitle());
+        verify(studentProfileRepository).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("updateProject: a project belonging to another profile is a 404")
+    void updateProject_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.updateProject(USER_ID, 9L, ProjectDto.builder().title("X").build()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("deleteProject: zero rows deleted (wrong id or wrong owner) is a 404")
+    void deleteProject_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.deleteByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(0L);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.deleteProject(USER_ID, 9L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("uploadProjectCover: stores the bytes and content type on the owned project")
+    void uploadProjectCover_Owned_Stores() {
+        Project existing = Project.builder().id(9L).studentProfileId(PROFILE_ID).title("CB").build();
+        byte[] bytes = {1, 2, 3};
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        studentService.uploadProjectCover(USER_ID, 9L, bytes, "image/png");
+
+        ArgumentCaptor<Project> saved = ArgumentCaptor.forClass(Project.class);
+        verify(projectRepository).save(saved.capture());
+        assertEquals("image/png", saved.getValue().getCoverImageContentType());
+    }
+
+    @Test
+    @DisplayName("getProjectCover: a project with no cover image is a 404, not an empty blob")
+    void getProjectCover_NoCoverImage_Throws404() {
+        Project existing = Project.builder().id(9L).studentProfileId(PROFILE_ID).title("CB").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.getProjectCover(USER_ID, 9L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("getProjectCover: returns the stored bytes and content type")
+    void getProjectCover_HasCoverImage_ReturnsBlob() {
+        Project existing = Project.builder().id(9L).studentProfileId(PROFILE_ID)
+                .coverImage(new byte[]{9, 9}).coverImageContentType("image/jpeg").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(projectRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        ImageBlob blob = studentService.getProjectCover(USER_ID, 9L);
+
+        assertEquals("image/jpeg", blob.getContentType());
+        assertEquals(2, blob.getBytes().length);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Certificate: update / delete (no recalculation, same as addCertificate)
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("updateCertificate: updates the owned row without recalculating completion")
+    void updateCertificate_Owned_UpdatesWithoutRecalculating() {
+        Certificate existing = Certificate.builder().id(11L).studentProfileId(PROFILE_ID).name("Old").build();
+        CertificateDto dto = CertificateDto.builder().name("AWS SAA").issuingOrganization("Amazon").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.findByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(Optional.of(existing));
+        when(certificateRepository.save(any(Certificate.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CertificateDto result = studentService.updateCertificate(USER_ID, 11L, dto);
+
+        assertEquals("AWS SAA", result.getName());
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("deleteCertificate: zero rows deleted (wrong id or wrong owner) is a 404")
+    void deleteCertificate_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.deleteByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(0L);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.deleteCertificate(USER_ID, 11L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("deleteCertificate: deletes the owned row without touching profile completion")
+    void deleteCertificate_Owned_DeletesWithoutRecalculating() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.deleteByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(1L);
+
+        studentService.deleteCertificate(USER_ID, 11L);
+
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Avatar
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("uploadAvatar: stores the bytes and content type; does not affect completion")
+    void uploadAvatar_Success_StoresWithoutRecalculating() {
+        byte[] bytes = {5, 6, 7};
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+
+        studentService.uploadAvatar(USER_ID, bytes, "image/png");
+
+        ArgumentCaptor<StudentProfile> saved = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentProfileRepository).save(saved.capture());
+        assertEquals("image/png", saved.getValue().getAvatarContentType());
+        // Not a recalculate() call: no skill/education/project lookups happen for an avatar.
+        verify(skillRepository, never()).findByStudentProfileId(anyLong());
+    }
+
+    @Test
+    @DisplayName("getAvatar: no avatar uploaded is a 404, not an empty blob")
+    void getAvatar_NoAvatar_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.getAvatar(USER_ID));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("getAvatar: returns the stored bytes and content type")
+    void getAvatar_HasAvatar_ReturnsBlob() {
+        profile.setAvatarImage(new byte[]{1, 2, 3, 4});
+        profile.setAvatarContentType("image/webp");
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+
+        ImageBlob blob = studentService.getAvatar(USER_ID);
+
+        assertEquals("image/webp", blob.getContentType());
+        assertEquals(4, blob.getBytes().length);
+    }
+
+    @Test
+    @DisplayName("deleteAvatar: clears the stored bytes and content type")
+    void deleteAvatar_Success_Clears() {
+        profile.setAvatarImage(new byte[]{1});
+        profile.setAvatarContentType("image/png");
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+
+        studentService.deleteAvatar(USER_ID);
+
+        ArgumentCaptor<StudentProfile> saved = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentProfileRepository).save(saved.capture());
+        assertNull(saved.getValue().getAvatarImage());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Certificate credential file
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("uploadCertificateFile: stores bytes, content type and original filename on the owned certificate")
+    void uploadCertificateFile_Owned_Stores() {
+        Certificate existing = Certificate.builder().id(11L).studentProfileId(PROFILE_ID).name("AWS SAA").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.findByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        studentService.uploadCertificateFile(USER_ID, 11L, new byte[]{1, 2}, "application/pdf", "aws-saa.pdf");
+
+        ArgumentCaptor<Certificate> saved = ArgumentCaptor.forClass(Certificate.class);
+        verify(certificateRepository).save(saved.capture());
+        assertEquals("application/pdf", saved.getValue().getCredentialFileContentType());
+        assertEquals("aws-saa.pdf", saved.getValue().getCredentialFileName());
+    }
+
+    @Test
+    @DisplayName("getCertificateFile: no file attached is a 404, not an empty blob")
+    void getCertificateFile_NoFile_Throws404() {
+        Certificate existing = Certificate.builder().id(11L).studentProfileId(PROFILE_ID).name("AWS SAA").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.findByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.getCertificateFile(USER_ID, 11L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("getCertificateFile: returns the stored bytes, content type and filename")
+    void getCertificateFile_HasFile_ReturnsBlob() {
+        Certificate existing = Certificate.builder().id(11L).studentProfileId(PROFILE_ID)
+                .credentialFile(new byte[]{1, 2, 3}).credentialFileContentType("application/pdf")
+                .credentialFileName("offer.pdf").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.findByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        ImageBlob blob = studentService.getCertificateFile(USER_ID, 11L);
+
+        assertEquals("application/pdf", blob.getContentType());
+        assertEquals("offer.pdf", blob.getFileName());
+        assertEquals(3, blob.getBytes().length);
+    }
+
+    @Test
+    @DisplayName("deleteCertificateFile: clears bytes, content type and filename")
+    void deleteCertificateFile_Owned_Clears() {
+        Certificate existing = Certificate.builder().id(11L).studentProfileId(PROFILE_ID)
+                .credentialFile(new byte[]{1}).credentialFileContentType("application/pdf")
+                .credentialFileName("offer.pdf").build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(certificateRepository.findByIdAndStudentProfileId(11L, PROFILE_ID)).thenReturn(Optional.of(existing));
+
+        studentService.deleteCertificateFile(USER_ID, 11L);
+
+        ArgumentCaptor<Certificate> saved = ArgumentCaptor.forClass(Certificate.class);
+        verify(certificateRepository).save(saved.capture());
+        assertNull(saved.getValue().getCredentialFile());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Experience: add / update / delete (no recalculation -- carries no completion weight)
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("addExperience: persists the entry without recalculating completion")
+    void addExperience_Success_DoesNotRecalculate() {
+        ExperienceDto dto = ExperienceDto.builder().title("SWE Intern").company("Finzo").isCurrent(true).build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(experienceRepository.save(any(Experience.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ExperienceDto result = studentService.addExperience(USER_ID, dto);
+
+        assertEquals("SWE Intern", result.getTitle());
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    @Test
+    @DisplayName("addExperience: isCurrent=true clears any supplied end date")
+    void addExperience_IsCurrent_ClearsEndDate() {
+        ExperienceDto dto = ExperienceDto.builder().title("SWE Intern").isCurrent(true)
+                .endDate(java.time.LocalDate.of(2026, 1, 1)).build();
+
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(experienceRepository.save(any(Experience.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        studentService.addExperience(USER_ID, dto);
+
+        ArgumentCaptor<Experience> saved = ArgumentCaptor.forClass(Experience.class);
+        verify(experienceRepository).save(saved.capture());
+        assertNull(saved.getValue().getEndDate());
+    }
+
+    @Test
+    @DisplayName("updateExperience: an entry belonging to another profile is a 404, not a leak")
+    void updateExperience_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(experienceRepository.findByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.updateExperience(USER_ID, 9L, ExperienceDto.builder().title("X").build()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(experienceRepository, never()).save(any(Experience.class));
+    }
+
+    @Test
+    @DisplayName("deleteExperience: zero rows deleted (wrong id or wrong owner) is a 404")
+    void deleteExperience_NotOwned_Throws404() {
+        when(studentProfileRepository.findByUserId(USER_ID)).thenReturn(Optional.of(profile));
+        when(experienceRepository.deleteByIdAndStudentProfileId(9L, PROFILE_ID)).thenReturn(0L);
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> studentService.deleteExperience(USER_ID, 9L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
     }
 }

@@ -11,19 +11,20 @@ import java.util.Optional;
 public interface StudentRoadmapRepository extends JpaRepository<StudentRoadmap, Long> {
 
     /**
-     * The idempotency fast path for a redelivered recommendation.generated. Optional is safe here
-     * only because of the unique constraint on (student_id, recommendation_id) -- without it two
-     * racing deliveries could both insert and this would start throwing.
+     * The idempotency fast path for POST /api/roadmap: build-or-return. Optional is safe here only
+     * because of the unique constraint on (student_id, career_name) -- without it two racing
+     * double-clicks of "Build my roadmap" could both insert and this would start throwing.
+     * IgnoreCase matches RoadmapTemplateRepository's own lookup convention.
      */
-    Optional<StudentRoadmap> findByStudentIdAndRecommendationId(Long studentId, Long recommendationId);
+    Optional<StudentRoadmap> findByStudentIdAndCareerNameIgnoreCase(Long studentId, String careerName);
 
     /**
      * Backs GET /api/roadmap/my, which takes the first -- the newest, by the DESC ordering.
      *
-     * A List, NOT an Optional. A student who takes a second assessment gets a second recommendation
-     * and therefore a second roadmap, so this legitimately matches more than one row and a
-     * single-result finder would throw IncorrectResultSizeDataAccessException on exactly the second
-     * assessment. Same reasoning as recommendation-service's findByUserIdAndIsActiveTrue.
+     * A List, NOT an Optional. A student can hold a roadmap for more than one career at once (one
+     * per career they've clicked "Build my roadmap" for), so this legitimately matches more than one
+     * row and a single-result finder would throw IncorrectResultSizeDataAccessException. Same
+     * reasoning as recommendation-service's findByUserIdAndIsActiveTrue.
      *
      * Deliberately not filtered by status. A ...AndStatusOrderByStartedAtDesc variant existed here
      * and getMyRoadmap used it to select IN_PROGRESS only, which meant completing the last milestone

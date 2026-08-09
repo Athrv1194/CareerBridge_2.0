@@ -2,6 +2,8 @@ package com.careerbridge.student.service;
 
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ExperienceDto;
+import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
@@ -18,11 +20,53 @@ public interface StudentService {
 
     EducationDto addEducation(Long userId, EducationDto dto);
 
+    /** 404 if the id does not exist or belongs to another profile -- ownership is not leaked. */
+    EducationDto updateEducation(Long userId, Long educationId, EducationDto dto);
+
+    void deleteEducation(Long userId, Long educationId);
+
     SkillDto addSkill(Long userId, SkillDto dto);
+
+    void deleteSkill(Long userId, Long skillId);
 
     ProjectDto addProject(Long userId, ProjectDto dto);
 
+    ProjectDto updateProject(Long userId, Long projectId, ProjectDto dto);
+
+    void deleteProject(Long userId, Long projectId);
+
+    /** Overwrites any previous cover image for this project. */
+    void uploadProjectCover(Long userId, Long projectId, byte[] bytes, String contentType);
+
+    ImageBlob getProjectCover(Long userId, Long projectId);
+
+    void deleteProjectCover(Long userId, Long projectId);
+
     CertificateDto addCertificate(Long userId, CertificateDto dto);
+
+    CertificateDto updateCertificate(Long userId, Long certificateId, CertificateDto dto);
+
+    void deleteCertificate(Long userId, Long certificateId);
+
+    /** Overwrites any previous credential file for this certificate. */
+    void uploadCertificateFile(Long userId, Long certificateId, byte[] bytes, String contentType, String fileName);
+
+    ImageBlob getCertificateFile(Long userId, Long certificateId);
+
+    void deleteCertificateFile(Long userId, Long certificateId);
+
+    ExperienceDto addExperience(Long userId, ExperienceDto dto);
+
+    ExperienceDto updateExperience(Long userId, Long experienceId, ExperienceDto dto);
+
+    void deleteExperience(Long userId, Long experienceId);
+
+    /** Overwrites any previous avatar. Does not affect profileCompletionPercentage. */
+    void uploadAvatar(Long userId, byte[] bytes, String contentType);
+
+    ImageBlob getAvatar(Long userId);
+
+    void deleteAvatar(Long userId);
 
     List<String> getSkillSuggestions();
 

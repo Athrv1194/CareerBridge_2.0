@@ -35,4 +35,7 @@ public class ProjectDto {
 
     @Builder.Default
     private Boolean isOngoing = false;
+
+    /** Whether a cover image is stored -- never the bytes themselves; fetched separately. */
+    private Boolean hasCoverImage;
 }

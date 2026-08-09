@@ -42,6 +42,36 @@ public class RabbitMQConfig {
         return new Queue(NotificationConstants.STUDENT_QUEUE_NAME, true);
     }
 
+    @Bean
+    public Queue notificationPasswordResetQueue() {
+        return new Queue(NotificationConstants.PASSWORD_RESET_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Queue notificationPasswordChangedQueue() {
+        return new Queue(NotificationConstants.PASSWORD_CHANGED_QUEUE_NAME, true);
+    }
+
+    /**
+     * Durable, and its own queue -- a new @RabbitListener on either queue above would create a
+     * second container round-robining against the first, same hazard as the other two.
+     */
+    @Bean
+    public Queue notificationSubscriptionQueue() {
+        return new Queue(NotificationConstants.SUBSCRIPTION_QUEUE_NAME, true);
+    }
+
+    /**
+     * A sixth queue, same one-queue-per-event-type reasoning as the others. auth-service also binds
+     * its own careerbridge.auth.organization.queue to organization.request.approved -- a different
+     * routing key from this one (organization.admin.invited), which auth-service publishes after it
+     * provisions the user.
+     */
+    @Bean
+    public Queue notificationOrgAdminQueue() {
+        return new Queue(NotificationConstants.ORG_ADMIN_QUEUE_NAME, true);
+    }
+
     /**
      * durable=true, autoDelete=false must match auth/student/assessment/recommendation exactly. A
      * mismatch is answered with 406 PRECONDITION_FAILED, and because declaration happens
@@ -67,6 +97,38 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationStudentQueue)
                 .to(careerBridgeExchange)
                 .with(NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED);
+    }
+
+    @Bean
+    public Binding passwordResetRequestedBinding(Queue notificationPasswordResetQueue,
+                                                 TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationPasswordResetQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED);
+    }
+
+    @Bean
+    public Binding passwordChangedBinding(Queue notificationPasswordChangedQueue,
+                                          TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationPasswordChangedQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED);
+    }
+
+    @Bean
+    public Binding subscriptionActivatedBinding(Queue notificationSubscriptionQueue,
+                                                TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationSubscriptionQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED);
+    }
+
+    @Bean
+    public Binding orgAdminInvitedBinding(Queue notificationOrgAdminQueue,
+                                          TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationOrgAdminQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED);
     }
 
     /**
