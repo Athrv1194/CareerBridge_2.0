@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, MatchScore, Skeleton, StatTile,
   Tag, Textarea,
@@ -154,6 +154,7 @@ function JobRow({ job, isSelected, onSelect }) {
 }
 
 export default function OpportunitiesPage() {
+  const navigate = useNavigate();
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [studentName, setStudentName] = useState('');
@@ -353,7 +354,7 @@ export default function OpportunitiesPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" />
+          <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

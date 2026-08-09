@@ -158,7 +158,7 @@ const badgeTones = {
   danger: { background: 'var(--status-danger-soft)', color: 'var(--status-danger)' },
 };
 
-export function Badge({ children, tone = 'default', icon }) {
+export function Badge({ children, tone = 'default', icon, style }) {
   const toneStyle = badgeTones[tone] || badgeTones.default;
   const IconComp = icon ? iconMap[icon] : null;
   return (
@@ -166,7 +166,7 @@ export function Badge({ children, tone = 'default', icon }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', padding: '4px 10px',
         fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase',
-        borderRadius: 'var(--radius-pill)', ...toneStyle,
+        borderRadius: 'var(--radius-pill)', ...toneStyle, ...style,
       }}
     >
       {IconComp && <IconComp size={11} />}
