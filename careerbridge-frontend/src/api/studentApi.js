@@ -53,8 +53,44 @@ export function addEducation(payload) {
   return authedFetch('/student/profile/education', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export function updateEducation(id, payload) {
+  return authedFetch(`/student/profile/education/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deleteEducation(id) {
+  return authedFetch(`/student/profile/education/${id}`, { method: 'DELETE' });
+}
+
 export function addSkill(payload) {
   return authedFetch('/student/profile/skills', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function deleteSkill(id) {
+  return authedFetch(`/student/profile/skills/${id}`, { method: 'DELETE' });
+}
+
+export function addProject(payload) {
+  return authedFetch('/student/profile/projects', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateProject(id, payload) {
+  return authedFetch(`/student/profile/projects/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deleteProject(id) {
+  return authedFetch(`/student/profile/projects/${id}`, { method: 'DELETE' });
+}
+
+export function addCertificate(payload) {
+  return authedFetch('/student/profile/certificates', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateCertificate(id, payload) {
+  return authedFetch(`/student/profile/certificates/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+}
+
+export function deleteCertificate(id) {
+  return authedFetch(`/student/profile/certificates/${id}`, { method: 'DELETE' });
 }
 
 // student-service itself reads no identity for this endpoint, but api-gateway still requires a
@@ -66,4 +102,54 @@ export async function getSkillSuggestions() {
   } catch {
     return [];
   }
+}
+
+async function uploadImage(path, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Could not upload that image.');
+  }
+}
+
+// Both the avatar and a project cover live behind the same Bearer auth as everything else -- a
+// plain <img src> can't attach that header, so the bytes are fetched here and handed to the
+// browser as a throwaway blob: URL, same approach as resumeApi.downloadResume.
+async function fetchImageAsBlobUrl(path) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Could not load that image.');
+  return URL.createObjectURL(await res.blob());
+}
+
+export function uploadAvatar(file) {
+  return uploadImage('/student/profile/avatar', file);
+}
+
+export function getAvatarBlobUrl() {
+  return fetchImageAsBlobUrl('/student/profile/avatar');
+}
+
+export function deleteAvatar() {
+  return authedFetch('/student/profile/avatar', { method: 'DELETE' });
+}
+
+export function uploadProjectCover(projectId, file) {
+  return uploadImage(`/student/profile/projects/${projectId}/cover`, file);
+}
+
+export function getProjectCoverBlobUrl(projectId) {
+  return fetchImageAsBlobUrl(`/student/profile/projects/${projectId}/cover`);
+}
+
+export function deleteProjectCover(projectId) {
+  return authedFetch(`/student/profile/projects/${projectId}/cover`, { method: 'DELETE' });
 }
