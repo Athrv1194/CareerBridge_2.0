@@ -125,6 +125,36 @@ class AdminUserControllerTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/auth/admin/users/{id}/organization returns 200 for a SUPER_ADMIN")
+    void linkOrganization_SuperAdmin_Returns200() throws Exception {
+        UserSummaryResponse linked = sampleUser();
+        linked.setOrganizationId(3L);
+        when(adminUserService.linkOrganization(eq("SUPER_ADMIN"), eq(5L), eq(3L)))
+                .thenReturn(linked);
+
+        mockMvc().perform(patch("/api/auth/admin/users/5/organization")
+                        .header(USER_ROLE_HEADER, "SUPER_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"organizationId\":3}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organizationId").value(3));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/auth/admin/users/{id}/organization returns 403 for an ORG_ADMIN")
+    void linkOrganization_OrgAdmin_Returns403() throws Exception {
+        when(adminUserService.linkOrganization(eq("ORG_ADMIN"), eq(5L), eq(3L)))
+                .thenThrow(new CustomException("Only SUPER_ADMIN may perform this operation",
+                        HttpStatus.FORBIDDEN));
+
+        mockMvc().perform(patch("/api/auth/admin/users/5/organization")
+                        .header(USER_ROLE_HEADER, "ORG_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"organizationId\":3}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("PATCH /api/auth/admin/users/{id}/role returns 400 when the body has no role")
     void changeUserRole_BlankRole_Returns400() throws Exception {
         // @NotBlank on ChangeRoleRequest.role, surfaced by the MethodArgumentNotValidException

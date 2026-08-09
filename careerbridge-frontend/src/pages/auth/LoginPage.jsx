@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { login } from '../../api/authApi';
 import { resolvePostLoginDestination } from '../../utils/postLoginRedirect';
+import { setStoredUser } from '../../utils/tokenUtils';
 import {
   Alert, Button, Field, Icon, Input, Logo,
 } from '../../components/ui';
@@ -35,6 +36,8 @@ export default function LoginPage() {
       const data = await login({ email, password });
       localStorage.setItem('cb_access_token', data.accessToken);
       localStorage.setItem('cb_refresh_token', data.refreshToken);
+      // AuthResponse carries no name on login (only register does) -- email is the best we have here.
+      setStoredUser({ email: data.email });
       window.location.href = await resolvePostLoginDestination(data.role);
     } catch (e) {
       setRequestError(e.message || 'Check your email and password and try again.');

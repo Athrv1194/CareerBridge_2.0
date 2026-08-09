@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Checkbox, Field, Icon, IconButton, Input, Logo,
   Skeleton, Switch, Tag, Textarea,
@@ -14,6 +14,7 @@ import {
   deleteProjectCover,
 } from '../../api/studentApi';
 import { getMyResumes, generateResume, deleteResume, downloadResume } from '../../api/resumeApi';
+import { getUnreadCount } from '../../api/notificationApi';
 import './profile.css';
 
 const NAV_ITEMS = [
@@ -46,9 +47,7 @@ function joinList(items) {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-// Mirrors student-service's ProfileCompletionCalculator weights (20/15/15/20/15/10/5 -- see
-// CLAUDE.md). Used only to explain gaps; the ring itself always shows the server's own
-// profileCompletionPercentage, the authoritative number.
+// Mirrors the backend's completion weights, just to explain gaps -- the ring shows the server's own number.
 function computeGaps(profile, skills, educations, projects) {
   const gaps = [];
   const basicFields = [['firstName', 'first name'], ['lastName', 'last name'], ['phone', 'phone'], ['bio', 'bio'], ['city', 'city']];
@@ -186,6 +185,8 @@ const EMPTY_PROJECT = { title: '', description: '', techStack: '', projectUrl: '
 const EMPTY_CERT = { name: '', issuingOrganization: '', issueDate: '', expiryDate: '', credentialUrl: '' };
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fadeIn, setFadeIn] = useState(false);
@@ -265,6 +266,7 @@ export default function ProfilePage() {
   }, [showToast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {}); }, []);
   useEffect(() => () => { clearTimeout(toastTimerRef.current); clearTimeout(blurTimerRef.current); }, []);
 
   useEffect(() => {
@@ -596,13 +598,15 @@ export default function ProfilePage() {
 
       <header className="cb-pf-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-pf-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" />
+          <div style={{ position: 'relative', display: 'flex' }}>
+            <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 15, height: 15, padding: '0 3px', borderRadius: '50%', background: 'var(--status-danger)', color: '#FCFBF9', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -652,7 +656,7 @@ export default function ProfilePage() {
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
                 <p style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--ink-900)', margin: 0, fontWeight: 500 }}>Roadmap pacing and coach follow-ups need Plus.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-600)', margin: 0 }}>Free covers your top 3 matches. Upgrade for the full roadmap, unlimited coach sessions and résumé exports.</p>
-                <Link to="/" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
                   <Button variant="primary" size="sm" fullWidth iconAfter="arrow-right">See plans</Button>
                 </Link>
               </div>

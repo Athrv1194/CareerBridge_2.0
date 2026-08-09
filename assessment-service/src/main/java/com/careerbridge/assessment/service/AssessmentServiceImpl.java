@@ -229,17 +229,31 @@ public class AssessmentServiceImpl implements AssessmentService {
         double percentage = ScoringEngine.calculateCategoryScorePercentage(rawScore, maxPossibleScore);
 
         List<CareerPath> allCareers = careerPathRepository.findAll();
-        // Relevance is matched against the REAL picked category (e.g. "Programming Fundamentals"),
-        // not the section's stable display name ("Domain Knowledge") -- career requiredSkills lists
-        // real skill words ("Programming", "Database"), which no section label will ever contain, so
-        // matching on the display name always tied every career at 0.3. This means a retake that
-        // lands on a different Domain Knowledge pool member can legitimately rank careers
-        // differently -- that's real signal from different content, not instability to hide.
+        // Relevance is matched against keywords, not the raw picked category name -- career
+        // requiredSkills lists real skill words ("Programming", "Database"), which no section label
+        // ("Domain Knowledge") will ever contain, so matching on the display name always tied every
+        // career at 0.3.
+        //
+        // For DOMAIN_KNOWLEDGE specifically, this is the UNION of every pool member's name
+        // ("Domain Knowledge", "Programming Fundamentals", "Database & SQL"), not just whichever one
+        // startAttempt happened to draw for this attempt. An earlier version matched only the drawn
+        // category and got this backwards: since relevanceFor() never looks at the student's actual
+        // answers (only categoryScorePercentage does, and it scales every career by the same factor),
+        // two students who answer identically but draw different pool members got different top
+        // matches purely from that random draw -- a coin flip, not "real signal from different
+        // content" as previously reasoned here. Frontend/Mobile Developer, whose requiredSkills lists
+        // are shortest, structurally won that coin flip whenever "Programming Fundamentals" was drawn,
+        // for every student, regardless of performance. Unioning the pool makes the ranking a fixed
+        // function of the section (real, reproducible signal) instead of the draw (noise); the
+        // student's actual score still scales every career's magnitude exactly as before.
         // Kept as its own variable, not inlined into getTopCareers: the full map goes out on the
         // event so recommendation-service can rank every career, while only the top N is persisted
         // and returned over HTTP.
+        String relevanceSource = section == AssessmentSection.DOMAIN_KNOWLEDGE
+                ? String.join(" ", AssessmentConstants.SECTION_CATEGORY_POOL.get(AssessmentSection.DOMAIN_KNOWLEDGE))
+                : category.getName();
         Map<String, Double> allCareerScores =
-                ScoringEngine.calculateCareerMatches(category.getName(), percentage, allCareers);
+                ScoringEngine.calculateCareerMatches(relevanceSource, percentage, allCareers);
         Map<String, Double> topCareers = ScoringEngine.getTopCareers(
                 allCareerScores, AssessmentConstants.TOP_CAREERS_TO_RECOMMEND);
 

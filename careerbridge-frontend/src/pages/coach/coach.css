@@ -1,0 +1,80 @@
+@keyframes cbSkeletonShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+@keyframes cbPeek { from { transform: translateY(80px); } to { transform: translateY(0); } }
+@keyframes cbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes cbTilt { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes cbWave {
+  0%, 100% { transform: rotate(0deg); }
+  18% { transform: rotate(-165deg); }
+  40% { transform: rotate(-125deg); }
+  60% { transform: rotate(-165deg); }
+  80% { transform: rotate(-125deg); }
+  95% { transform: rotate(0deg); }
+}
+@keyframes cbArmLift { 0% { transform: rotate(-20deg); } 100% { transform: rotate(0deg); } }
+@keyframes cbAntennaPulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+@keyframes cbRowIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cbBubbleInR { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes cbBubbleInL { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes cbFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.cb-co-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--nav-w) var(--sessions-w) minmax(360px, 1fr) var(--resources-w);
+  /* Without this, the implicit row falls back to grid-auto-rows: auto, which sizes to the
+     TALLEST column's own content height (e.g. the full nav link list) rather than filling the
+     grid container -- every pane then grows past the viewport instead of scrolling internally,
+     and the whole page carries the sidebars along when the chat transcript scrolls. */
+  grid-template-rows: minmax(0, 1fr);
+  transition: grid-template-columns 220ms cubic-bezier(.2, 0, .2, 1);
+  position: relative;
+  overflow-x: auto;
+}
+
+.cb-co-shell > aside,
+.cb-co-shell > main {
+  min-height: 0;
+}
+
+.cb-co-row-delete {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms cubic-bezier(.2, 0, .2, 1);
+}
+.cb-co-row:hover .cb-co-row-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cb-co-resource-row {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  transition: background 140ms cubic-bezier(.2, 0, .2, 1);
+}
+.cb-co-resource-row:hover {
+  background: var(--bone-100);
+}
+
+@media (max-width: 860px) {
+  .cb-co-robot { display: none !important; }
+}
+
+@media (max-width: 900px) {
+  .cb-co-sidebar-label, .cb-co-sidebar-footer, .cb-co-toggle-row { display: none !important; }
+  .cb-co-header { padding: 0 16px !important; gap: 12px !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-co-avatar-name { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-co-root, .cb-co-root * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
