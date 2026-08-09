@@ -7,6 +7,7 @@ import {
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
   LuSun, LuHistory, LuChevronRight, LuChevronDown, LuExternalLink,
   LuBell, LuSearch, LuBookmark, LuCamera, LuMapPin, LuPencil, LuTrash2,
+  LuCircleHelp,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -41,6 +42,7 @@ const iconMap = {
   'map-pin': LuMapPin,
   pencil: LuPencil,
   'trash-2': LuTrash2,
+  'help-circle': LuCircleHelp,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -212,11 +214,7 @@ export function ProgressMeter({ value, max = 100, tone = 'accent' }) {
   );
 }
 
-// Same 80/60/40/20 breakpoints as the completion grade (A/B/C/D/F) elsewhere in this app, so the
-// ring's color and the letter grade next to it never disagree. The token palette's status colors
-// (--status-danger etc.) are muted/dark, tuned for the light page background -- on this ring's
-// near-black sidebar they'd be low-contrast, so inverse gets the same brighter equivalents the
-// checklist badges already use on this exact background (BADGE_TONE_STYLE's success, for one).
+// Brighter variants for the dark ring background, same 80/60/40/20 grade cutoffs as elsewhere.
 function scoreToColor(value, inverse) {
   if (inverse) {
     if (value >= 80) return '#8FB393';
@@ -241,10 +239,7 @@ export function ScoreRing({
   const c = 2 * Math.PI * r;
   const offset = c - (value / 100) * c;
   const inverse = tone === 'inverse';
-  // Deliberately not a CSS filter (e.g. brightness(0) invert(1)) on the whole graphic: that
-  // zeroes every pixel to black regardless of its original shade, so the light track and the
-  // dark progress arc both end up the exact same white and the fill becomes invisible. Two
-  // separate stroke colors, chosen per tone, is the only way both circles stay distinguishable.
+  // No filter here -- inverting the whole SVG would make track and arc the same white.
   const trackStroke = inverse ? 'rgba(255,255,255,.18)' : 'var(--bone-300)';
   const progressStroke = colorByScore ? scoreToColor(value, inverse) : (inverse ? '#FCFBF9' : 'var(--ink-900)');
   const valueColor = inverse ? '#FCFBF9' : 'var(--ink-900)';

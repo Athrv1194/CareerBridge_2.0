@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Icon, IconButton, Input, Logo, ProgressMeter, Skeleton, StatTile,
+  Alert, Badge, Button, Icon, IconButton, Logo, ProgressMeter, Skeleton, StatTile,
 } from '../../components/ui';
-import { getMyRoadmap, completeMilestone } from '../../api/roadmapApi';
+import { getMyRoadmap, getMyRoadmaps, activateRoadmap, completeMilestone } from '../../api/roadmapApi';
 import { getMyResources } from '../../api/aiCoachApi';
 import { getMyProfile } from '../../api/studentApi';
 import { getUnreadCount } from '../../api/notificationApi';
@@ -51,9 +51,7 @@ function cap(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Resource';
 }
 
-// Real resources come from ai-coach-service's milestone catalog (up to 4 articles/tutorials +
-// 1 video, keyed by milestone title). Falls back to roadmap-service's single seeded resourceUrl
-// only when the catalog has nothing for this milestone yet (e.g. not refreshed for this career).
+// Prefers the ai-coach resource catalog (up to 4 links + 1 video); falls back to the seeded resourceUrl.
 function ResourceBadges({ resources, fallbackUrl }) {
   const items = (resources && resources.length > 0)
     ? resources
@@ -226,6 +224,8 @@ export default function RoadmapPage() {
   const [paceOpen, setPaceOpen] = useState(false);
   const [paceChoice, setPaceChoice] = useState(() => localStorage.getItem('cb_roadmap_pace') || 'ambitious');
   const [toast, setToast] = useState({ visible: false, title: '', message: '' });
+  const [allRoadmaps, setAllRoadmaps] = useState([]);
+  const [switching, setSwitching] = useState(false);
 
   const toastTimerRef = useRef(null);
 
@@ -251,10 +251,21 @@ export default function RoadmapPage() {
       }
       setLoading(false);
     });
+    getMyRoadmaps().then(setAllRoadmaps).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+
+  const switchRoadmap = useCallback((id) => {
+    if (switching || (roadmap && roadmap.id === id)) return;
+    setSwitching(true);
+    activateRoadmap(id)
+      .then((next) => { setRoadmap(next); setNotFound(false); })
+      .catch(() => showToast('Could not switch', 'Please try again.'))
+      .finally(() => setSwitching(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switching, roadmap]);
 
   const showToast = useCallback((title, message) => {
     clearTimeout(toastTimerRef.current);
@@ -301,11 +312,6 @@ export default function RoadmapPage() {
 
       <header className="cb-rm-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-rm-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
@@ -364,7 +370,7 @@ export default function RoadmapPage() {
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
                 <p style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--ink-900)', margin: 0, fontWeight: 500 }}>Roadmap pacing and coach follow-ups need Plus.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-600)', margin: 0 }}>Free covers your top 3 matches. Upgrade for the full roadmap, unlimited coach sessions and résumé exports.</p>
-                <Link to="/" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
                   <Button variant="primary" size="sm" fullWidth iconAfter="arrow-right">See plans</Button>
                 </Link>
               </div>
@@ -393,6 +399,30 @@ export default function RoadmapPage() {
 
             {!loading && !notFound && roadmap && (
               <div className="cb-rm-fade" style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+
+                {allRoadmaps.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink-400)', marginRight: 4 }}>Your roadmaps</span>
+                    {allRoadmaps.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        disabled={switching}
+                        onClick={() => switchRoadmap(r.id)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px',
+                          borderRadius: 'var(--radius-pill)', fontSize: 13, cursor: switching ? 'default' : 'pointer',
+                          border: `1px solid ${r.id === roadmap.id ? 'var(--ink-900)' : 'var(--line-hairline)'}`,
+                          background: r.id === roadmap.id ? 'var(--ink-900)' : 'transparent',
+                          color: r.id === roadmap.id ? 'var(--bone-50)' : 'var(--ink-700)',
+                        }}
+                      >
+                        {r.careerName}
+                        {r.id === roadmap.id && <Icon name="check" size={13} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>

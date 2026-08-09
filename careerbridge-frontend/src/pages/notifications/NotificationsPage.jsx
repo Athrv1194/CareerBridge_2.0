@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, IconButton, Input, Logo, Skeleton } from '../../components/ui';
+import { Alert, Badge, Button, Icon, IconButton, Logo, Skeleton } from '../../components/ui';
 import { getMyNotifications, markNotificationRead } from '../../api/notificationApi';
+import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
 import './notifications.css';
+
+const ROLE_LABEL = { STUDENT: 'Student', PLACEMENT_OFFICER: 'Placement officer', RECRUITER: 'Recruiter', ORG_ADMIN: 'Org admin', SUPER_ADMIN: 'Super admin', MENTOR: 'Mentor' };
 
 const TYPE_BADGE = {
   RECOMMENDATION: { tone: 'accent', label: 'CAREER MATCH' },
@@ -49,6 +52,10 @@ export default function NotificationsPage() {
   const [markingIds, setMarkingIds] = useState({});
   const [expandedIds, setExpandedIds] = useState({});
   const [rowsMounted, setRowsMounted] = useState(false);
+  const role = getTokenPayload()?.role || 'STUDENT';
+  const isStudent = role === 'STUDENT';
+  const roleLabel = ROLE_LABEL[role] || 'Account';
+  const userName = getDisplayName(roleLabel);
 
   const loadAll = useCallback(() => {
     setLoading(true); setError(false);
@@ -96,8 +103,7 @@ export default function NotificationsPage() {
   const now = new Date();
   const unreadCount = notifications.filter((n) => n.isRead === false && !markingIds[n.id]).length;
 
-  // Keeps a non-zero label around for the badge's own exit animation, instead of it going blank
-  // the instant the count hits zero.
+  // Keeps the old count visible during the badge's exit animation instead of snapping to blank.
   const lastUnreadLabel = useRef('0');
   if (unreadCount > 0) lastUnreadLabel.current = String(unreadCount);
 
@@ -122,11 +128,6 @@ export default function NotificationsPage() {
 
       <header className="cb-no-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-no-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" variant="secondary" onClick={() => navigate(-1)} />
@@ -142,7 +143,8 @@ export default function NotificationsPage() {
               <Icon name="user" size={15} />
             </div>
             <div className="cb-no-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>Student</span>
+              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{userName}</span>
+              <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>{roleLabel}</span>
             </div>
           </div>
         </div>
@@ -195,8 +197,14 @@ export default function NotificationsPage() {
               <div style={{ padding: '72px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, textAlign: 'center' }}>
                 <Icon name="bell" size={48} style={{ color: 'var(--ink-300)' }} />
                 <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--ink-600)' }}>Nothing here yet</span>
-                <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-400)', maxWidth: 400, margin: 0 }}>Your career match and welcome notifications will appear here once your assessment is complete.</p>
-                <Button variant="secondary" size="md" iconAfter="arrow-right" to="/assessment" style={{ marginTop: 8 }}>Take assessment</Button>
+                <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-400)', maxWidth: 400, margin: 0 }}>
+                  {isStudent
+                    ? 'Your career match and welcome notifications will appear here once your assessment is complete.'
+                    : 'Updates relevant to your account will appear here.'}
+                </p>
+                {isStudent && (
+                  <Button variant="secondary" size="md" iconAfter="arrow-right" to="/assessment" style={{ marginTop: 8 }}>Take assessment</Button>
+                )}
               </div>
             )}
 

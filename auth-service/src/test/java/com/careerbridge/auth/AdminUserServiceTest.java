@@ -279,6 +279,60 @@ class AdminUserServiceTest {
     }
 
     // -------------------------------------------------------------------------------------------
+    // linkOrganization
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("SUPER_ADMIN links a user to an organization")
+    void linkOrganization_SuperAdmin_SetsOrganizationId() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.PLACEMENT_OFFICER, null, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result = adminUserService.linkOrganization(SUPER_ADMIN, 5L, 7L);
+
+        assertEquals(7L, result.getOrganizationId());
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertEquals(7L, saved.getValue().getOrganizationId());
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN can unlink a user by passing a null organizationId")
+    void linkOrganization_NullOrganizationId_Unlinks() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.PLACEMENT_OFFICER, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result = adminUserService.linkOrganization(SUPER_ADMIN, 5L, null);
+
+        assertEquals(null, result.getOrganizationId());
+    }
+
+    @Test
+    @DisplayName("ORG_ADMIN cannot link a user to an organization, and the user is never loaded")
+    void linkOrganization_OrgAdmin_Throws403() {
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.linkOrganization(ORG_ADMIN, 5L, 7L));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(userRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("linking a non-existent user throws 404")
+    void linkOrganization_UnknownUser_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.linkOrganization(SUPER_ADMIN, 999L, 7L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------------------------
     // deactivateUser / activateUser
     // -------------------------------------------------------------------------------------------
 

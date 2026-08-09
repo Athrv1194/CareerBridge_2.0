@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import {
   Alert, Button, Checkbox, Field, Icon, Input, Logo,
 } from '../../components/ui';
+import { resolvePostLoginDestination } from '../../utils/postLoginRedirect';
+import { setStoredUser } from '../../utils/tokenUtils';
 import './register.css';
 
 const ROLES = [
@@ -12,6 +14,10 @@ const ROLES = [
   { value: 'RECRUITER', label: 'Recruiter', hint: 'Post roles, hire' },
   { value: 'MENTOR', label: 'Mentor', hint: 'Guide students' },
 ];
+
+// Recruiters belong to no organization (same as SUPER_ADMIN) -- only these roles have a real use
+// for the field, so it's hidden rather than shown-and-ignored for RECRUITER.
+const ORG_LINKED_ROLES = new Set(['STUDENT', 'PLACEMENT_OFFICER', 'MENTOR']);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -32,6 +38,7 @@ export default function RegisterPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [errors, setErrors] = useState({});
@@ -50,12 +57,13 @@ export default function RegisterPage() {
     try {
       const data = await register({
         firstName, lastName, email, password, role,
+        organizationId: ORG_LINKED_ROLES.has(role) && organizationId.trim() ? Number(organizationId.trim()) : undefined,
       });
       localStorage.setItem('cb_access_token', data.accessToken);
       localStorage.setItem('cb_refresh_token', data.refreshToken);
-      // Onboarding, not /dashboard: a brand-new account has no education/skills/profile yet,
-      // and student-service's own consumer already created the (empty) profile row this page reads.
-      window.location.href = '/onboarding';
+      setStoredUser({ firstName, lastName, email });
+      // Students (empty profile) go to onboarding; every other role goes straight to its own console.
+      window.location.href = await resolvePostLoginDestination(data.role);
     } catch (e) {
       setRequestError(e.message || 'Something went wrong. Please try again.');
     } finally {
@@ -132,6 +140,20 @@ export default function RegisterPage() {
               })}
             </div>
           </div>
+
+          {ORG_LINKED_ROLES.has(role) && (
+            <Field
+              label="Organization ID"
+              hint="Ask your placement officer or org admin — it's shown on their College Dashboard. Leave blank if you don't have one yet."
+            >
+              <Input
+                type="number"
+                placeholder="e.g. 5"
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+              />
+            </Field>
+          )}
 
           <div className="cb-reg-fields" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 14 }}>
             <Field label="First name" error={errors.firstName}>

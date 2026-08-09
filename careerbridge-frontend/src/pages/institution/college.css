@@ -1,0 +1,18 @@
+@media (max-width: 860px) {
+  .cb-college-overview-grid,
+  .cb-college-dept-grid,
+  .cb-college-placement-grid,
+  .cb-college-ctc-grid,
+  .cb-college-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .cb-college-stat4-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .cb-college-stat4-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

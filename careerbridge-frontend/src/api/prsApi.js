@@ -2,9 +2,7 @@ import { getAccessToken } from '../utils/tokenUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-// Every student gets a PRS row the moment they register (prs-service creates it defensively off
-// student.registered), so a missing row is not a normal state -- but this still fails soft to null
-// rather than throwing, since a dashboard widget going blank beats the whole page erroring out.
+// Fails soft to null -- a blank widget beats the whole dashboard erroring out.
 export async function getMyPrs() {
   try {
     const res = await fetch(`${API_BASE}/prs/my`, {

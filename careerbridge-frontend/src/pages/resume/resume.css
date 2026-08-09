@@ -49,7 +49,6 @@
 @media (max-width: 900px) {
   .cb-rs-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
   .cb-rs-sidebar-label, .cb-rs-sidebar-footer, .cb-rs-toggle-row { display: none !important; }
-  .cb-rs-search { display: none !important; }
   .cb-rs-header { padding: 0 16px !important; gap: 12px !important; }
   .cb-rs-topbar { padding: 20px 16px !important; }
   .cb-rs-detail { gap: 20px !important; }

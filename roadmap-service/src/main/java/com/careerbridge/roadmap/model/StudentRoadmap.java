@@ -95,6 +95,15 @@ public class StudentRoadmap {
     /** Null until the last milestone is ticked off. */
     private LocalDateTime completedAt;
 
+    /**
+     * Which roadmap the Dashboard/Roadmap page shows, when the student holds more than one. Set on
+     * build (including the idempotent re-click of an existing career) and on an explicit
+     * PATCH /{id}/activate. Nullable and untouched on every pre-existing row -- getMyRoadmap orders
+     * by this DESC NULLS LAST, then startedAt DESC, so rows from before this column existed keep
+     * exactly their old "newest wins" behaviour with zero migration needed.
+     */
+    private LocalDateTime activatedAt;
+
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 

@@ -67,6 +67,21 @@ public class RoadmapController {
         return ResponseEntity.ok(roadmapService.getMyRoadmap(studentId));
     }
 
+    /** Every roadmap the caller has built, active one first -- backs the roadmap switcher. */
+    @GetMapping("/my/all")
+    public ResponseEntity<List<RoadmapResponse>> getMyRoadmaps(
+            @RequestHeader(USER_ID_HEADER) Long studentId) {
+        return ResponseEntity.ok(roadmapService.getMyRoadmaps(studentId));
+    }
+
+    /** Switches which roadmap /my (and therefore the Dashboard) returns, without resetting progress. */
+    @PatchMapping("/{id}/activate")
+    public ResponseEntity<RoadmapResponse> activateRoadmap(
+            @RequestHeader(USER_ID_HEADER) Long studentId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(roadmapService.activateRoadmap(studentId, id));
+    }
+
     /**
      * PATCH, not PUT: this flips one field on one milestone rather than replacing the resource.
      * The service refuses a milestone belonging to another student with 403, so the milestoneId in

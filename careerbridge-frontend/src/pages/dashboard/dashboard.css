@@ -15,7 +15,6 @@
 @media (max-width: 900px) {
   .cb-db-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
   .cb-db-sidebar-label, .cb-db-sidebar-footer, .cb-db-toggle-row { display: none !important; }
-  .cb-db-search { display: none !important; }
   .cb-db-header { padding: 0 16px !important; gap: 12px !important; }
   .cb-db-main-pad { padding: 22px 16px 48px !important; }
   .cb-db-hero { font-size: 34px !important; }

@@ -2,6 +2,8 @@ package com.careerbridge.roadmap.repository;
 
 import com.careerbridge.roadmap.model.StudentRoadmap;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -32,4 +34,15 @@ public interface StudentRoadmapRepository extends JpaRepository<StudentRoadmap, 
      * the filter without giving the student some other way to see a finished roadmap.
      */
     List<StudentRoadmap> findByStudentIdOrderByStartedAtDesc(Long studentId);
+
+    /**
+     * Backs getMyRoadmap now that a student can explicitly pick which roadmap is "current": a row
+     * that was ever activated (built, re-built, or explicitly switched to) sorts by that moment;
+     * NULLS LAST means a row from before this column existed -- or one that simply never got
+     * reactivated after a newer roadmap took over -- falls back to the old startedAt-DESC order
+     * rather than jumping to the front as a false "most recent".
+     */
+    @Query("SELECT r FROM StudentRoadmap r WHERE r.studentId = :studentId "
+            + "ORDER BY r.activatedAt DESC NULLS LAST, r.startedAt DESC")
+    List<StudentRoadmap> findByStudentIdOrderByActivatedThenStarted(@Param("studentId") Long studentId);
 }
