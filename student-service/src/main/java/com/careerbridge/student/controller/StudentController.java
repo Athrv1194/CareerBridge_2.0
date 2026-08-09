@@ -2,6 +2,7 @@ package com.careerbridge.student.controller;
 
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ExperienceDto;
 import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
@@ -182,6 +183,59 @@ public class StudentController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping(value = "/profile/certificates/{certificateId}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Void> uploadCertificateFile(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @PathVariable Long certificateId,
+            @RequestParam("file") MultipartFile file) {
+        studentService.uploadCertificateFile(userId, certificateId,
+                readCertificateFileBytes(file), resolveCertificateFileContentType(file), file.getOriginalFilename());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/profile/certificates/{certificateId}/file")
+    public ResponseEntity<byte[]> getCertificateFile(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @PathVariable Long certificateId) {
+        ImageBlob blob = studentService.getCertificateFile(userId, certificateId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(blob.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + blob.getFileName() + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .body(blob.getBytes());
+    }
+
+    @DeleteMapping("/profile/certificates/{certificateId}/file")
+    public ResponseEntity<Void> deleteCertificateFile(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @PathVariable Long certificateId) {
+        studentService.deleteCertificateFile(userId, certificateId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/profile/experience")
+    public ResponseEntity<ExperienceDto> addExperience(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @Valid @RequestBody ExperienceDto dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentService.addExperience(userId, dto));
+    }
+
+    @PutMapping("/profile/experience/{experienceId}")
+    public ResponseEntity<ExperienceDto> updateExperience(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @PathVariable Long experienceId,
+            @Valid @RequestBody ExperienceDto dto) {
+        return ResponseEntity.ok(studentService.updateExperience(userId, experienceId, dto));
+    }
+
+    @DeleteMapping("/profile/experience/{experienceId}")
+    public ResponseEntity<Void> deleteExperience(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @PathVariable Long experienceId) {
+        studentService.deleteExperience(userId, experienceId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Void> uploadAvatar(
             @RequestHeader(USER_ID_HEADER) Long userId,
@@ -232,6 +286,26 @@ public class StudentController {
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
             throw new CustomException("Only image uploads are accepted", HttpStatus.BAD_REQUEST);
+        }
+        return contentType;
+    }
+
+    /** Certificates/offer letters are legitimately PDFs, not just images -- a separate check from avatar/cover. */
+    private byte[] readCertificateFileBytes(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new CustomException("No file was uploaded", HttpStatus.BAD_REQUEST);
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new CustomException("Could not read the uploaded file", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private String resolveCertificateFileContentType(MultipartFile file) {
+        String contentType = file.getContentType();
+        if (contentType == null || !(contentType.equals(MediaType.APPLICATION_PDF_VALUE) || contentType.startsWith("image/"))) {
+            throw new CustomException("Only PDF or image uploads are accepted", HttpStatus.BAD_REQUEST);
         }
         return contentType;
     }

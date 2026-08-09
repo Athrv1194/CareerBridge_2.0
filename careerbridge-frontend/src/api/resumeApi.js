@@ -11,15 +11,39 @@ export async function getMyResumes() {
   return res.json();
 }
 
-export async function generateResume() {
+// options is the resolved ResumeGenerateRequest body -- summary, include* toggles, jobDescription.
+// Every field is optional; omitting the whole object (or any field in it) defaults to "include
+// everything, no tailoring" on the backend.
+export async function generateResume(options) {
   const res = await fetch(`${API_BASE}/resume/generate`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken()}` },
+    body: options ? JSON.stringify(options) : undefined,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.message || 'Could not generate a résumé.');
   }
+  return res.json();
+}
+
+export async function setDefaultResume(id) {
+  const res = await fetch(`${API_BASE}/resume/${id}/default`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Could not set that résumé as default.');
+  }
+  return res.json();
+}
+
+export async function getResume(id) {
+  const res = await fetch(`${API_BASE}/resume/${id}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) throw new Error('Could not load that résumé.');
   return res.json();
 }
 

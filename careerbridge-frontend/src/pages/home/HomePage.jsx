@@ -3,6 +3,7 @@ import { useAuthState } from '../../hooks/useAuth';
 import {
   Button, IconButton, Logo, StatTile, ProgressMeter, ScoreRing, ListRow, Badge, Icon,
 } from '../../components/ui';
+import './home.css';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -159,7 +160,7 @@ export default function HomePage() {
           {!isMobile && (
             <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, flex: 1, minWidth: 0, overflow: 'hidden' }}>
               {NAV_LINKS.map((link) => (
-                <a key={link.href} href={link.href} style={{ fontSize: 13, fontWeight: 400, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-700)', whiteSpace: 'nowrap', flexShrink: 0, border: 'none' }}>
+                <a key={link.href} href={link.href} className="cb-home-nav-link" style={{ fontSize: 13, fontWeight: 400, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-700)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                   {link.label}
                 </a>
               ))}
@@ -191,7 +192,7 @@ export default function HomePage() {
         {drawerOpen && (
           <div style={{ background: 'var(--bone-50)', borderBottom: 'var(--border-hairline)', padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             {NAV_LINKS.map((link) => (
-              <a key={link.href} href={link.href} onClick={closeDrawer} style={{ fontSize: 13, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-700)', border: 'none' }}>
+              <a key={link.href} href={link.href} onClick={closeDrawer} className="cb-home-nav-link" style={{ fontSize: 13, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-700)', width: 'fit-content' }}>
                 {link.label}
               </a>
             ))}
