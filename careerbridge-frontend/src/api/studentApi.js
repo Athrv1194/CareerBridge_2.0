@@ -26,11 +26,7 @@ function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
-// Registration returns a token immediately, but the profile row is created asynchronously by
-// student-service's student.registered consumer over RabbitMQ -- fetching right after a fresh
-// registration can beat that by a few hundred ms and get a genuine 404. Retried a few times with
-// a short gap rather than treated as a hard failure; the profile is present well within this
-// window in the normal case.
+// Profile row is created async on registration, so retry a few times instead of failing on a 404.
 export async function getMyProfileWithRetry(attempts = 4, delayMs = 700) {
   for (let i = 0; i < attempts; i += 1) {
     try {
@@ -105,9 +101,7 @@ export function deleteExperience(id) {
   return authedFetch(`/student/profile/experience/${id}`, { method: 'DELETE' });
 }
 
-// student-service itself reads no identity for this endpoint, but api-gateway still requires a
-// valid JWT on any path that isn't in its own public-paths list -- this one isn't, so a bare
-// unauthenticated fetch 401s at the gateway before ever reaching student-service.
+// Needs auth just to pass the gateway, even though the endpoint itself doesn't check identity.
 export async function getSkillSuggestions() {
   try {
     return await authedFetch('/student/profile/skills/suggestions');
@@ -130,9 +124,7 @@ async function uploadImage(path, file) {
   }
 }
 
-// Both the avatar and a project cover live behind the same Bearer auth as everything else -- a
-// plain <img src> can't attach that header, so the bytes are fetched here and handed to the
-// browser as a throwaway blob: URL, same approach as resumeApi.downloadResume.
+// <img src> can't send a Bearer header, so fetch the bytes ourselves and hand back a blob URL.
 async function fetchImageAsBlobUrl(path) {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },

@@ -1,26 +1,17 @@
 import { getMyRecommendation } from '../api/recommendationApi';
 import { getMyProfile } from '../api/studentApi';
 
-const ROLE_REDIRECTS = {
+// Exported so any logged-in-state UI (e.g. HomePage's header CTA) can point a non-student
+// straight at their own console instead of a generic /dashboard, without duplicating this map.
+export const ROLE_REDIRECTS = {
   RECRUITER: '/recruiter-console',
   ORG_ADMIN: '/college-dashboard',
-  PLACEMENT_OFFICER: '/college-dashboard',
-  SUPER_ADMIN: '/dashboard',
+  PLACEMENT_OFFICER: '/placement-console',
+  SUPER_ADMIN: '/super-admin',
   MENTOR: '/dashboard',
 };
 
-/**
- * Only a STUDENT goes through onboarding -> assessment -> roadmap/dashboard; every other role
- * lands on its own console with no "where did they leave off" question to answer, so this never
- * runs for them.
- *
- * A dashboard with no assessment, no recommendation and no roadmap has nothing to show -- so a
- * student is sent to wherever that chain is actually incomplete, not to a page that would just be
- * empty. No education/skills on the profile means onboarding was never finished; a profile with
- * no recommendation yet means the assessment hasn't been completed (recommendation-service only
- * ever creates one by consuming assessment.completed). Only once both exist does /dashboard mean
- * anything.
- */
+// Only students walk the onboarding -> assessment -> roadmap chain; other roles go straight to their console.
 export async function resolvePostLoginDestination(role) {
   if (role !== 'STUDENT') {
     return ROLE_REDIRECTS[role] || '/dashboard';
@@ -36,9 +27,7 @@ export async function resolvePostLoginDestination(role) {
 
     return '/dashboard';
   } catch {
-    // Any of these calls failing (a downstream service down, a fresh profile still being
-    // created) must not block login itself -- falling back to onboarding is the safe default,
-    // since it is harmless to show even to a fully-onboarded student.
+    // A downstream hiccup shouldn't block login -- onboarding is a safe fallback either way.
     return '/onboarding';
   }
 }

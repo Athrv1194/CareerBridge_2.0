@@ -70,7 +70,12 @@ public class RoadmapServiceImpl implements RoadmapService {
         Optional<StudentRoadmap> existing =
                 studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(studentId, careerName);
         if (existing.isPresent()) {
-            return toResponse(existing.get());
+            // Re-clicking "Build my roadmap" for a career the student already has means "show me
+            // that one now" -- so it reactivates, same as a fresh build, rather than silently no-op
+            // leaving whichever OTHER roadmap was activated most recently still in front.
+            StudentRoadmap roadmap = existing.get();
+            roadmap.setActivatedAt(LocalDateTime.now());
+            return toResponse(studentRoadmapRepository.save(roadmap));
         }
 
         RoadmapTemplate template = roadmapTemplateRepository
@@ -90,6 +95,7 @@ public class RoadmapServiceImpl implements RoadmapService {
                 // Counted from the rows actually copied, not template.getTotalMilestones(), so the
                 // denominator of completionPercentage can never disagree with the milestone list.
                 .totalMilestones(steps.size())
+                .activatedAt(LocalDateTime.now())
                 .build();
 
         for (MilestoneTemplate step : steps) {
@@ -130,13 +136,36 @@ public class RoadmapServiceImpl implements RoadmapService {
     @Override
     @Transactional(readOnly = true)
     public RoadmapResponse getMyRoadmap(Long studentId) {
-        List<StudentRoadmap> roadmaps = studentRoadmapRepository.findByStudentIdOrderByStartedAtDesc(studentId);
+        List<StudentRoadmap> roadmaps =
+                studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(studentId);
 
         if (roadmaps.isEmpty()) {
             throw new CustomException("No roadmap found", HttpStatus.NOT_FOUND);
         }
 
         return toResponse(roadmaps.get(0));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RoadmapResponse> getMyRoadmaps(Long studentId) {
+        return studentRoadmapRepository.findByStudentIdOrderByActivatedThenStarted(studentId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public RoadmapResponse activateRoadmap(Long studentId, Long roadmapId) {
+        StudentRoadmap roadmap = studentRoadmapRepository.findById(roadmapId)
+                .orElseThrow(() -> new CustomException("Roadmap not found", HttpStatus.NOT_FOUND));
+
+        if (!Objects.equals(roadmap.getStudentId(), studentId)) {
+            throw new CustomException("This roadmap does not belong to you", HttpStatus.FORBIDDEN);
+        }
+
+        roadmap.setActivatedAt(LocalDateTime.now());
+        return toResponse(studentRoadmapRepository.save(roadmap));
     }
 
     @Override

@@ -6,8 +6,7 @@ function authHeaders() {
   return { Authorization: `Bearer ${getAccessToken()}` };
 }
 
-// Idempotent on the backend: calling this again for a career the student already built just
-// returns the existing roadmap, so callers never need to check "do they have one yet" first.
+// Safe to call again -- backend just returns the existing roadmap if one's already built.
 export async function buildRoadmap(careerName) {
   const res = await fetch(`${API_BASE}/roadmap`, {
     method: 'POST',
@@ -21,13 +20,32 @@ export async function buildRoadmap(careerName) {
   return res.json();
 }
 
-// 404 is real and expected -- "no roadmap yet" -- not a failure. Note this returns the STUDENT'S
-// SINGLE NEWEST roadmap, not "the one for career X": a student can hold one roadmap per career
-// (see buildRoadmap), but there is currently no way to list or pick among them from here.
+// 404 just means no roadmap yet. Returns the active one -- whichever was built or activated most
+// recently -- not necessarily the newest by creation date.
 export async function getMyRoadmap() {
   const res = await fetch(`${API_BASE}/roadmap/my`, { headers: authHeaders() });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error('Could not load your roadmap.');
+  return res.json();
+}
+
+// Every roadmap the student has built, active one first. Backs the roadmap switcher.
+export async function getMyRoadmaps() {
+  const res = await fetch(`${API_BASE}/roadmap/my/all`, { headers: authHeaders() });
+  if (!res.ok) throw new Error('Could not load your roadmaps.');
+  return res.json();
+}
+
+// Makes this roadmap the one getMyRoadmap returns, without resetting its progress.
+export async function activateRoadmap(roadmapId) {
+  const res = await fetch(`${API_BASE}/roadmap/${roadmapId}/activate`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Could not switch roadmaps.');
+  }
   return res.json();
 }
 

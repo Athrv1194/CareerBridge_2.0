@@ -1,10 +1,10 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-export async function register({ firstName, lastName, email, password, role }) {
+export async function register({ firstName, lastName, email, password, role, organizationId }) {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ firstName, lastName, email, password, role }),
+    body: JSON.stringify({ firstName, lastName, email, password, role, organizationId: organizationId || undefined }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

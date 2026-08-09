@@ -390,6 +390,45 @@ class AssessmentServiceTest {
     }
 
     @Test
+    @DisplayName("submitAttempt: DOMAIN_KNOWLEDGE relevance is the union of the whole pool, not just "
+            + "whichever pool member startAttempt happened to draw -- the random draw must not be able "
+            + "to change which career wins for an identical score")
+    void submitAttempt_DomainKnowledge_RelevanceUsesWholePoolNotJustDrawnCategory() {
+        AssessmentSection domainKnowledge = AssessmentSection.DOMAIN_KNOWLEDGE;
+        List<Question> questions = questions(domainKnowledge.getTargetSize());
+        // The attempt's REAL category is "Programming Fundamentals" -- one of three pool members --
+        // but the union also includes "Database & SQL", which is what should let Backend Developer's
+        // "Database" skill match.
+        Category drawnCategory = Category.builder()
+                .id(CATEGORY_ID).name("Programming Fundamentals").build();
+        AssessmentAttempt attempt = AssessmentAttempt.builder()
+                .id(ATTEMPT_ID).userId(USER_ID).categoryId(CATEGORY_ID)
+                .section(domainKnowledge.name()).status(AttemptStatus.IN_PROGRESS).build();
+
+        when(attemptRepository.findByIdAndUserId(ATTEMPT_ID, USER_ID)).thenReturn(Optional.of(attempt));
+        when(categoryRepository.findById(CATEGORY_ID)).thenReturn(Optional.of(drawnCategory));
+        when(questionRepository.findByCategoryIdAndIsActiveTrueOrderByOrderIndexAsc(CATEGORY_ID)).thenReturn(questions);
+        when(optionRepository.findByQuestionIdInOrderByOrderIndex(anyList())).thenReturn(optionsFor(questions));
+        when(careerPathRepository.findAll()).thenReturn(List.of(
+                CareerPath.builder().id(1L).name("Backend Developer")
+                        .requiredSkills("Programming,Database,System Design").build(),
+                CareerPath.builder().id(2L).name("Frontend Developer")
+                        .requiredSkills("Web Development,Programming").build()));
+        when(resultRepository.save(any(AssessmentResult.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // Every question answered with the weight-3 option: 100%.
+        AssessmentResultDto dto = assessmentService.submitAttempt(USER_ID, submitAll(questions, 1));
+
+        // Under the old bug (relevance matched only "Programming Fundamentals"), Backend Developer
+        // matches 1 of 3 skills (relevance 0.53) and Frontend Developer matches 1 of 2 (relevance
+        // 0.65) -- Frontend wins purely because its skill list is shorter, regardless of the
+        // student's answers. Unioning the pool lets Backend's "Database" skill match too (2 of 3,
+        // relevance 0.77), so it correctly outranks Frontend's still-1-of-2 match.
+        assertEquals("Backend Developer", dto.getTopCareerPath());
+        assertEquals(76.67, dto.getCareerMatchPercentage());
+    }
+
+    @Test
     @DisplayName("submitAttempt: the final section (Soft Skills) publishes ONE event averaging all 3 "
             + "sections -- not just its own 5-question score")
     void submitAttempt_FinalSection_AggregatesAllThreeSections() {
