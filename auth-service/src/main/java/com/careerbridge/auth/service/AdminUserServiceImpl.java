@@ -199,6 +199,23 @@ public class AdminUserServiceImpl implements AdminUserService {
      */
     @Override
     @Transactional
+    public UserSummaryResponse linkOrganization(String callerRole, Long targetUserId, Long organizationId) {
+        requireSuperAdmin(callerRole);
+
+        User user = userRepository.findByIdAndIsDeletedFalse(targetUserId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        Long previous = user.getOrganizationId();
+        user.setOrganizationId(organizationId);
+        User saved = userRepository.save(user);
+
+        log.info("organizationId changed for userId={} from {} to {}", targetUserId, previous, organizationId);
+
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
     public UserSummaryResponse activateUser(String callerRole, Long callerOrgId, Long targetUserId) {
         requireAdmin(callerRole);
 

@@ -69,9 +69,7 @@ export default function OnboardingPage() {
   const [profile, setProfile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  // What the backend already had before this page loaded -- Continue must only POST entries
-  // beyond these, or resuming a partially-finished profile just re-submits rows that are already
-  // saved and the backend rejects them (skills have a per-student uniqueness check).
+  // What the backend already had -- Continue should only POST new entries, not resubmit saved ones.
   const [existingInstitutions, setExistingInstitutions] = useState(new Set());
   const [existingSkillNames, setExistingSkillNames] = useState(new Set());
 
@@ -85,9 +83,7 @@ export default function OnboardingPage() {
       setProfile(p);
       if (!p) return;
 
-      // Coming back to this page after closing the browser (or navigating here directly once
-      // already onboarded) must show what was actually saved, not a blank form -- otherwise
-      // resubmitting would just create duplicate education/skill rows against the same profile.
+      // Show what was actually saved on return, not a blank form -- avoids duplicate rows.
       const hasEducation = (p.educations || []).length > 0;
       if (hasEducation) {
         setEducation(p.educations.map((e) => ({
@@ -123,9 +119,7 @@ export default function OnboardingPage() {
         isPublic: p.isPublic ?? true,
       });
 
-      // Land on the first step that still needs attention, not always step 0 -- someone who
-      // finished education and skills in an earlier session shouldn't have to click through both
-      // again just to reach basic info.
+      // Land on the first step still needing attention, not always step 0.
       let resumeStep = 0;
       if (hasEducation) resumeStep = 1;
       if (hasEducation && hasSkills) resumeStep = 2;
@@ -172,9 +166,7 @@ export default function OnboardingPage() {
   };
 
   const submitEducation = async () => {
-    // Anything already on the profile (loaded on mount, or from an earlier Continue this
-    // session) must not be re-sent -- re-adding a qualification the student never touched again
-    // just piles up duplicate rows.
+    // Skip anything already saved to the profile -- don't re-send and pile up duplicates.
     const toSend = education.filter((e) => e.institution.trim() && !existingInstitutions.has(e.institution.trim().toLowerCase()));
     for (const e of toSend) {
       // eslint-disable-next-line no-await-in-loop
@@ -191,10 +183,7 @@ export default function OnboardingPage() {
   };
 
   const submitSkills = async () => {
-    // Same reasoning as submitEducation: skip anything already saved. student-service enforces
-    // one row per (student, skillName) anyway, but skipping client-side is what turns "Skill
-    // 'Java' is already on this profile" from a blocking error into a no-op, since re-adding an
-    // unchanged skill you already saved is not something Continue should ever fail on.
+    // Same as submitEducation: skip already-saved skills so Continue never errors on a re-add.
     const toSend = skills.filter((s) => !existingSkillNames.has(s.name.trim().toLowerCase()));
     for (const s of toSend) {
       const isCustom = suggestions ? !suggestions.includes(s.name) : s.isCustom;
@@ -252,9 +241,7 @@ export default function OnboardingPage() {
 
   const alreadySelected = useMemo(() => new Set(skills.map((sk) => sk.name.toLowerCase())), [skills]);
 
-  // Reflects what has actually been typed, not which step you've clicked past -- filling in
-  // qualification 2 while still sitting on step 0 must count immediately, not only once Continue
-  // is clicked.
+  // Reflects what's actually been typed, not which step you've clicked past.
   const filledEducations = education.filter((e) => e.institution.trim());
   const educationDone = filledEducations.length > 0;
   const educationSummary = filledEducations.length === 0

@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthState } from '../../hooks/useAuth';
+import { getTokenPayload } from '../../utils/tokenUtils';
+import { ROLE_REDIRECTS } from '../../utils/postLoginRedirect';
 import {
   Button, IconButton, Logo, StatTile, ProgressMeter, ScoreRing, ListRow, Badge, Icon,
 } from '../../components/ui';
 import './home.css';
+
+// Students land on /dashboard, which is a real "Dashboard". Every other role has its own console,
+// not a dashboard, so the header CTA should say and go to that -- not a generic /dashboard link
+// that 403s or shows the wrong screen for a recruiter, placement officer, org admin or super admin.
+function homeCta() {
+  const role = getTokenPayload()?.role;
+  if (!role || role === 'STUDENT') return { label: 'Dashboard', to: '/dashboard' };
+  return { label: 'Console', to: ROLE_REDIRECTS[role] || '/dashboard' };
+}
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const NAV_LINKS = [
   { href: '#features', label: 'Features' },
   { href: '#how-it-works', label: 'Roadmap' },
+  { href: '/plans', label: 'Plans' },
   { href: '/register-institution', label: 'For colleges' },
   { href: '/recruiter-console', label: 'For recruiters' },
 ];
@@ -90,6 +102,7 @@ function useAnimatedStats() {
 
 export default function HomePage() {
   const { loggedIn, logout } = useAuthState();
+  const cta = loggedIn ? homeCta() : null;
   const [isMobile, setIsMobile] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [heroIn, setHeroIn] = useState(false);
@@ -176,7 +189,7 @@ export default function HomePage() {
                 {loggedIn ? (
                   <>
                     <Button variant="ghost" size="sm" onClick={logout}>Log out</Button>
-                    <Button variant="primary" size="sm" iconAfter="arrow-right" to="/dashboard">Dashboard</Button>
+                    <Button variant="primary" size="sm" iconAfter="arrow-right" to={cta.to}>{cta.label}</Button>
                   </>
                 ) : (
                   <>
@@ -199,7 +212,7 @@ export default function HomePage() {
             <div style={{ height: 1, background: 'var(--line-hairline)', margin: '4px 0' }} />
             {loggedIn ? (
               <>
-                <Button variant="primary" iconAfter="arrow-right" to="/dashboard" fullWidth>Dashboard</Button>
+                <Button variant="primary" iconAfter="arrow-right" to={cta.to} fullWidth>{cta.label}</Button>
                 <Button variant="ghost" onClick={logout} fullWidth>Log out</Button>
               </>
             ) : (
@@ -385,7 +398,7 @@ export default function HomePage() {
               <a href="/about" style={{ fontSize: 13, color: 'var(--ink-700)' }}>About</a>
               <a href="/register-institution" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For colleges</a>
               <a href="/recruiter-console" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For recruiters</a>
-              <a href="/pricing" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Pricing</a>
+              <a href="/plans" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Pricing</a>
             </div>
             <div style={{ background: 'var(--bone-200)', padding: '0 0 0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Legal</span>

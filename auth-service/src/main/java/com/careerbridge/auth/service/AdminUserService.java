@@ -39,6 +39,16 @@ public interface AdminUserService {
     /** Takes callerId for the same self-lockout reason as changeUserRole. */
     UserSummaryResponse deactivateUser(String callerRole, Long callerId, Long callerOrgId, Long targetUserId);
 
+    /**
+     * SUPER_ADMIN only -- an ORG_ADMIN able to move a user into an organization could move one into
+     * their OWN organization, which is a privilege escalation dressed up as a data edit. This is
+     * the only way an existing user's organizationId ever changes: POST /auth/register sets it once
+     * at signup and nothing else in the system has ever been able to touch it since.
+     *
+     * organizationId may be null, which unlinks the user rather than being rejected as invalid.
+     */
+    UserSummaryResponse linkOrganization(String callerRole, Long targetUserId, Long organizationId);
+
     UserSummaryResponse activateUser(String callerRole, Long callerOrgId, Long targetUserId);
 
     /** Counts are platform-wide for a SUPER_ADMIN and organization-scoped for an ORG_ADMIN. */

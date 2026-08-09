@@ -15,7 +15,6 @@
 @media (max-width: 900px) {
   .cb-op-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
   .cb-op-sidebar-label, .cb-op-sidebar-footer, .cb-op-toggle-row { display: none !important; }
-  .cb-op-search { display: none !important; }
   .cb-op-header { padding: 0 16px !important; gap: 12px !important; }
   .cb-op-main-pad { padding: 22px 16px 48px !important; }
   .cb-op-board { grid-template-columns: 1fr !important; }
