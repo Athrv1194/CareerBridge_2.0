@@ -64,7 +64,6 @@
 
 @media (max-width: 900px) {
   .cb-co-sidebar-label, .cb-co-sidebar-footer, .cb-co-toggle-row { display: none !important; }
-  .cb-co-search { display: none !important; }
   .cb-co-header { padding: 0 16px !important; gap: 12px !important; }
 }
 

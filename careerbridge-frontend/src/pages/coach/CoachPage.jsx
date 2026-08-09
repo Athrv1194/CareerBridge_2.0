@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Icon, IconButton, Input, Logo, Skeleton, Tag } from '../../components/ui';
 import { getSessions, getSession, createSession, deleteSession, sendCoachMessage, getMyResources } from '../../api/aiCoachApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { getDisplayName } from '../../utils/tokenUtils';
 import './coach.css';
 
 const NAV_ITEMS = [
@@ -227,8 +228,7 @@ export default function CoachPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-collapse side rails on narrower viewports; only resets on crossing the breakpoint, so a
-  // manual re-expand survives resizes that don't cross it.
+  // Auto-collapse side rails on narrow viewports; a manual re-expand survives small resizes.
   useEffect(() => {
     const mqNav = window.matchMedia('(max-width: 1180px)');
     const mqSessions = window.matchMedia('(max-width: 720px)');
@@ -345,11 +345,6 @@ export default function CoachPage() {
 
       <header className="cb-co-header" style={{ flexShrink: 0, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-co-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
@@ -365,7 +360,7 @@ export default function CoachPage() {
               <Icon name="user" size={15} />
             </div>
             <div className="cb-co-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>Student</span>
+              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{getDisplayName('Student')}</span>
             </div>
           </div>
         </div>
@@ -484,7 +479,7 @@ export default function CoachPage() {
                       return (
                         <div key={i}>
                           {isAssistant && i === firstAssistantIdx && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: -4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                               <Badge tone="accent">AI Coach</Badge>
                               <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Coaching session · context: your assessment, roadmap and readiness score</span>
                             </div>

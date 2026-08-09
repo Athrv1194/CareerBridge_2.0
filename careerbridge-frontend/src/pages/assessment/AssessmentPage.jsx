@@ -90,8 +90,7 @@ export default function AssessmentPage() {
     clearTimeout(analyzeTimerRef.current);
   }, []);
 
-  // Same breakpoint and matchMedia pattern as HomePage -- below this width the fixed 320px sidebar
-  // column stops fitting alongside the question/intro content, so it needs to stack instead.
+  // Below this width the fixed sidebar no longer fits alongside the content, so it stacks instead.
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 860px)');
     const update = () => setIsMobile(mq.matches);
@@ -156,11 +155,7 @@ export default function AssessmentPage() {
     setIndex((i) => Math.max(0, i - 1));
   }, []);
 
-  // The Soft Skills (final section) response IS already the true 3-section blend -- assessment-service
-  // computes it once and uses it for both the recommendation email and this response, so there is
-  // nothing left to re-derive here. Re-averaging on the client used to produce a different number
-  // than the career list underneath it (the client only ever averaged the headline percentage, never
-  // the per-career scores), which is the bug this replaced.
+  // The final section's response is already the true 3-section blend -- don't re-average it client-side.
   const finishSubmit = useCallback((sectionResult) => {
     const isLast = sectionIndex >= SECTIONS.length - 1;
     setIsSubmitting(false);

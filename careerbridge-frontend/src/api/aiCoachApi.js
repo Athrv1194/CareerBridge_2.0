@@ -6,9 +6,7 @@ function authHeader() {
   return { Authorization: `Bearer ${getAccessToken()}` };
 }
 
-// [] means "no roadmap yet"; a list where every entry has resources: [] means the roadmap exists
-// but the catalog hasn't been refreshed for this career. Both are legitimate, non-error states, so
-// this never throws for either -- only a genuine network/5xx failure returns [].
+// Empty resources per milestone just means the catalog isn't refreshed yet, not an error.
 export async function getMyResources() {
   try {
     const res = await fetch(`${API_BASE}/ai-coach/resources`, { headers: authHeader() });
@@ -19,7 +17,7 @@ export async function getMyResources() {
   }
 }
 
-// List-view shape only (no messages) -- matches ChatSessionSummary on the backend.
+// List view only, no messages.
 export async function getSessions() {
   const res = await fetch(`${API_BASE}/ai-coach/sessions`, { headers: authHeader() });
   if (!res.ok) return [];

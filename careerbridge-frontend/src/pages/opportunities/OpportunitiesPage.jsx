@@ -26,11 +26,7 @@ const WORK_MODE_LABEL = { REMOTE: 'Remote', HYBRID: 'Hybrid', ON_SITE: 'On-site'
 const STATUS_TONE = { APPLIED: 'default', SHORTLISTED: 'info', INTERVIEWED: 'accent', OFFERED: 'success', REJECTED: 'danger' };
 const STATUS_LABEL = { APPLIED: 'Applied', SHORTLISTED: 'Shortlisted', INTERVIEWED: 'Interviewed', OFFERED: 'Offered', REJECTED: 'Rejected' };
 
-// Client-side keyword-bucket estimate, same technique resume-service's AtsScoreCalculator uses
-// server-side against a career -- there is no backend endpoint that scores a student against a
-// SPECIFIC job posting, so this is the only real signal available for the list view. Stage two
-// (computeExactMatch) replaces it with a genuine overlap against the posting's own requiredSkills
-// the moment the detail loads.
+// Rough client-side keyword match for the list view; computeExactMatch replaces it once a job's detail loads.
 const CAREER_KEYWORDS = {
   'Full Stack Developer': ['Java', 'Spring Boot', 'React', 'JavaScript', 'SQL', 'REST API', 'Git', 'Docker', 'HTML', 'CSS', 'Maven', 'Hibernate'],
   'Backend Developer': ['Java', 'Spring Boot', 'Spring', 'REST API', 'SQL', 'PostgreSQL', 'MySQL', 'Maven', 'Git', 'Hibernate', 'JPA', 'Microservices', 'Docker'],
@@ -172,8 +168,7 @@ export default function OpportunitiesPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  // Every job whose real requiredSkills we've fetched -- once we know the real number for a job,
-  // the list should show that instead of the title-guess forever, not just in the detail panel.
+  // Jobs whose real requiredSkills we've fetched -- once known, use that instead of the title-guess.
   const [detailCache, setDetailCache] = useState({});
 
   const [coverNote, setCoverNote] = useState('');
@@ -241,8 +236,7 @@ export default function OpportunitiesPage() {
     if (!selectedId || applying) return;
     const job = jobs.find((j) => j.id === selectedId);
     setApplying(true);
-    // The notes textarea is deliberately NOT sent as coverLetter -- it's the student's own
-    // scratch space ("Not saved — for your own reference only"), never the recruiter's business.
+    // Notes are the student's own scratch space, never sent as the coverLetter.
     applyToJob(selectedId, null).then((application) => {
       setApplications((prev) => [application, ...prev]);
       setApplying(false);
@@ -281,11 +275,7 @@ export default function OpportunitiesPage() {
     return map;
   }, [applications]);
 
-  // Match scores only depend on jobs + skills + detailCache, never on the search/filter inputs --
-  // computed once here so typing in the search box doesn't re-run keyword matching on every
-  // keystroke. Once a job's real requiredSkills have been fetched (it's been opened at least once
-  // -- the first job auto-opens on load), the list uses that exact number instead of the
-  // title-guess, so the same job never shows two different percentages on screen at once.
+  // Computed once here so typing in search doesn't re-run keyword matching on every keystroke.
   const jobsWithMatch = useMemo(() => (jobs || [])
     .filter((j) => j.isActive !== false)
     .map((j) => {
@@ -352,11 +342,6 @@ export default function OpportunitiesPage() {
 
       <header className="cb-op-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-op-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
@@ -415,7 +400,7 @@ export default function OpportunitiesPage() {
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
                 <p style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--ink-900)', margin: 0, fontWeight: 500 }}>See your PRS impact for every role you apply to.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-600)', margin: 0 }}>Free covers your top 3 matches. Upgrade for unlimited job matching and coach follow-ups.</p>
-                <Link to="/" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
                   <Button variant="primary" size="sm" fullWidth iconAfter="arrow-right">See plans</Button>
                 </Link>
               </div>

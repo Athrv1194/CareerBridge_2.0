@@ -25,9 +25,7 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// Shared by both the top-3 cards and the "also ranked" grid -- one build-my-roadmap action per
-// career, everywhere a career is shown, not just the #1 match. Idempotent on the backend, so a
-// re-click after "Built" just re-confirms rather than erroring.
+// Shared by the top-3 cards and the "also ranked" grid -- safe to re-click after "Built".
 function RoadmapButton({ careerName, status, onBuild, size = 'sm' }) {
   if (status === 'built') {
     return (
@@ -175,7 +173,7 @@ export default function RecommendationPage() {
                 <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4, lineHeight: 1.4 }}>
                   Free covers your top 3 matches. Upgrade for the full roadmap and unlimited coach sessions.
                 </div>
-                <Link to="/" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 12 }}>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 12 }}>
                   <Button variant="primary" size="sm" fullWidth>See plans</Button>
                 </Link>
               </div>

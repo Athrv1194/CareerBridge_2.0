@@ -125,8 +125,7 @@ export default function ResumePage() {
 
   const selected = useMemo(() => resumes.find((r) => r.id === selectedId) || null, [resumes, selectedId]);
 
-  // Reseed the builder form from whichever resume is selected -- editing continues from that
-  // version's own toggles rather than always resetting to defaults.
+  // Reseed the form from whichever resume is selected instead of always resetting to defaults.
   useEffect(() => {
     if (selected) {
       setSummary(selected.summary || '');
@@ -142,15 +141,12 @@ export default function ResumePage() {
     }
   }, [selected?.id]);
 
-  // overrideJobDescription lets a caller (the auto-tailor-on-arrival effect below) generate with a
-  // job description that was just set via setJobDescription, without waiting a render for state to
-  // catch up -- React batches that setState, so reading the `jobDescription` closure value in the
-  // same tick would still see the old (empty) string.
+  // overrideJobDescription sidesteps a stale closure -- React hasn't re-rendered with the new state yet.
   const handleGenerate = useCallback(async (overrideJobDescription) => {
     setGenerating(true);
     setGenError('');
     try {
-      const jd = overrideJobDescription !== undefined ? overrideJobDescription : jobDescription;
+      const jd = typeof overrideJobDescription === 'string' ? overrideJobDescription : jobDescription;
       const options = {
         summary: summary || null,
         includePhone, includeEmail, includeLinks, includeLocation,
@@ -171,10 +167,7 @@ export default function ResumePage() {
     }
   }, [summary, includePhone, includeEmail, includeLinks, includeLocation, includeExperience, includeSkills, includeProjects, includeEducation, includeCertificates, jobDescription, showToast]);
 
-  // Arrived here via Opportunities' "Tailor my résumé" button with a specific job's description in
-  // router state -- generate immediately rather than making the student find and paste it
-  // themselves. Runs once profile/resumes have loaded, and clears the state afterward so a refresh
-  // or back-navigation doesn't silently re-tailor.
+  // Arrived via "Tailor my résumé" with a job description in router state -- generate right away.
   useEffect(() => {
     const incoming = location.state?.jobDescription;
     if (!incoming || loading) return;
@@ -307,11 +300,6 @@ export default function ResumePage() {
 
       <header className="cb-rs-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div className="cb-rs-search" style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 20px', minWidth: 0 }}>
-          <div style={{ width: '100%', maxWidth: 440 }}>
-            <Input placeholder="Search careers, roadmap steps, opportunities" value="" onChange={() => {}} />
-          </div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
@@ -353,7 +341,7 @@ export default function ResumePage() {
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
                 <p style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--ink-900)', margin: 0, fontWeight: 500 }}>Résumé exports need Plus.</p>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-600)', margin: 0 }}>Free covers your latest résumé. Upgrade for unlimited versions and priority ATS scoring.</p>
-                <Link to="/" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
                   <Button variant="primary" size="sm" fullWidth iconAfter="arrow-right">See plans</Button>
                 </Link>
               </div>
@@ -369,7 +357,7 @@ export default function ResumePage() {
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Your résumés</h1>
               <p style={{ fontSize: 14, color: 'var(--ink-500)', margin: 0, maxWidth: 440 }}>Generated from your profile. ATS-scored against your career path.</p>
             </div>
-            <Button variant="primary" size="md" icon="refresh-cw" disabled={generating} onClick={handleGenerate}>
+            <Button variant="primary" size="md" icon="refresh-cw" disabled={generating} onClick={() => handleGenerate()}>
               {generating ? 'Generating…' : (resumes.length ? 'Regenerate résumé' : 'Generate my résumé')}
             </Button>
           </div>
@@ -462,7 +450,7 @@ export default function ResumePage() {
                       <Icon name="file-text" size={24} />
                       <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, color: 'var(--ink-900)', margin: '12px 0 8px' }}>Nothing to show yet</h2>
                       <p style={{ fontSize: 14, color: 'var(--ink-500)', margin: '0 0 16px' }}>Generate your first résumé to see its ATS breakdown here.</p>
-                      <Button iconAfter="arrow-right" disabled={generating} onClick={handleGenerate}>Generate my résumé</Button>
+                      <Button iconAfter="arrow-right" disabled={generating} onClick={() => handleGenerate()}>Generate my résumé</Button>
                     </div>
                   </div>
                 )}
@@ -694,7 +682,7 @@ export default function ResumePage() {
                         </div>
 
                         <div>
-                          <Button variant="secondary" size="sm" iconAfter="refresh-cw" disabled={generating} onClick={handleGenerate}>
+                          <Button variant="secondary" size="sm" iconAfter="refresh-cw" disabled={generating} onClick={() => handleGenerate()}>
                             {generating ? 'Regenerating…' : 'Regenerate with these changes'}
                           </Button>
                         </div>
