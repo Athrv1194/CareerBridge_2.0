@@ -425,7 +425,12 @@ export default function OpportunitiesPage() {
                   </span>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <Badge tone="info">{applications.length} live application{applications.length === 1 ? '' : 's'}</Badge>
-                    <Button size="sm" variant="secondary" iconAfter="file-text" to="/resume">Tailor my résumé</Button>
+                    <Button
+                      size="sm" variant="secondary" iconAfter="file-text" to="/resume"
+                      state={detailView ? { jobDescription: detailView.description, jobTitle: detailView.title } : undefined}
+                    >
+                      Tailor my résumé
+                    </Button>
                   </div>
                 </div>
 

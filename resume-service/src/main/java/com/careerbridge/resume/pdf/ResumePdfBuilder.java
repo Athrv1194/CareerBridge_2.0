@@ -2,7 +2,9 @@ package com.careerbridge.resume.pdf;
 
 import com.careerbridge.resume.dto.CertificateDto;
 import com.careerbridge.resume.dto.EducationDto;
+import com.careerbridge.resume.dto.ExperienceDto;
 import com.careerbridge.resume.dto.ProjectDto;
+import com.careerbridge.resume.dto.ResumeBuildOptions;
 import com.careerbridge.resume.dto.SkillDto;
 import com.careerbridge.resume.dto.StudentProfileDto;
 import com.lowagie.text.Chunk;
@@ -75,7 +77,7 @@ public class ResumePdfBuilder {
     /**
      * @throws IOException if the PDF cannot be written; the service maps this to a 500.
      */
-    public byte[] build(StudentProfileDto profile) throws IOException {
+    public byte[] build(StudentProfileDto profile, ResumeBuildOptions options) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         // Rectangle, then left, right, top, bottom -- that is OpenPDF's argument order, not the
@@ -86,12 +88,25 @@ public class ResumePdfBuilder {
             PdfWriter.getInstance(document, out);
             document.open();
 
-            addHeader(document, profile);
-            addSkills(document, profile);
-            addEducation(document, profile);
-            addProjects(document, profile);
-            addCertificates(document, profile);
-            addLinks(document, profile);
+            addHeader(document, profile, options);
+            if (options.isIncludeExperience()) {
+                addExperience(document, profile);
+            }
+            if (options.isIncludeSkills()) {
+                addSkills(document, profile);
+            }
+            if (options.isIncludeProjects()) {
+                addProjects(document, profile);
+            }
+            if (options.isIncludeEducation()) {
+                addEducation(document, profile);
+            }
+            if (options.isIncludeCertificates()) {
+                addCertificates(document, profile);
+            }
+            if (options.isIncludeLinks()) {
+                addLinks(document, profile);
+            }
         } catch (DocumentException ex) {
             throw new IOException("Failed to render resume PDF", ex);
         } finally {
@@ -104,15 +119,18 @@ public class ResumePdfBuilder {
         return out.toByteArray();
     }
 
-    private void addHeader(Document document, StudentProfileDto profile) throws DocumentException {
+    private void addHeader(Document document, StudentProfileDto profile, ResumeBuildOptions options) throws DocumentException {
         String fullName = join(" ", profile.getFirstName(), profile.getLastName());
         Paragraph name = new Paragraph(fullName.isBlank() ? "Resume" : fullName, NAME_FONT);
         name.setAlignment(Element.ALIGN_CENTER);
         document.add(name);
 
-        // Only the contact parts that exist, so a student with no phone gets "email | city",
-        // never "email |  | city".
-        String contact = join(" | ", profile.getEmail(), profile.getPhone(), profile.getCity());
+        // Only the contact parts that exist AND are toggled on, so a student with no phone -- or
+        // who switched the phone toggle off -- gets "email | city", never "email |  | city".
+        String contact = join(" | ",
+                options.isIncludeEmail() ? profile.getEmail() : null,
+                options.isIncludePhone() ? profile.getPhone() : null,
+                options.isIncludeLocation() ? profile.getCity() : null);
         if (!contact.isBlank()) {
             Paragraph contactLine = new Paragraph(contact, CONTACT_FONT);
             contactLine.setAlignment(Element.ALIGN_CENTER);
@@ -120,13 +138,40 @@ public class ResumePdfBuilder {
             document.add(contactLine);
         }
 
-        if (StringUtils.hasText(profile.getBio())) {
-            Paragraph bio = new Paragraph(truncate(profile.getBio()), SMALL_FONT);
+        String summary = StringUtils.hasText(options.getSummary()) ? options.getSummary() : profile.getBio();
+        if (StringUtils.hasText(summary)) {
+            Paragraph bio = new Paragraph(truncate(summary), SMALL_FONT);
             bio.setAlignment(Element.ALIGN_CENTER);
             bio.setSpacingBefore(6f);
             document.add(bio);
         }
 
+        addSeparator(document);
+    }
+
+    private void addExperience(Document document, StudentProfileDto profile) throws DocumentException {
+        List<ExperienceDto> experiences = profile.getExperiences();
+        if (isEmpty(experiences)) {
+            return;
+        }
+
+        addHeading(document, "WORK EXPERIENCE");
+        for (ExperienceDto exp : experiences) {
+            if (exp == null || !StringUtils.hasText(exp.getTitle())) {
+                continue;
+            }
+
+            String line = join(" - ", exp.getTitle(), exp.getCompany());
+            String dates = formatDateRange(exp.getStartDate(), exp.getEndDate(), exp.getIsCurrent());
+            if (!dates.isBlank()) {
+                line = line + " (" + dates + ")";
+            }
+
+            document.add(itemParagraph(line, ITEM_TITLE_FONT));
+            if (StringUtils.hasText(exp.getDescription())) {
+                document.add(new Paragraph(truncate(exp.getDescription()), SMALL_FONT));
+            }
+        }
         addSeparator(document);
     }
 
@@ -307,6 +352,21 @@ public class ResumePdfBuilder {
 
     private String formatMonthYear(LocalDate date) {
         return date == null ? "" : date.format(MONTH_YEAR);
+    }
+
+    private String formatDateRange(LocalDate start, LocalDate end, Boolean isCurrent) {
+        String startLabel = formatMonthYear(start);
+        String endLabel = Boolean.TRUE.equals(isCurrent) ? "Present" : formatMonthYear(end);
+        if (startLabel.isBlank() && endLabel.isBlank()) {
+            return "";
+        }
+        if (startLabel.isBlank()) {
+            return endLabel;
+        }
+        if (endLabel.isBlank()) {
+            return startLabel;
+        }
+        return startLabel + " - " + endLabel;
     }
 
     private String truncate(String text) {

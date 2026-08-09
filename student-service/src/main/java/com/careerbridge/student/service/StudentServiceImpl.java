@@ -3,6 +3,7 @@ package com.careerbridge.student.service;
 import com.careerbridge.student.constants.SkillConstants;
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ExperienceDto;
 import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
@@ -12,11 +13,13 @@ import com.careerbridge.student.dto.StudentProfileResponse;
 import com.careerbridge.student.exception.CustomException;
 import com.careerbridge.student.model.Certificate;
 import com.careerbridge.student.model.Education;
+import com.careerbridge.student.model.Experience;
 import com.careerbridge.student.model.Project;
 import com.careerbridge.student.model.Skill;
 import com.careerbridge.student.model.StudentProfile;
 import com.careerbridge.student.repository.CertificateRepository;
 import com.careerbridge.student.repository.EducationRepository;
+import com.careerbridge.student.repository.ExperienceRepository;
 import com.careerbridge.student.repository.ProjectRepository;
 import com.careerbridge.student.repository.SkillRepository;
 import com.careerbridge.student.repository.StudentProfileRepository;
@@ -52,17 +55,20 @@ public class StudentServiceImpl implements StudentService {
     private final SkillRepository skillRepository;
     private final ProjectRepository projectRepository;
     private final CertificateRepository certificateRepository;
+    private final ExperienceRepository experienceRepository;
 
     public StudentServiceImpl(StudentProfileRepository studentProfileRepository,
             EducationRepository educationRepository,
             SkillRepository skillRepository,
             ProjectRepository projectRepository,
-            CertificateRepository certificateRepository) {
+            CertificateRepository certificateRepository,
+            ExperienceRepository experienceRepository) {
         this.studentProfileRepository = studentProfileRepository;
         this.educationRepository = educationRepository;
         this.skillRepository = skillRepository;
         this.projectRepository = projectRepository;
         this.certificateRepository = certificateRepository;
+        this.experienceRepository = experienceRepository;
     }
 
     @Override
@@ -95,6 +101,8 @@ public class StudentServiceImpl implements StudentService {
                 .skills(skillRepository.findByStudentProfileId(id).stream().map(this::toDto).toList())
                 .projects(projectRepository.findByStudentProfileId(id).stream().map(this::toDto).toList())
                 .certificates(certificateRepository.findByStudentProfileId(id).stream().map(this::toDto).toList())
+                .experiences(experienceRepository.findByStudentProfileIdOrderByStartDateDesc(id).stream()
+                        .map(this::toDto).toList())
                 .build();
     }
 
@@ -366,6 +374,92 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     @Transactional
+    public void uploadCertificateFile(Long userId, Long certificateId, byte[] bytes, String contentType, String fileName) {
+        StudentProfile profile = requireProfile(userId);
+        Certificate certificate = requireOwnedCertificate(profile.getId(), certificateId);
+        certificate.setCredentialFile(bytes);
+        certificate.setCredentialFileContentType(contentType);
+        certificate.setCredentialFileName(fileName);
+        certificateRepository.save(certificate);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ImageBlob getCertificateFile(Long userId, Long certificateId) {
+        StudentProfile profile = requireProfile(userId);
+        Certificate certificate = requireOwnedCertificate(profile.getId(), certificateId);
+        if (certificate.getCredentialFile() == null) {
+            throw new CustomException("This certificate has no file attached", HttpStatus.NOT_FOUND);
+        }
+        return ImageBlob.builder()
+                .bytes(certificate.getCredentialFile())
+                .contentType(certificate.getCredentialFileContentType())
+                .fileName(certificate.getCredentialFileName())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteCertificateFile(Long userId, Long certificateId) {
+        StudentProfile profile = requireProfile(userId);
+        Certificate certificate = requireOwnedCertificate(profile.getId(), certificateId);
+        certificate.setCredentialFile(null);
+        certificate.setCredentialFileContentType(null);
+        certificate.setCredentialFileName(null);
+        certificateRepository.save(certificate);
+    }
+
+    @Override
+    @Transactional
+    public ExperienceDto addExperience(Long userId, ExperienceDto dto) {
+        StudentProfile profile = requireProfile(userId);
+
+        Experience saved = experienceRepository.save(Experience.builder()
+                .studentProfileId(profile.getId())
+                .title(dto.getTitle())
+                .company(dto.getCompany())
+                .startDate(dto.getStartDate())
+                .endDate(Boolean.TRUE.equals(dto.getIsCurrent()) ? null : dto.getEndDate())
+                .isCurrent(dto.getIsCurrent() != null && dto.getIsCurrent())
+                .description(dto.getDescription())
+                .build());
+
+        // No recalculate(): work experience carries no weight in ProfileCompletionCalculator --
+        // adding it would mean re-deriving every existing student's completion percentage, a bigger
+        // decision than this page needs. Same deliberate omission as certificates.
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public ExperienceDto updateExperience(Long userId, Long experienceId, ExperienceDto dto) {
+        StudentProfile profile = requireProfile(userId);
+        Experience existing = experienceRepository.findByIdAndStudentProfileId(experienceId, profile.getId())
+                .orElseThrow(() -> new CustomException("Experience entry not found", HttpStatus.NOT_FOUND));
+
+        existing.setTitle(dto.getTitle());
+        existing.setCompany(dto.getCompany());
+        existing.setStartDate(dto.getStartDate());
+        boolean current = dto.getIsCurrent() != null && dto.getIsCurrent();
+        existing.setIsCurrent(current);
+        existing.setEndDate(current ? null : dto.getEndDate());
+        existing.setDescription(dto.getDescription());
+
+        return toDto(experienceRepository.save(existing));
+    }
+
+    @Override
+    @Transactional
+    public void deleteExperience(Long userId, Long experienceId) {
+        StudentProfile profile = requireProfile(userId);
+        long deleted = experienceRepository.deleteByIdAndStudentProfileId(experienceId, profile.getId());
+        if (deleted == 0) {
+            throw new CustomException("Experience entry not found", HttpStatus.NOT_FOUND);
+        }
+    }
+
+    @Override
+    @Transactional
     public void uploadAvatar(Long userId, byte[] bytes, String contentType) {
         StudentProfile profile = requireProfile(userId);
         profile.setAvatarImage(bytes);
@@ -473,6 +567,11 @@ public class StudentServiceImpl implements StudentService {
                 .orElseThrow(() -> new CustomException("Project not found", HttpStatus.NOT_FOUND));
     }
 
+    private Certificate requireOwnedCertificate(Long profileId, Long certificateId) {
+        return certificateRepository.findByIdAndStudentProfileId(certificateId, profileId)
+                .orElseThrow(() -> new CustomException("Certificate not found", HttpStatus.NOT_FOUND));
+    }
+
     /**
      * Single place the completion percentage is derived, so no caller can forget to
      * update it.
@@ -536,6 +635,20 @@ public class StudentServiceImpl implements StudentService {
                 .issueDate(c.getIssueDate())
                 .expiryDate(c.getExpiryDate())
                 .credentialUrl(c.getCredentialUrl())
+                .hasCredentialFile(c.getCredentialFile() != null)
+                .credentialFileName(c.getCredentialFileName())
+                .build();
+    }
+
+    private ExperienceDto toDto(Experience e) {
+        return ExperienceDto.builder()
+                .id(e.getId())
+                .title(e.getTitle())
+                .company(e.getCompany())
+                .startDate(e.getStartDate())
+                .endDate(e.getEndDate())
+                .isCurrent(e.getIsCurrent())
+                .description(e.getDescription())
                 .build();
     }
 }

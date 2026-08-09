@@ -42,4 +42,5 @@ public class StudentProfileDto {
     private List<SkillDto> skills;
     private List<ProjectDto> projects;
     private List<CertificateDto> certificates;
+    private List<ExperienceDto> experiences;
 }
