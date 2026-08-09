@@ -2,6 +2,7 @@ package com.careerbridge.auth.controller;
 
 import com.careerbridge.auth.dto.AdminStatsResponse;
 import com.careerbridge.auth.dto.ChangeRoleRequest;
+import com.careerbridge.auth.dto.LinkOrganizationRequest;
 import com.careerbridge.auth.dto.UserSummaryResponse;
 import com.careerbridge.auth.service.AdminUserService;
 import jakarta.validation.Valid;
@@ -88,6 +89,19 @@ public class AdminUserController {
             @Valid @RequestBody ChangeRoleRequest request) {
         return ResponseEntity.ok(
                 adminUserService.changeUserRole(callerRole, callerId, userId, request.getRole()));
+    }
+
+    /**
+     * SUPER_ADMIN only. This is the only way an existing user's organizationId ever changes -- see
+     * AdminUserService.linkOrganization. Body's organizationId may be null to unlink.
+     */
+    @PatchMapping("/users/{userId}/organization")
+    public ResponseEntity<UserSummaryResponse> linkOrganization(
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long userId,
+            @RequestBody LinkOrganizationRequest request) {
+        return ResponseEntity.ok(
+                adminUserService.linkOrganization(callerRole, userId, request.getOrganizationId()));
     }
 
     /** X-User-Id read for the same self-lockout guard as changeUserRole. */

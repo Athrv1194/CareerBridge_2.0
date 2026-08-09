@@ -13,7 +13,6 @@
 @media (max-width: 900px) {
   .cb-rm-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
   .cb-rm-sidebar-label, .cb-rm-sidebar-footer, .cb-rm-toggle-row { display: none !important; }
-  .cb-rm-search { display: none !important; }
   .cb-rm-header { padding: 0 16px !important; gap: 12px !important; }
   .cb-rm-main-pad { padding: 22px 16px 48px !important; }
   .cb-rm-hero { font-size: 34px !important; }

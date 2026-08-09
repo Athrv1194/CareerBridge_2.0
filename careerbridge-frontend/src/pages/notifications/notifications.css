@@ -1,0 +1,11 @@
+@keyframes cbSkeletonShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+@media (max-width: 900px) {
+  .cb-no-header { padding: 0 16px !important; gap: 12px !important; }
+  .cb-no-topbar { padding: 20px 16px !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-no-avatar-name { display: none !important; }
+  .cb-no-topbar h1 { font-size: 24px !important; }
+}

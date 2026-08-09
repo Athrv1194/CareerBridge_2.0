@@ -7,12 +7,7 @@ import {
 
 const REDIRECT_DELAY_MS = 2500;
 
-/**
- * Reads token + email from the invite link's query string and posts to the SAME
- * POST /api/auth/forgot-password/reset that the forgot-password flow uses -- activation is
- * implemented as a pre-filled password reset, not a separate endpoint. See
- * OrgAdminProvisioningService in auth-service.
- */
+// Invite activation reuses the forgot-password reset endpoint, just pre-filled from the link.
 export default function SetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

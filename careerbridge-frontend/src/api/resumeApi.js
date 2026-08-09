@@ -2,7 +2,7 @@ import { getAccessToken } from '../utils/tokenUtils';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
-// Metadata only (no PDF bytes) -- that's what GET /my returns by design on the backend.
+// Metadata only, no PDF bytes.
 export async function getMyResumes() {
   const res = await fetch(`${API_BASE}/resume/my`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },
@@ -11,9 +11,7 @@ export async function getMyResumes() {
   return res.json();
 }
 
-// options is the resolved ResumeGenerateRequest body -- summary, include* toggles, jobDescription.
-// Every field is optional; omitting the whole object (or any field in it) defaults to "include
-// everything, no tailoring" on the backend.
+// options: summary, include* toggles, jobDescription -- all optional, defaults to "include everything".
 export async function generateResume(options) {
   const res = await fetch(`${API_BASE}/resume/generate`, {
     method: 'POST',
@@ -58,9 +56,7 @@ export async function deleteResume(id) {
   }
 }
 
-// The download route returns raw PDF bytes behind the same Bearer auth as everything else -- a
-// plain <a href> or window.open() hits it with no Authorization header and gets a 401. Fetch the
-// bytes ourselves and hand the browser a throwaway blob: URL to save instead.
+// A plain <a href> can't send the Bearer header, so fetch the PDF ourselves as a blob URL.
 export async function downloadResume(id, fileName) {
   const res = await fetch(`${API_BASE}/resume/download/${id}`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },
