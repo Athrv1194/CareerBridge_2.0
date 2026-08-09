@@ -18,8 +18,7 @@ async function authedFetch(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-// section is one of the fixed AssessmentSection names the backend defines: APTITUDE,
-// DOMAIN_KNOWLEDGE, SOFT_SKILLS -- the backend resolves which real category backs it.
+// section: APTITUDE, DOMAIN_KNOWLEDGE, or SOFT_SKILLS.
 export function startAttempt(section) {
   return authedFetch('/assessment/attempt/start', { method: 'POST', body: JSON.stringify({ section }) });
 }

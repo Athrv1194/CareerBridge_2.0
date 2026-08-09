@@ -37,7 +37,15 @@
       "Bash(git log *)",
       "PowerShell(docker compose down 2>&1)",
       "PowerShell(tail -5)",
-      "PowerShell(docker compose down)"
+      "PowerShell(docker compose down)",
+      "Bash(./mvnw.cmd test *)",
+      "Bash(docker compose *)",
+      "Bash(npm run *)",
+      "Bash(git status *)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh pr create --base dev --head feature/recommendation-page --title 'feat\\(recommendation\\): recommendation page, on-demand roadmaps, career-ranking fix' --body ' *)",
+      "PowerShell(gh --version 2>&1)",
+      "Bash(git fetch *)"
     ]
   }
 }
