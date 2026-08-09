@@ -13,6 +13,7 @@ import OpportunitiesPage from './pages/opportunities/OpportunitiesPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import ResumePage from './pages/resume/ResumePage';
 import CoachPage from './pages/coach/CoachPage';
+import NotificationsPage from './pages/notifications/NotificationsPage';
 import RegisterInstitutionPage from './pages/institution/RegisterInstitutionPage';
 import CollegeDashboardPage from './pages/institution/CollegeDashboardPage';
 
@@ -34,6 +35,7 @@ function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/resume" element={<ResumePage />} />
         <Route path="/coach" element={<CoachPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/register-institution" element={<RegisterInstitutionPage />} />
         <Route path="/college-dashboard" element={<CollegeDashboardPage />} />
       </Routes>

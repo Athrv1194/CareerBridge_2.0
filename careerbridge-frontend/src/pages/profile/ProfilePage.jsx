@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Checkbox, Field, Icon, IconButton, Input, Logo,
   Skeleton, Switch, Tag, Textarea,
@@ -186,6 +186,7 @@ const EMPTY_PROJECT = { title: '', description: '', techStack: '', projectUrl: '
 const EMPTY_CERT = { name: '', issuingOrganization: '', issueDate: '', expiryDate: '', credentialUrl: '' };
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fadeIn, setFadeIn] = useState(false);
@@ -602,7 +603,7 @@ export default function ProfilePage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" />
+          <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

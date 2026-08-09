@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Icon, IconButton, Input, Logo, Skeleton, Tag } from '../../components/ui';
 import { getSessions, getSession, createSession, deleteSession, sendCoachMessage, getMyResources } from '../../api/aiCoachApi';
 import './coach.css';
@@ -42,6 +42,7 @@ function fmtClock(iso) {
 const GROUP_LABELS = ['Today', 'This week', 'Earlier'];
 
 export default function CoachPage() {
+  const navigate = useNavigate();
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [resourcesCollapsed, setResourcesCollapsed] = useState(false);
@@ -347,7 +348,7 @@ export default function CoachPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" />
+          <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

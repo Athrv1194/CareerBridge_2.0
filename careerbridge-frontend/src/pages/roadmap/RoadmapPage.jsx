@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Icon, IconButton, Input, Logo, ProgressMeter, Skeleton, StatTile,
 } from '../../components/ui';
@@ -210,6 +210,7 @@ function PaceDialog({ choice, onChoose, onClose, onSave }) {
 }
 
 export default function RoadmapPage() {
+  const navigate = useNavigate();
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -302,7 +303,7 @@ export default function RoadmapPage() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
-          <IconButton icon="bell" label="Notifications" />
+          <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
