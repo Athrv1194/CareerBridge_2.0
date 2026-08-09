@@ -10,6 +10,7 @@ import RecommendationPage from './pages/recommendation/RecommendationPage';
 import RoadmapPage from './pages/roadmap/RoadmapPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import OpportunitiesPage from './pages/opportunities/OpportunitiesPage';
+import ProfilePage from './pages/profile/ProfilePage';
 import RegisterInstitutionPage from './pages/institution/RegisterInstitutionPage';
 import CollegeDashboardPage from './pages/institution/CollegeDashboardPage';
 
@@ -28,6 +29,7 @@ function App() {
         <Route path="/roadmap" element={<RoadmapPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/opportunities" element={<OpportunitiesPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/register-institution" element={<RegisterInstitutionPage />} />
         <Route path="/college-dashboard" element={<CollegeDashboardPage />} />
       </Routes>

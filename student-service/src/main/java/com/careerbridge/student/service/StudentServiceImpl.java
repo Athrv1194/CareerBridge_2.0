@@ -3,6 +3,7 @@ package com.careerbridge.student.service;
 import com.careerbridge.student.constants.SkillConstants;
 import com.careerbridge.student.dto.CertificateDto;
 import com.careerbridge.student.dto.EducationDto;
+import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
@@ -36,9 +37,12 @@ public class StudentServiceImpl implements StudentService {
 
     private static final Logger log = LoggerFactory.getLogger(StudentServiceImpl.class);
 
-    /** Matches auth-service's Role enum. Strings, because that is what arrives in X-User-Role. */
-    private static final Set<String> ALLOWED_PUBLIC_PROFILE_ROLES =
-            Set.of("RECRUITER", "PLACEMENT_OFFICER", "ORG_ADMIN", "SUPER_ADMIN");
+    /**
+     * Matches auth-service's Role enum. Strings, because that is what arrives in
+     * X-User-Role.
+     */
+    private static final Set<String> ALLOWED_PUBLIC_PROFILE_ROLES = Set.of("RECRUITER", "PLACEMENT_OFFICER",
+            "ORG_ADMIN", "SUPER_ADMIN");
 
     /** The only role that belongs in a candidate pool. See getPublicProfiles. */
     private static final String ROLE_STUDENT = "STUDENT";
@@ -50,10 +54,10 @@ public class StudentServiceImpl implements StudentService {
     private final CertificateRepository certificateRepository;
 
     public StudentServiceImpl(StudentProfileRepository studentProfileRepository,
-                              EducationRepository educationRepository,
-                              SkillRepository skillRepository,
-                              ProjectRepository projectRepository,
-                              CertificateRepository certificateRepository) {
+            EducationRepository educationRepository,
+            SkillRepository skillRepository,
+            ProjectRepository projectRepository,
+            CertificateRepository certificateRepository) {
         this.studentProfileRepository = studentProfileRepository;
         this.educationRepository = educationRepository;
         this.skillRepository = skillRepository;
@@ -82,6 +86,7 @@ public class StudentServiceImpl implements StudentService {
                 .githubUrl(profile.getGithubUrl())
                 .portfolioUrl(profile.getPortfolioUrl())
                 .resumeUrl(profile.getResumeUrl())
+                .hasAvatar(profile.getAvatarImage() != null)
                 .profileCompletionPercentage(profile.getProfileCompletionPercentage())
                 .isPublic(profile.getIsPublic())
                 .createdAt(profile.getCreatedAt())
@@ -94,8 +99,10 @@ public class StudentServiceImpl implements StudentService {
     }
 
     /**
-     * Full replace: a null field clears the stored value, so the client sends the whole profile.
-     * email, resumeUrl, userId and the completion percentage are absent from the request DTO by
+     * Full replace: a null field clears the stored value, so the client sends the
+     * whole profile.
+     * email, resumeUrl, userId and the completion percentage are absent from the
+     * request DTO by
      * design and therefore cannot be overwritten from here.
      */
     @Override
@@ -113,7 +120,8 @@ public class StudentServiceImpl implements StudentService {
         profile.setLinkedinUrl(request.getLinkedinUrl());
         profile.setGithubUrl(request.getGithubUrl());
         profile.setPortfolioUrl(request.getPortfolioUrl());
-        // The one field full-replace cannot blank: the column is NOT NULL, so an omitted
+        // The one field full-replace cannot blank: the column is NOT NULL, so an
+        // omitted
         // isPublic falls back to the entity default rather than failing the insert.
         profile.setIsPublic(request.getIsPublic() == null ? Boolean.TRUE : request.getIsPublic());
 
@@ -144,11 +152,43 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     @Transactional
+    public EducationDto updateEducation(Long userId, Long educationId, EducationDto dto) {
+        StudentProfile profile = requireProfile(userId);
+        Education existing = requireOwnedEducation(profile.getId(), educationId);
+
+        existing.setInstitution(dto.getInstitution());
+        existing.setDegree(dto.getDegree());
+        existing.setFieldOfStudy(dto.getFieldOfStudy());
+        existing.setStartYear(dto.getStartYear());
+        existing.setEndYear(dto.getEndYear());
+        existing.setGrade(dto.getGrade());
+        existing.setDescription(dto.getDescription());
+
+        Education saved = educationRepository.save(existing);
+        recalculate(profile);
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void deleteEducation(Long userId, Long educationId) {
+        StudentProfile profile = requireProfile(userId);
+        long deleted = educationRepository.deleteByIdAndStudentProfileId(educationId, profile.getId());
+        if (deleted == 0) {
+            throw new CustomException("Education entry not found", HttpStatus.NOT_FOUND);
+        }
+        recalculate(profile);
+    }
+
+    @Override
+    @Transactional
     public SkillDto addSkill(Long userId, SkillDto dto) {
         StudentProfile profile = requireProfile(userId);
 
-        // isCustom is derived, not trusted: the client cannot mark "Java" as a custom skill, and
-        // must positively opt in (isCustom=true) to introduce anything off the catalogue.
+        // isCustom is derived, not trusted: the client cannot mark "Java" as a custom
+        // skill, and
+        // must positively opt in (isCustom=true) to introduce anything off the
+        // catalogue.
         boolean predefined = isPredefined(dto.getSkillName());
         if (!predefined && !Boolean.TRUE.equals(dto.getIsCustom())) {
             throw new CustomException(
@@ -175,6 +215,21 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     @Transactional
+    public void deleteSkill(Long userId, Long skillId) {
+        StudentProfile profile = requireProfile(userId);
+        long deleted = skillRepository.deleteByIdAndStudentProfileId(skillId, profile.getId());
+        if (deleted == 0) {
+            throw new CustomException("Skill not found", HttpStatus.NOT_FOUND);
+        }
+        // Skill COUNT feeds 15% of completion (>=2 skills), so dropping below that
+        // threshold here
+        // must be reflected immediately, the same way addSkill's recalculate is not
+        // optional.
+        recalculate(profile);
+    }
+
+    @Override
+    @Transactional
     public ProjectDto addProject(Long userId, ProjectDto dto) {
         StudentProfile profile = requireProfile(userId);
 
@@ -196,6 +251,69 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     @Transactional
+    public ProjectDto updateProject(Long userId, Long projectId, ProjectDto dto) {
+        StudentProfile profile = requireProfile(userId);
+        Project existing = requireOwnedProject(profile.getId(), projectId);
+
+        existing.setTitle(dto.getTitle());
+        existing.setDescription(dto.getDescription());
+        existing.setTechStack(dto.getTechStack());
+        existing.setProjectUrl(dto.getProjectUrl());
+        existing.setGithubUrl(dto.getGithubUrl());
+        existing.setStartDate(dto.getStartDate());
+        existing.setEndDate(dto.getEndDate());
+        existing.setIsOngoing(dto.getIsOngoing() != null && dto.getIsOngoing());
+
+        Project saved = projectRepository.save(existing);
+        recalculate(profile);
+        return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public void deleteProject(Long userId, Long projectId) {
+        StudentProfile profile = requireProfile(userId);
+        long deleted = projectRepository.deleteByIdAndStudentProfileId(projectId, profile.getId());
+        if (deleted == 0) {
+            throw new CustomException("Project not found", HttpStatus.NOT_FOUND);
+        }
+        recalculate(profile);
+    }
+
+    @Override
+    @Transactional
+    public void uploadProjectCover(Long userId, Long projectId, byte[] bytes, String contentType) {
+        StudentProfile profile = requireProfile(userId);
+        Project project = requireOwnedProject(profile.getId(), projectId);
+        project.setCoverImage(bytes);
+        project.setCoverImageContentType(contentType);
+        projectRepository.save(project);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ImageBlob getProjectCover(Long userId, Long projectId) {
+        StudentProfile profile = requireProfile(userId);
+        Project project = requireOwnedProject(profile.getId(), projectId);
+        if (project.getCoverImage() == null) {
+            throw new CustomException("This project has no cover image", HttpStatus.NOT_FOUND);
+        }
+        return ImageBlob.builder().bytes(project.getCoverImage()).contentType(project.getCoverImageContentType())
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteProjectCover(Long userId, Long projectId) {
+        StudentProfile profile = requireProfile(userId);
+        Project project = requireOwnedProject(profile.getId(), projectId);
+        project.setCoverImage(null);
+        project.setCoverImageContentType(null);
+        projectRepository.save(project);
+    }
+
+    @Override
+    @Transactional
     public CertificateDto addCertificate(Long userId, CertificateDto dto) {
         StudentProfile profile = requireProfile(userId);
 
@@ -209,9 +327,69 @@ public class StudentServiceImpl implements StudentService {
                 .build());
 
         // ponytail: no recalculate() here -- certificates carry zero weight in
-        // ProfileCompletionCalculator, so the call is a provable no-op costing 3 selects and an
-        // update. StudentServiceTest pins this; give certificates a weight and that test fails.
+        // ProfileCompletionCalculator, so the call is a provable no-op costing 3
+        // selects and an
+        // update. StudentServiceTest pins this; give certificates a weight and that
+        // test fails.
         return toDto(saved);
+    }
+
+    @Override
+    @Transactional
+    public CertificateDto updateCertificate(Long userId, Long certificateId, CertificateDto dto) {
+        StudentProfile profile = requireProfile(userId);
+        Certificate existing = certificateRepository.findByIdAndStudentProfileId(certificateId, profile.getId())
+                .orElseThrow(() -> new CustomException("Certificate not found", HttpStatus.NOT_FOUND));
+
+        existing.setName(dto.getName());
+        existing.setIssuingOrganization(dto.getIssuingOrganization());
+        existing.setIssueDate(dto.getIssueDate());
+        existing.setExpiryDate(dto.getExpiryDate());
+        existing.setCredentialUrl(dto.getCredentialUrl());
+
+        // No recalculate(): certificates carry zero weight, same as addCertificate
+        // above.
+        return toDto(certificateRepository.save(existing));
+    }
+
+    @Override
+    @Transactional
+    public void deleteCertificate(Long userId, Long certificateId) {
+        StudentProfile profile = requireProfile(userId);
+        long deleted = certificateRepository.deleteByIdAndStudentProfileId(certificateId, profile.getId());
+        if (deleted == 0) {
+            throw new CustomException("Certificate not found", HttpStatus.NOT_FOUND);
+        }
+        // No recalculate(): certificates carry zero weight, same as addCertificate
+        // above.
+    }
+
+    @Override
+    @Transactional
+    public void uploadAvatar(Long userId, byte[] bytes, String contentType) {
+        StudentProfile profile = requireProfile(userId);
+        profile.setAvatarImage(bytes);
+        profile.setAvatarContentType(contentType);
+        studentProfileRepository.save(profile);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ImageBlob getAvatar(Long userId) {
+        StudentProfile profile = requireProfile(userId);
+        if (profile.getAvatarImage() == null) {
+            throw new CustomException("No avatar uploaded", HttpStatus.NOT_FOUND);
+        }
+        return ImageBlob.builder().bytes(profile.getAvatarImage()).contentType(profile.getAvatarContentType()).build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteAvatar(Long userId) {
+        StudentProfile profile = requireProfile(userId);
+        profile.setAvatarImage(null);
+        profile.setAvatarContentType(null);
+        studentProfileRepository.save(profile);
     }
 
     @Override
@@ -220,14 +398,20 @@ public class StudentServiceImpl implements StudentService {
     }
 
     /**
-     * RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN and SUPER_ADMIN only -- a STUDENT calling this would
-     * be able to enumerate every other public profile on the platform, which is not what "public"
-     * on a single profile is meant to permit. RBAC lives here, in the service layer, never in the
+     * RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN and SUPER_ADMIN only -- a STUDENT
+     * calling this would
+     * be able to enumerate every other public profile on the platform, which is not
+     * what "public"
+     * on a single profile is meant to permit. RBAC lives here, in the service
+     * layer, never in the
      * controller or the gateway.
      *
-     * Filtered to STUDENT profiles only. auth-service publishes student.registered for every
-     * registration regardless of role, so this table holds a profile row for recruiters and admins
-     * too; without the role predicate they appear in recruiter-service's candidate pool.
+     * Filtered to STUDENT profiles only. auth-service publishes student.registered
+     * for every
+     * registration regardless of role, so this table holds a profile row for
+     * recruiters and admins
+     * too; without the role predicate they appear in recruiter-service's candidate
+     * pool.
      */
     @Override
     @Transactional(readOnly = true)
@@ -267,7 +451,8 @@ public class StudentServiceImpl implements StudentService {
     public void updateResumeUrl(Long userId, String resumeUrl) {
         studentProfileRepository.findByUserId(userId).ifPresentOrElse(profile -> {
             profile.setResumeUrl(resumeUrl);
-            // recalculate() saves internally, same path updateProfile/addEducation/addSkill/
+            // recalculate() saves internally, same path
+            // updateProfile/addEducation/addSkill/
             // addProject all use -- this is the only place RESUME's 15% can ever be earned.
             recalculate(profile);
         }, () -> log.warn("No student profile for userId={}; ignoring resume.generated", userId));
@@ -278,7 +463,20 @@ public class StudentServiceImpl implements StudentService {
                 .orElseThrow(() -> new CustomException("Student profile not found", HttpStatus.NOT_FOUND));
     }
 
-    /** Single place the completion percentage is derived, so no caller can forget to update it. */
+    private Education requireOwnedEducation(Long profileId, Long educationId) {
+        return educationRepository.findByIdAndStudentProfileId(educationId, profileId)
+                .orElseThrow(() -> new CustomException("Education entry not found", HttpStatus.NOT_FOUND));
+    }
+
+    private Project requireOwnedProject(Long profileId, Long projectId) {
+        return projectRepository.findByIdAndStudentProfileId(projectId, profileId)
+                .orElseThrow(() -> new CustomException("Project not found", HttpStatus.NOT_FOUND));
+    }
+
+    /**
+     * Single place the completion percentage is derived, so no caller can forget to
+     * update it.
+     */
     private void recalculate(StudentProfile profile) {
         Long id = profile.getId();
         profile.setProfileCompletionPercentage(ProfileCompletionCalculator.calculateCompletion(
@@ -326,6 +524,7 @@ public class StudentServiceImpl implements StudentService {
                 .startDate(p.getStartDate())
                 .endDate(p.getEndDate())
                 .isOngoing(p.getIsOngoing())
+                .hasCoverImage(p.getCoverImage() != null)
                 .build();
     }
 

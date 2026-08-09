@@ -1,0 +1,32 @@
+@keyframes cbPfFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.cb-pf-fade { animation: cbPfFadeIn 340ms cubic-bezier(.2, 0, .2, 1) both; }
+
+.cb-pf-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  transition: grid-template-columns 220ms cubic-bezier(.2, 0, .2, 1);
+}
+
+@media (max-width: 900px) {
+  .cb-pf-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
+  .cb-pf-sidebar-label, .cb-pf-sidebar-footer, .cb-pf-toggle-row { display: none !important; }
+  .cb-pf-search { display: none !important; }
+  .cb-pf-header { padding: 0 16px !important; gap: 12px !important; }
+  .cb-pf-main-pad { padding: 22px 16px 48px !important; }
+  .cb-pf-hero { grid-template-columns: auto 1fr !important; }
+  .cb-pf-hero > button { grid-column: 1 / -1; justify-self: flex-start; }
+  .cb-pf-score-grid { grid-template-columns: 1fr !important; }
+  .cb-pf-skill-grid { grid-template-columns: 1fr !important; }
+  .cb-pf-project-row { grid-template-columns: minmax(0,1fr) !important; }
+  .cb-pf-project-cover { min-height: 180px; }
+  .cb-pf-form-grid { grid-template-columns: 1fr !important; }
+  .cb-pf-edu-row { grid-template-columns: 1fr !important; row-gap: 10px; }
+}
+
+@media (max-width: 560px) {
+  .cb-pf-avatar-name { display: none !important; }
+  .cb-pf-main-pad { padding: 16px 12px 40px !important; }
+  .cb-pf-hero h1 { font-size: 30px !important; }
+  .cb-pf-skill-form { flex-direction: column; align-items: stretch !important; }
+  .cb-pf-skill-form > div { width: 100% !important; }
+}
