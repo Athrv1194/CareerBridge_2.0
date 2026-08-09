@@ -5,10 +5,12 @@ import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.Locale;
 
 /**
@@ -39,10 +41,15 @@ public class EmailService {
      */
     private final String fromEmail;
 
+    /** Backs the "Set Password & Access Portal" link in the org admin invite email. */
+    private final String frontendUrl;
+
     public EmailService(JavaMailSender mailSender,
-                        @Value("${spring.mail.username:}") String fromEmail) {
+                        @Value("${spring.mail.username:}") String fromEmail,
+                        @Value("${app.frontend-url:http://localhost:5173}") String frontendUrl) {
         this.mailSender = mailSender;
         this.fromEmail = fromEmail;
+        this.frontendUrl = frontendUrl;
     }
 
     /**
@@ -73,6 +80,223 @@ public class EmailService {
                     toEmail, recommendationId, ex.getMessage());
             return false;
         }
+    }
+
+    /**
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendPasswordResetOtpEmail(String toEmail, String firstName, String otp, int expiresInMinutes) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.PASSWORD_RESET_EMAIL_SUBJECT);
+            helper.setText(buildPasswordResetOtpBody(firstName, otp, expiresInMinutes), true);
+
+            mailSender.send(message);
+
+            log.info("Sent password reset OTP email to {}", toEmail);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send password reset OTP email to {}: {}", toEmail, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendPasswordChangedEmail(String toEmail, String firstName) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.PASSWORD_CHANGED_EMAIL_SUBJECT);
+            helper.setText(buildPasswordChangedBody(firstName), true);
+
+            mailSender.send(message);
+
+            log.info("Sent password changed confirmation email to {}", toEmail);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send password changed confirmation email to {}: {}", toEmail, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * @param invoicePdf may be null -- a failed fetch from payment-service still sends this email,
+     *                    just without the attachment, rather than losing the confirmation entirely.
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendInvoiceEmail(String toEmail,
+                                    String planName,
+                                    BigDecimal amount,
+                                    String invoiceNumber,
+                                    byte[] invoicePdf,
+                                    Long paymentId) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            // The multipart overload (message, true, "UTF-8") -- sendRecommendationEmail above uses
+            // the two-arg non-multipart form and must not change; only a message that might carry
+            // an attachment needs this one.
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.INVOICE_EMAIL_SUBJECT);
+            helper.setText(buildInvoiceHtmlBody(planName, amount, invoiceNumber), true);
+
+            if (invoicePdf != null && invoicePdf.length > 0) {
+                helper.addAttachment(invoiceNumber + ".pdf", new ByteArrayResource(invoicePdf));
+            }
+
+            mailSender.send(message);
+
+            log.info("Sent invoice email to {} for paymentId={} (attachment={})",
+                    toEmail, paymentId, invoicePdf != null);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send invoice email to {} for paymentId={}: {}",
+                    toEmail, paymentId, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendOrgAdminInviteEmail(String toEmail, String firstName, String organizationName,
+                                           String resetToken, int expiresInHours) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.ORG_ADMIN_INVITE_EMAIL_SUBJECT);
+            helper.setText(buildOrgAdminInviteBody(firstName, organizationName, toEmail, resetToken,
+                    expiresInHours), true);
+
+            mailSender.send(message);
+
+            log.info("Sent org admin invite email to {}", toEmail);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send org admin invite email to {}: {}", toEmail, ex.getMessage());
+            return false;
+        }
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildPasswordResetOtpBody(String firstName, String otp, int expiresInMinutes) {
+        String name = (firstName == null || firstName.isBlank()) ? "there" : firstName;
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Reset your password</h2>
+                    <p>Hi %s,</p>
+                    <p>Use this code to reset your CareerBridge password. It expires in %d minutes.</p>
+                    <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1c6ea4; margin: 24px 0;">
+                      %s
+                    </p>
+                    <p>If you didn't request this, you can safely ignore this email -- your password will not change.</p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name, expiresInMinutes, otp);
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildPasswordChangedBody(String firstName) {
+        String name = (firstName == null || firstName.isBlank()) ? "there" : firstName;
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Your password was changed</h2>
+                    <p>Hi %s,</p>
+                    <p>This is a confirmation that your CareerBridge password was just changed.</p>
+                    <p style="font-weight: bold; color: #b71c1c;">
+                      If this wasn't you, please reset your password again immediately and contact support.
+                    </p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name);
+    }
+
+    /**
+     * Public for the same test-reachability reason as buildHtmlBody above.
+     *
+     * Deliberately posts to POST /api/auth/forgot-password/reset, not a purpose-built activation
+     * endpoint: activation is implemented as a pre-filled password reset (see
+     * OrgAdminProvisioningService in auth-service), so the token behind this link is the same
+     * opaque PasswordResetOtp.resetToken that flow already checks. That endpoint requires email
+     * alongside the token, hence both are carried in the query string.
+     */
+    public String buildOrgAdminInviteBody(String firstName, String organizationName, String email,
+                                          String resetToken, int expiresInHours) {
+        String name = (firstName == null || firstName.isBlank()) ? "there" : firstName;
+        String org = (organizationName == null || organizationName.isBlank())
+                ? "your institution" : organizationName;
+        String link = frontendUrl + "/set-password?token="
+                + java.net.URLEncoder.encode(resetToken, java.nio.charset.StandardCharsets.UTF_8)
+                + "&email=" + java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Welcome to CareerBridge</h2>
+                    <p>Hi %s,</p>
+                    <p>
+                      <strong>%s</strong> has been approved as a CareerBridge partner institution, and
+                      you have been set up as its administrator.
+                    </p>
+                    <p style="margin: 28px 0;">
+                      <a href="%s" style="background: #1c6ea4; color: #ffffff; padding: 12px 28px;
+                        text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">
+                        Set Password &amp; Access Portal
+                      </a>
+                    </p>
+                    <p>This link is valid for %d hours.</p>
+                    <p style="margin-top: 24px;">Welcome aboard,<br/>The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name, org, link, expiresInHours);
+    }
+
+    public String buildInvoiceHtmlBody(String planName, BigDecimal amount, String invoiceNumber) {
+        String plan = (planName == null || planName.isBlank()) ? "your plan" : planName;
+        String amountText = (amount == null) ? "n/a" : "Rs. " + amount.toPlainString();
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Payment Received</h2>
+                    <p>Hi there,</p>
+                    <p>
+                      Thanks for subscribing to <strong>%s</strong>. Your payment of
+                      <strong>%s</strong> was successful.
+                    </p>
+                    <p>
+                      Invoice number: <strong>%s</strong>. The GST invoice is attached to this
+                      email as a PDF; you can also download it any time from your CareerBridge
+                      billing page.
+                    </p>
+                    <p style="margin-top: 24px;">Thank you,<br/>The CareerBridge Team</p>
+                    <hr style="border: none; border-top: 1px solid #e4e7eb; margin-top: 28px;"/>
+                    <p style="font-size: 12px; color: #7b8794;">
+                      You are receiving this because a payment was made on your CareerBridge account.
+                    </p>
+                  </body>
+                </html>
+                """, plan, amountText, invoiceNumber);
     }
 
     /**

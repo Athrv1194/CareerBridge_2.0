@@ -2,12 +2,18 @@ package com.careerbridge.auth;
 
 import com.careerbridge.auth.config.JwtConfig;
 import com.careerbridge.auth.dto.AuthResponse;
+import com.careerbridge.auth.dto.ForgotPasswordRequest;
 import com.careerbridge.auth.dto.LoginRequest;
 import com.careerbridge.auth.dto.RegisterRequest;
+import com.careerbridge.auth.dto.ResetPasswordRequest;
+import com.careerbridge.auth.dto.VerifyOtpRequest;
+import com.careerbridge.auth.dto.VerifyOtpResponse;
 import com.careerbridge.auth.exception.CustomException;
+import com.careerbridge.auth.model.PasswordResetOtp;
 import com.careerbridge.auth.model.RefreshToken;
 import com.careerbridge.auth.model.Role;
 import com.careerbridge.auth.model.User;
+import com.careerbridge.auth.repository.PasswordResetOtpRepository;
 import com.careerbridge.auth.repository.RefreshTokenRepository;
 import com.careerbridge.auth.repository.UserRepository;
 import com.careerbridge.auth.service.AuthServiceImpl;
@@ -41,6 +47,7 @@ class AuthServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
+    @Mock private PasswordResetOtpRepository passwordResetOtpRepository;
     @Mock private JwtConfig jwtConfig;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private RabbitTemplate rabbitTemplate;
@@ -356,5 +363,239 @@ class AuthServiceTest {
 
         assertEquals(HttpStatus.UNAUTHORIZED, ex.getStatus());
         verify(jwtConfig, never()).generateAccessToken(any(User.class));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // FORGOT PASSWORD
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("forgotPassword: unknown email is a silent no-op, never revealing the account doesn't exist")
+    void forgotPassword_UnknownEmail_DoesNothing() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setEmail("nobody@careerbridge.com");
+        when(userRepository.findByEmail("nobody@careerbridge.com")).thenReturn(Optional.empty());
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetOtpRepository, never()).save(any(PasswordResetOtp.class));
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any(Object.class));
+    }
+
+    @Test
+    @DisplayName("forgotPassword: a known email gets a hashed OTP saved and an event published")
+    void forgotPassword_KnownEmail_SavesOtpAndPublishesEvent() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed-otp");
+
+        authService.forgotPassword(request);
+
+        ArgumentCaptor<PasswordResetOtp> saved = ArgumentCaptor.forClass(PasswordResetOtp.class);
+        verify(passwordResetOtpRepository).save(saved.capture());
+        assertEquals(1L, saved.getValue().getUserId());
+        assertEquals("hashed-otp", saved.getValue().getOtpHash());
+        // the plaintext code must never be logged or stored, only carried in the outbound event
+        verify(rabbitTemplate).convertAndSend(anyString(), eq("password.reset.requested"), any(Object.class));
+    }
+
+    @Test
+    @DisplayName("forgotPassword: a resend within the cooldown window is rejected with 429")
+    void forgotPassword_WithinCooldown_Throws429() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(
+                PasswordResetOtp.builder()
+                        .id(5L).userId(1L).otpHash("hashed-otp").used(false)
+                        .expiresAt(LocalDateTime.now().plusMinutes(9))
+                        .createdAt(LocalDateTime.now().minusSeconds(5))
+                        .build()));
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.forgotPassword(request));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
+        verify(passwordResetOtpRepository, never()).save(any(PasswordResetOtp.class));
+    }
+
+    @Test
+    @DisplayName("forgotPassword: an already-used OTP row does not block a fresh resend")
+    void forgotPassword_LastOtpAlreadyUsed_AllowsNewCode() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(
+                PasswordResetOtp.builder()
+                        .id(5L).userId(1L).otpHash("old-hash").used(true)
+                        .expiresAt(LocalDateTime.now().plusMinutes(9))
+                        .createdAt(LocalDateTime.now().minusSeconds(5))
+                        .build()));
+        when(passwordEncoder.encode(anyString())).thenReturn("hashed-otp");
+
+        authService.forgotPassword(request);
+
+        verify(passwordResetOtpRepository).save(any(PasswordResetOtp.class));
+    }
+
+    @Test
+    @DisplayName("verifyOtp: correct code returns a reset token and marks the row with it")
+    void verifyOtp_CorrectCode_ReturnsResetToken() {
+        VerifyOtpRequest request = new VerifyOtpRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setOtp("1234");
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(1L).otpHash("hashed-otp").used(false).attempts(0)
+                .expiresAt(LocalDateTime.now().plusMinutes(9))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(record));
+        when(passwordEncoder.matches("1234", "hashed-otp")).thenReturn(true);
+
+        VerifyOtpResponse response = authService.verifyOtp(request);
+
+        assertNotNull(response.getResetToken());
+        assertEquals(response.getResetToken(), record.getResetToken());
+        verify(passwordResetOtpRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("verifyOtp: wrong code is rejected and counts against the attempt limit")
+    void verifyOtp_WrongCode_IncrementsAttemptsAndThrows() {
+        VerifyOtpRequest request = new VerifyOtpRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setOtp("0000");
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(1L).otpHash("hashed-otp").used(false).attempts(0)
+                .expiresAt(LocalDateTime.now().plusMinutes(9))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(record));
+        when(passwordEncoder.matches("0000", "hashed-otp")).thenReturn(false);
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.verifyOtp(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        assertEquals(1, record.getAttempts());
+        verify(passwordResetOtpRepository).save(record);
+    }
+
+    @Test
+    @DisplayName("verifyOtp: a code that has already hit the attempt cap is dead even if now correct")
+    void verifyOtp_AttemptsExhausted_ThrowsWithoutCheckingHash() {
+        VerifyOtpRequest request = new VerifyOtpRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setOtp("1234");
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(1L).otpHash("hashed-otp").used(false).attempts(5)
+                .expiresAt(LocalDateTime.now().plusMinutes(9))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(record));
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.verifyOtp(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("verifyOtp: an expired code is rejected even if it would otherwise match")
+    void verifyOtp_Expired_Throws() {
+        VerifyOtpRequest request = new VerifyOtpRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setOtp("1234");
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(1L).otpHash("hashed-otp").used(false).attempts(0)
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .createdAt(LocalDateTime.now().minusMinutes(11))
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findTopByUserIdOrderByCreatedAtDesc(1L)).thenReturn(Optional.of(record));
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.verifyOtp(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("resetPassword: mismatched confirmation is rejected before touching the database")
+    void resetPassword_PasswordsDoNotMatch_Throws() {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setResetToken("token-123");
+        request.setNewPassword("newPassword1");
+        request.setConfirmPassword("different1");
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.resetPassword(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    @DisplayName("resetPassword: valid token updates the password, revokes sessions, and notifies")
+    void resetPassword_ValidToken_UpdatesPasswordAndRevokesSessions() {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setResetToken("token-123");
+        request.setNewPassword("newPassword1");
+        request.setConfirmPassword("newPassword1");
+
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(1L).otpHash("hashed-otp").used(false)
+                .resetToken("token-123")
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findByResetTokenAndUsedFalse("token-123")).thenReturn(Optional.of(record));
+        when(passwordEncoder.encode("newPassword1")).thenReturn("new-hashed-password");
+
+        authService.resetPassword(request);
+
+        ArgumentCaptor<User> savedUser = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(savedUser.capture());
+        assertEquals("new-hashed-password", savedUser.getValue().getPassword());
+
+        assertEquals(Boolean.TRUE, record.getUsed());
+        verify(passwordResetOtpRepository).save(record);
+        verify(refreshTokenRepository).deleteByUserId(1L);
+        verify(rabbitTemplate).convertAndSend(anyString(), eq("password.changed"), any(Object.class));
+    }
+
+    @Test
+    @DisplayName("resetPassword: a token belonging to a different user is refused")
+    void resetPassword_TokenBelongsToDifferentUser_Throws() {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setEmail("ada@careerbridge.com");
+        request.setResetToken("token-123");
+        request.setNewPassword("newPassword1");
+        request.setConfirmPassword("newPassword1");
+
+        PasswordResetOtp record = PasswordResetOtp.builder()
+                .id(5L).userId(99L).otpHash("hashed-otp").used(false)
+                .resetToken("token-123")
+                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByEmail("ada@careerbridge.com")).thenReturn(Optional.of(persistedUser()));
+        when(passwordResetOtpRepository.findByResetTokenAndUsedFalse("token-123")).thenReturn(Optional.of(record));
+
+        CustomException ex = assertThrows(CustomException.class, () -> authService.resetPassword(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any(User.class));
     }
 }

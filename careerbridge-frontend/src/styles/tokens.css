@@ -1,0 +1,122 @@
+/* CareerBridge design system v8 — tokens, ported from the Claude Design source. */
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..600&family=Inter:wght@300..700&display=swap");
+
+:root {
+  /* ---- Base: warm paper neutrals ---- */
+  --bone-50: #FCFBF9;
+  --bone-100: #F5F3EF;
+  --bone-200: #EEEBE5;
+  --bone-300: #E7E3DB;
+  --bone-400: #D5CFC4;
+  --bone-500: #A69E94;
+
+  /* ---- Base: ink ---- */
+  --ink-900: #1B1A18;
+  --ink-800: #2A2927;
+  --ink-700: #3D3B37;
+  --ink-600: #55524D;
+  --ink-500: #6E6A64;
+  --ink-400: #8A847C;
+  --ink-300: #A69E94;
+
+  /* ---- Brand accent: taupe (monochromatic — a warm mid-neutral, not a hue) ---- */
+  --taupe-700: #6E6A64;
+  --taupe-600: #7E7972;
+  --taupe-500: #A69E94;
+  --taupe-300: #C7C0B6;
+  --taupe-100: #E7E3DB;
+
+  /* ---- Semantic status ---- */
+  --status-success: #4F6B52;
+  --status-success-soft: #E1E8DF;
+  --status-warning: #9C7729;
+  --status-warning-soft: #F0E7D1;
+  --status-danger: #8E3B2F;
+  --status-danger-soft: #EFDDD8;
+  --status-info: #4A5F6B;
+  --status-info-soft: #DEE5E8;
+
+  /* ---- Semantic aliases: surfaces ---- */
+  --surface-page: var(--bone-100);
+  --surface-card: var(--bone-50);
+  --surface-sunken: var(--bone-200);
+  --surface-muted: var(--bone-300);
+  --surface-inverse: var(--ink-900);
+  --surface-accent: var(--taupe-100);
+  --surface-overlay: rgba(27, 26, 24, .46);
+
+  /* ---- Semantic aliases: text ---- */
+  --text-display: var(--ink-900);
+  --text-body: var(--ink-800);
+  --text-secondary: var(--ink-500);
+  --text-muted: var(--ink-400);
+  --text-inverse: var(--bone-50);
+  --text-accent: var(--taupe-700);
+  --text-link: var(--ink-900);
+  --text-link-hover: var(--taupe-700);
+
+  /* ---- Semantic aliases: lines ---- */
+  --line-hairline: var(--bone-300);
+  --line-strong: var(--bone-500);
+  --line-ink: var(--ink-900);
+  --line-focus: var(--taupe-700);
+
+  /* ---- Typography ---- */
+  --font-display: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-numeric: "Inter", "Helvetica Neue", Arial, sans-serif;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --text-display-xl: 88px;
+  --text-display-lg: 64px;
+  --text-display-md: 44px;
+  --text-display-sm: 32px;
+
+  --text-title-lg: 24px;
+  --text-title-md: 20px;
+  --text-title-sm: 17px;
+  --text-body-lg: 16px;
+  --text-body-md: 14px;
+  --text-body-sm: 13px;
+  --text-caption: 12px;
+  --text-eyebrow: 11px;
+
+  --leading-display: 1.02;
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+
+  --tracking-display: -0.015em;
+  --tracking-eyebrow: 0.14em;
+
+  /* ---- Spacing / layout ---- */
+  --space-3: 8px;
+  --space-5: 16px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-10: 48px;
+  --space-13: 96px;
+  --max-content: 1160px;
+  --header-height: 64px;
+
+  /* ---- Borders ---- */
+  --border-hairline: 1px solid var(--line-hairline);
+  --border-ink: 1px solid var(--line-ink);
+  --radius-sm: 3px;
+  --radius-pill: 999px;
+
+  /* ---- Elevation / motion ---- */
+  --shadow-menu: 0 8px 24px -8px rgba(22, 21, 15, .18);
+  --duration-normal: 220ms;
+  --ease-standard: cubic-bezier(.2, 0, .2, 1);
+  --transition-color: color var(--duration-normal) var(--ease-standard), background-color var(--duration-normal) var(--ease-standard), border-color var(--duration-normal) var(--ease-standard);
+}
+
+.cb-num {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}

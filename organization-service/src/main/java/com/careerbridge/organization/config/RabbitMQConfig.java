@@ -14,6 +14,9 @@ public class RabbitMQConfig {
     public static final String EXCHANGE = "careerbridge.exchange";
     public static final String ORGANIZATION_CREATED_ROUTING_KEY = "organization.created";
 
+    /** Published on approve(), consumed by auth-service to provision the ORG_ADMIN user. */
+    public static final String ORGANIZATION_REQUEST_APPROVED_ROUTING_KEY = "organization.request.approved";
+
     /**
      * Producer side only declares the exchange; consumers own their own queues and bindings.
      *

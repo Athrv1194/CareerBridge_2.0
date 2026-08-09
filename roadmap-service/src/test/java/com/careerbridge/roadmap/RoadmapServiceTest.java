@@ -1,6 +1,5 @@
 package com.careerbridge.roadmap;
 
-import com.careerbridge.roadmap.event.RecommendationGeneratedEvent;
 import com.careerbridge.roadmap.exception.CustomException;
 import com.careerbridge.roadmap.model.MilestoneTemplate;
 import com.careerbridge.roadmap.model.RoadmapTemplate;
@@ -21,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -77,7 +75,6 @@ class RoadmapServiceTest {
         return StudentRoadmap.builder()
                 .id(id)
                 .studentId(1L)
-                .recommendationId(50L)
                 .careerName("Backend Developer")
                 .status("IN_PROGRESS")
                 .totalMilestones(total)
@@ -99,26 +96,25 @@ class RoadmapServiceTest {
     }
 
     // -------------------------------------------------------------------------------------------
-    // generateRoadmap
+    // buildRoadmap
     // -------------------------------------------------------------------------------------------
 
     @Test
-    @DisplayName("a valid event creates a roadmap with milestones copied from the template")
-    void generateRoadmap_ValidEvent_CreatesRoadmapWithMilestones() {
+    @DisplayName("building a roadmap for a new career copies milestones from the template")
+    void buildRoadmap_NewCareer_CreatesRoadmapWithMilestones() {
         RoadmapTemplate tmpl = template(10L);
-        when(studentRoadmapRepository.findByStudentIdAndRecommendationId(1L, 50L)).thenReturn(Optional.empty());
+        when(studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(1L, "Backend Developer"))
+                .thenReturn(Optional.empty());
         when(roadmapTemplateRepository.findByCareerNameIgnoreCaseAndIsActiveTrue("Backend Developer"))
                 .thenReturn(Optional.of(tmpl));
         when(milestoneTemplateRepository.findByRoadmapTemplateIdOrderByOrderIndexAsc(10L))
                 .thenReturn(steps(tmpl));
         when(studentRoadmapRepository.save(any(StudentRoadmap.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(any()))
+                .thenReturn(List.of());
 
-        RecommendationGeneratedEvent event = RecommendationGeneratedEvent.builder()
-                .userId(1L).recommendationId(50L).topCareerName("Backend Developer")
-                .matchPercentage(80.0).generatedAt(LocalDateTime.now()).build();
-
-        roadmapService.generateRoadmap(event);
+        roadmapService.buildRoadmap(1L, "Backend Developer");
 
         ArgumentCaptor<StudentRoadmap> captor = ArgumentCaptor.forClass(StudentRoadmap.class);
         verify(studentRoadmapRepository).save(captor.capture());
@@ -130,32 +126,34 @@ class RoadmapServiceTest {
     }
 
     @Test
-    @DisplayName("a redelivered event for an existing roadmap is skipped, idempotently")
-    void generateRoadmap_DuplicateEvent_SkipsIdempotent() {
-        when(studentRoadmapRepository.findByStudentIdAndRecommendationId(1L, 50L))
-                .thenReturn(Optional.of(roadmap(1L, 2, 0)));
+    @DisplayName("building a roadmap for a career the student already has returns the existing one, "
+            + "not a duplicate")
+    void buildRoadmap_AlreadyExists_ReturnsExistingIdempotently() {
+        StudentRoadmap existing = roadmap(1L, 2, 0);
+        when(studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(1L, "Backend Developer"))
+                .thenReturn(Optional.of(existing));
+        when(studentMilestoneRepository.findByStudentRoadmapIdOrderByOrderIndexAsc(1L))
+                .thenReturn(List.of());
 
-        RecommendationGeneratedEvent event = RecommendationGeneratedEvent.builder()
-                .userId(1L).recommendationId(50L).topCareerName("Backend Developer").build();
+        var response = roadmapService.buildRoadmap(1L, "Backend Developer");
 
-        roadmapService.generateRoadmap(event);
-
+        assertEquals(1L, response.getId());
         verify(studentRoadmapRepository, never()).save(any());
         verify(roadmapTemplateRepository, never()).findByCareerNameIgnoreCaseAndIsActiveTrue(anyString());
     }
 
     @Test
-    @DisplayName("no matching template logs and returns instead of throwing")
-    void generateRoadmap_NoTemplateFound_LogsAndReturns() {
-        when(studentRoadmapRepository.findByStudentIdAndRecommendationId(1L, 50L)).thenReturn(Optional.empty());
+    @DisplayName("no matching template is a 404, not a silent no-op")
+    void buildRoadmap_NoTemplateFound_Throws404() {
+        when(studentRoadmapRepository.findByStudentIdAndCareerNameIgnoreCase(1L, "Underwater Basket Weaver"))
+                .thenReturn(Optional.empty());
         when(roadmapTemplateRepository.findByCareerNameIgnoreCaseAndIsActiveTrue("Underwater Basket Weaver"))
                 .thenReturn(Optional.empty());
 
-        RecommendationGeneratedEvent event = RecommendationGeneratedEvent.builder()
-                .userId(1L).recommendationId(50L).topCareerName("Underwater Basket Weaver").build();
+        CustomException ex = assertThrows(CustomException.class,
+                () -> roadmapService.buildRoadmap(1L, "Underwater Basket Weaver"));
 
-        roadmapService.generateRoadmap(event);
-
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
         verify(studentRoadmapRepository, never()).save(any());
     }
 

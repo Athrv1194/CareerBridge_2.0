@@ -126,6 +126,39 @@ class RecommendationServiceTest {
     }
 
     @Test
+    @DisplayName("generate: uses the event's own allCareerScores map, not a local recompute from "
+            + "categoryName -- categoryName is always \"Overall\" for the real aggregated event, "
+            + "which matches no career's requiredSkills and would flatten every score if relied on")
+    void generateRecommendation_UsesEventCareerScores_NotLocalRecompute() {
+        event.setCategoryName("Overall");
+        event.setTopCareerPath(null);
+        event.setAllCareerScores(java.util.Map.of(
+                "Full Stack Developer", 61.0,
+                "Backend Developer", 54.0,
+                "Frontend Developer", 48.0,
+                "Data Scientist", 41.0,
+                "DevOps Engineer", 35.0,
+                "Mobile Developer", 29.0,
+                "System Design Engineer", 22.0));
+
+        when(recommendationRepository.findByUserIdAndIsActiveTrueOrderByCreatedAtDesc(USER_ID))
+                .thenReturn(List.of());
+        stubSaveAssigningId();
+
+        recommendationService.generateRecommendation(event);
+
+        List<CareerRanking> saved = captureSavedRankings();
+        // If this fell back to the local "Overall" keyword match every score would tie at 30.0 --
+        // asserting distinct, event-sourced values pins that the map is actually being used.
+        assertEquals("Full Stack Developer", saved.get(0).getCareerName());
+        assertEquals(61.0, saved.get(0).getMatchPercentage());
+        assertEquals("System Design Engineer", saved.get(6).getCareerName());
+        assertEquals(22.0, saved.get(6).getMatchPercentage());
+        assertEquals(7, saved.stream().map(CareerRanking::getMatchPercentage).distinct().count(),
+                "all seven scores should be distinct, not flattened to a single tied value");
+    }
+
+    @Test
     @DisplayName("generate: when every career ties, the event's own top career takes rank 1")
     void generateRecommendation_TiedScores_PlacesEventTopCareerAtRankOne() {
         // Backend Developer is 2nd in catalogue order, so catalogue order alone would not pick it.

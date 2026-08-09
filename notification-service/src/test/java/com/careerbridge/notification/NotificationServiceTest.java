@@ -5,6 +5,7 @@ import com.careerbridge.notification.dto.NotificationResponse;
 import com.careerbridge.notification.dto.UnreadCountResponse;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.exception.CustomException;
 import com.careerbridge.notification.model.NotificationDocument;
 import com.careerbridge.notification.model.NotificationRecord;
@@ -14,6 +15,7 @@ import com.careerbridge.notification.repository.NotificationRecordRepository;
 import com.careerbridge.notification.repository.UserContactRepository;
 import com.careerbridge.notification.service.EmailService;
 import com.careerbridge.notification.service.NotificationServiceImpl;
+import com.careerbridge.notification.service.PaymentServiceClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +52,7 @@ class NotificationServiceTest {
 
     private static final Long USER_ID = 42L;
     private static final Long RECOMMENDATION_ID = 7L;
+    private static final Long PAYMENT_ID = 77L;
     private static final String EMAIL = "ada@careerbridge.com";
     private static final String DOC_ID = "6650f1c2a1b2c3d4e5f60718";
 
@@ -56,10 +60,12 @@ class NotificationServiceTest {
     @Mock private NotificationDocumentRepository notificationDocumentRepository;
     @Mock private UserContactRepository userContactRepository;
     @Mock private EmailService emailService;
+    @Mock private PaymentServiceClient paymentServiceClient;
 
     @InjectMocks private NotificationServiceImpl notificationService;
 
     private RecommendationGeneratedEvent event;
+    private SubscriptionActivatedEvent subscriptionEvent;
 
     @BeforeEach
     void setUp() {
@@ -70,6 +76,15 @@ class NotificationServiceTest {
                 .matchPercentage(66.666)
                 .categoryName("System Design")
                 .generatedAt(LocalDateTime.now())
+                .build();
+
+        subscriptionEvent = SubscriptionActivatedEvent.builder()
+                .userId(USER_ID)
+                .paymentId(PAYMENT_ID)
+                .planName("STUDENT_PREMIUM")
+                .amount(new BigDecimal("199.00"))
+                .invoiceNumber("CB-INV-000077")
+                .userRole("STUDENT")
                 .build();
     }
 
@@ -336,5 +351,90 @@ class NotificationServiceTest {
 
         assertEquals(USER_ID, response.getUserId());
         assertEquals(7L, response.getUnreadCount());
+    }
+
+    @Test
+    @DisplayName("invoice: with a contact and a successful PDF fetch, sends the email with the attachment and writes the in-app notification")
+    void processSubscriptionInvoice_Success_SendsEmailWithAttachmentAndSavesInAppNotification() {
+        byte[] pdf = {'%', 'P', 'D', 'F'};
+        when(notificationDocumentRepository.findByUserIdAndPaymentId(USER_ID, PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(paymentServiceClient.fetchInvoicePdf(PAYMENT_ID, USER_ID, "STUDENT")).thenReturn(pdf);
+        when(emailService.sendInvoiceEmail(eq(EMAIL), anyString(), any(), anyString(), eq(pdf), eq(PAYMENT_ID)))
+                .thenReturn(true);
+
+        notificationService.processSubscriptionInvoice(subscriptionEvent);
+
+        NotificationDocument doc = captureSavedDocument();
+        assertEquals(USER_ID, doc.getUserId());
+        assertEquals(PAYMENT_ID, doc.getPaymentId());
+        assertNull(doc.getRecommendationId(), "a subscription notification is not tied to a recommendation");
+        assertEquals(NotificationConstants.TYPE_SUBSCRIPTION, doc.getNotificationType());
+        assertNotNull(doc.getCreatedAt());
+
+        verify(emailService).sendInvoiceEmail(eq(EMAIL), anyString(), any(), anyString(), eq(pdf), eq(PAYMENT_ID));
+        // No Postgres audit row for this event type -- see the class comment on why.
+        verify(notificationRecordRepository, never()).save(any(NotificationRecord.class));
+    }
+
+    @Test
+    @DisplayName("invoice: a redelivered event does no work at all")
+    void processSubscriptionInvoice_AlreadyProcessed_SkipsEverything() {
+        when(notificationDocumentRepository.findByUserIdAndPaymentId(USER_ID, PAYMENT_ID))
+                .thenReturn(Optional.of(NotificationDocument.builder().id(DOC_ID).build()));
+
+        notificationService.processSubscriptionInvoice(subscriptionEvent);
+
+        verify(notificationDocumentRepository, never()).save(any(NotificationDocument.class));
+        verify(paymentServiceClient, never()).fetchInvoicePdf(any(), any(), any());
+        verify(emailService, never()).sendInvoiceEmail(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("invoice: no contact row skips the email but still creates the in-app notification")
+    void processSubscriptionInvoice_NoContactRecord_SkipsEmailButStillCreatesInAppNotification() {
+        when(notificationDocumentRepository.findByUserIdAndPaymentId(USER_ID, PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.empty());
+        when(paymentServiceClient.fetchInvoicePdf(PAYMENT_ID, USER_ID, "STUDENT")).thenReturn(new byte[]{1});
+
+        notificationService.processSubscriptionInvoice(subscriptionEvent);
+
+        assertNotNull(captureSavedDocument(), "the student must still see it in-app");
+        verify(emailService, never()).sendInvoiceEmail(any(), any(), any(), any(), any(), any());
+    }
+
+    /**
+     * A payment-service outage must not stop the confirmation email -- the user was genuinely
+     * charged, and the in-app notification and email both still happen, just without the PDF.
+     */
+    @Test
+    @DisplayName("invoice: a failed PDF fetch still sends the email, without an attachment")
+    void processSubscriptionInvoice_PdfFetchFails_StillSendsEmailWithoutAttachment() {
+        when(notificationDocumentRepository.findByUserIdAndPaymentId(USER_ID, PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(paymentServiceClient.fetchInvoicePdf(PAYMENT_ID, USER_ID, "STUDENT")).thenReturn(null);
+        when(emailService.sendInvoiceEmail(eq(EMAIL), anyString(), any(), anyString(), eq(null), eq(PAYMENT_ID)))
+                .thenReturn(true);
+
+        assertDoesNotThrow(() -> notificationService.processSubscriptionInvoice(subscriptionEvent));
+
+        verify(emailService).sendInvoiceEmail(eq(EMAIL), anyString(), any(), anyString(), eq(null), eq(PAYMENT_ID));
+    }
+
+    @Test
+    @DisplayName("invoice: an SMTP failure does not throw and still leaves the in-app notification written")
+    void processSubscriptionInvoice_EmailFails_DoesNotThrow() {
+        when(notificationDocumentRepository.findByUserIdAndPaymentId(USER_ID, PAYMENT_ID))
+                .thenReturn(Optional.empty());
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(paymentServiceClient.fetchInvoicePdf(PAYMENT_ID, USER_ID, "STUDENT")).thenReturn(new byte[]{1});
+        when(emailService.sendInvoiceEmail(any(), any(), any(), any(), any(), any())).thenReturn(false);
+
+        assertDoesNotThrow(() -> notificationService.processSubscriptionInvoice(subscriptionEvent));
+
+        assertNotNull(captureSavedDocument());
     }
 }

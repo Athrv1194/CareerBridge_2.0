@@ -1,0 +1,8 @@
+.cb-home-nav-link {
+  border-bottom: 1px solid transparent;
+  transition: border-bottom-color 160ms cubic-bezier(.2, 0, .2, 1);
+}
+
+.cb-home-nav-link:hover {
+  border-bottom-color: var(--ink-900);
+}

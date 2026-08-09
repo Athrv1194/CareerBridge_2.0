@@ -69,6 +69,56 @@ public class StudentResume {
     @Column(columnDefinition = "bytea", nullable = false)
     private byte[] pdfContent;
 
+    // Builder options and ATS breakdown, snapshotted at generation time -- a resume is immutable
+    // once built, so these describe exactly what THIS version was built with/scored against, even
+    // if the student's live profile or a later generation's toggles differ.
+    //
+    // Nullable, added to an already-populated table -- same reasoning as StudentProfile.avatarImage
+    // in student-service: a NOT NULL column with no DEFAULT fails ddl-auto's ALTER against existing
+    // rows. Every include* toggle is read as "true unless explicitly false" wherever it matters
+    // (PDF rendering), so a null on a pre-migration row behaves exactly like the old always-on
+    // default.
+
+    @Column(columnDefinition = "TEXT")
+    private String summary;
+
+    private Boolean includePhone;
+    private Boolean includeEmail;
+    private Boolean includeLinks;
+    private Boolean includeLocation;
+
+    private Boolean includeExperience;
+    private Boolean includeSkills;
+    private Boolean includeProjects;
+    private Boolean includeEducation;
+    private Boolean includeCertificates;
+
+    @Column(columnDefinition = "TEXT")
+    private String jobDescription;
+
+    // columnDefinition carries a DB-level DEFAULT, not just @Builder.Default's Java-side one -- a
+    // NOT NULL column added to an already-populated table fails ddl-auto's ALTER silently (WARN
+    // only) without one. Hit exactly this against live data during this feature's own rollout: the
+    // ALTER for this column failed, the column was never created, and every /my and /generate call
+    // 500'd on "column is_tailored does not exist" until this fix. Same pattern as prs-service's
+    // resumeScore.
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "boolean not null default false")
+    private Boolean isTailored = false;
+
+    private String closestCareerName;
+
+    /** Comma-joined, not a join table -- a handful of short keyword strings, not relational data. */
+    @Column(columnDefinition = "TEXT")
+    private String matchedKeywords;
+
+    @Column(columnDefinition = "TEXT")
+    private String missingKeywords;
+
+    /** Snapshot booleans for the ATS breakdown card: did this version's profile have these sections. */
+    private Boolean hasEducation;
+    private Boolean hasProjects;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime generatedAt;

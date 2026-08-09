@@ -115,11 +115,17 @@ public class RecommendationServiceImpl implements RecommendationService {
     /**
      * Scores every career in the local catalogue and orders them best-first.
      *
+     * The score itself comes from event.getAllCareerScores() -- assessment-service's own
+     * already-graduated per-career map -- not a local recomputation. See the comment on
+     * AssessmentCompletedEvent.allCareerScores for why: categoryName alone (always "Overall" now)
+     * carries no differentiating signal. RecommendationEngine.calculateMatchScore only fires as a
+     * fallback for a career the map is missing, which should not happen in practice since both
+     * services rank the same CareerCatalog.
+     *
      * Deliberately the same shape as assessment-service's ScoringEngine.getTopCareers -- score
      * descending over a catalogue-ordered LinkedHashMap -- with one addition: on a tie, the career
-     * the event already named as topCareerPath wins. That matters because today every playable
-     * category damps all seven careers to the same score, so the tie-break decides rank 1 outright,
-     * and disagreeing with the result screen the student just saw would be a visible contradiction.
+     * the event already named as topCareerPath wins, so a genuine tie never disagrees with the
+     * result screen the student already saw.
      *
      * Score first, pin second: pinning first could seat a lower-scoring career at rank 1 if the two
      * catalogues ever drift, producing a response whose rank 1 shows a smaller percentage than
@@ -128,12 +134,15 @@ public class RecommendationServiceImpl implements RecommendationService {
      * matches nothing and leaves catalogue order in charge.
      */
     private List<Map.Entry<String, Double>> rankCareers(AssessmentCompletedEvent event) {
+        Map<String, Double> incoming = event.getAllCareerScores();
         Map<String, Double> scores = new LinkedHashMap<>();
         for (CareerPathDto career : CareerCatalog.ALL) {
-            scores.put(career.getName(), RecommendationEngine.calculateMatchScore(
-                    event.getCategoryName(),
-                    event.getCategoryScorePercentage(),
-                    career.getRequiredSkills()));
+            Double fromEvent = incoming == null ? null : incoming.get(career.getName());
+            scores.put(career.getName(), fromEvent != null ? fromEvent
+                    : RecommendationEngine.calculateMatchScore(
+                            event.getCategoryName(),
+                            event.getCategoryScorePercentage(),
+                            career.getRequiredSkills()));
         }
 
         Comparator<Map.Entry<String, Double>> byScore = Map.Entry.comparingByValue();

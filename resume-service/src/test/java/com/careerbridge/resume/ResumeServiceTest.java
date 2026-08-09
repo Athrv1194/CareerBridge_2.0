@@ -1,6 +1,8 @@
 package com.careerbridge.resume;
 
+import com.careerbridge.resume.dto.AtsResult;
 import com.careerbridge.resume.dto.ResumeDownload;
+import com.careerbridge.resume.dto.ResumeGenerateRequest;
 import com.careerbridge.resume.dto.ResumeResponse;
 import com.careerbridge.resume.dto.StudentProfileDto;
 import com.careerbridge.resume.exception.CustomException;
@@ -89,8 +91,14 @@ class ResumeServiceTest {
             @Override public Integer getVersion() { return version; }
             @Override public Double getAtsScore() { return 72.5; }
             @Override public Boolean getIsDefault() { return isDefault; }
+            @Override public Boolean getIsTailored() { return false; }
             @Override public LocalDateTime getGeneratedAt() { return LocalDateTime.now(); }
         };
+    }
+
+    private static AtsResult detailedResult() {
+        return AtsResult.builder().score(72.5).closestCareerName("Backend Developer")
+                .matchedKeywords(List.of("Java")).missingKeywords(List.of("Spring Boot")).totalKeywords(2).build();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -99,8 +107,8 @@ class ResumeServiceTest {
 
     private void stubHappyGeneration() throws IOException {
         when(studentServiceClient.fetchMyProfile(STUDENT_ID)).thenReturn(profile);
-        when(atsScoreCalculator.calculate(profile)).thenReturn(72.5);
-        when(resumePdfBuilder.build(profile)).thenReturn(PDF_BYTES);
+        when(atsScoreCalculator.calculateDetailed(profile)).thenReturn(detailedResult());
+        when(resumePdfBuilder.build(any(), any())).thenReturn(PDF_BYTES);
         when(resumeRepository.save(any(StudentResume.class))).thenAnswer(inv -> {
             StudentResume r = inv.getArgument(0);
             r.setId(RESUME_ID);
@@ -115,7 +123,7 @@ class ResumeServiceTest {
         when(resumeRepository.findTopByStudentIdOrderByVersionDesc(STUDENT_ID)).thenReturn(Optional.empty());
         when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of());
 
-        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID);
+        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID, null);
 
         assertEquals(1, result.getVersion());
         assertEquals(72.5, result.getAtsScore());
@@ -137,7 +145,7 @@ class ResumeServiceTest {
                 .thenReturn(Optional.of(resume(1L, STUDENT_ID, 2, true)));
         when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of());
 
-        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID);
+        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID, null);
 
         assertEquals(3, result.getVersion());
         assertEquals("resume_42_v3.pdf", result.getFileName());
@@ -152,7 +160,7 @@ class ResumeServiceTest {
                 .thenReturn(Optional.of(previous));
         when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of(previous));
 
-        resumeService.generateResume("STUDENT", STUDENT_ID);
+        resumeService.generateResume("STUDENT", STUDENT_ID, null);
 
         assertFalse(previous.getIsDefault(), "the previous resume should no longer be the default");
         verify(resumeRepository).saveAll(List.of(previous));
@@ -171,7 +179,7 @@ class ResumeServiceTest {
         when(resumeRepository.findTopByStudentIdOrderByVersionDesc(STUDENT_ID)).thenReturn(Optional.empty());
         when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of());
 
-        resumeService.generateResume("STUDENT", STUDENT_ID);
+        resumeService.generateResume("STUDENT", STUDENT_ID, null);
 
         InOrder order = inOrder(resumeRepository, eventPublisher);
         order.verify(resumeRepository).save(any(StudentResume.class));
@@ -188,7 +196,7 @@ class ResumeServiceTest {
         when(studentServiceClient.fetchMyProfile(STUDENT_ID)).thenReturn(null);
 
         CustomException ex = assertThrows(CustomException.class,
-                () -> resumeService.generateResume("STUDENT", STUDENT_ID));
+                () -> resumeService.generateResume("STUDENT", STUDENT_ID, null));
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
         verify(resumeRepository, never()).save(any());
@@ -199,12 +207,12 @@ class ResumeServiceTest {
     @DisplayName("generateResume: a PDF failure is a 500, and no row is written")
     void generateResume_PdfBuildFails_Throws500() throws Exception {
         when(studentServiceClient.fetchMyProfile(STUDENT_ID)).thenReturn(profile);
-        when(atsScoreCalculator.calculate(profile)).thenReturn(72.5);
+        when(atsScoreCalculator.calculateDetailed(profile)).thenReturn(detailedResult());
         when(resumeRepository.findTopByStudentIdOrderByVersionDesc(STUDENT_ID)).thenReturn(Optional.empty());
-        when(resumePdfBuilder.build(profile)).thenThrow(new IOException("render failed"));
+        when(resumePdfBuilder.build(any(), any())).thenThrow(new IOException("render failed"));
 
         CustomException ex = assertThrows(CustomException.class,
-                () -> resumeService.generateResume("STUDENT", STUDENT_ID));
+                () -> resumeService.generateResume("STUDENT", STUDENT_ID, null));
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, ex.getStatus());
         verify(resumeRepository, never()).save(any());
@@ -215,7 +223,7 @@ class ResumeServiceTest {
     @DisplayName("generateResume: a RECRUITER is refused with 403 before student-service is called")
     void generateResume_WrongRole_Throws403() {
         CustomException ex = assertThrows(CustomException.class,
-                () -> resumeService.generateResume("RECRUITER", STUDENT_ID));
+                () -> resumeService.generateResume("RECRUITER", STUDENT_ID, null));
 
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
         verify(studentServiceClient, never()).fetchMyProfile(anyLong());
@@ -425,5 +433,102 @@ class ResumeServiceTest {
 
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
         verify(resumeRepository, never()).findByStudentIdOrderByGeneratedAtDesc(anyLong());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // generateResume: tailor mode
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("generateResume: a non-blank jobDescription switches to tailored scoring")
+    void generateResume_WithJobDescription_UsesTailoredScoring() throws Exception {
+        when(studentServiceClient.fetchMyProfile(STUDENT_ID)).thenReturn(profile);
+        when(atsScoreCalculator.calculateTailored(profile, "Need Java and Docker"))
+                .thenReturn(AtsResult.builder().score(50.0).closestCareerName(null)
+                        .matchedKeywords(List.of("Java")).missingKeywords(List.of("Docker")).totalKeywords(2).build());
+        when(resumePdfBuilder.build(any(), any())).thenReturn(PDF_BYTES);
+        when(resumeRepository.findTopByStudentIdOrderByVersionDesc(STUDENT_ID)).thenReturn(Optional.empty());
+        when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of());
+        when(resumeRepository.save(any(StudentResume.class))).thenAnswer(inv -> {
+            StudentResume r = inv.getArgument(0);
+            r.setId(RESUME_ID);
+            return r;
+        });
+
+        ResumeGenerateRequest request = ResumeGenerateRequest.builder().jobDescription("Need Java and Docker").build();
+        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID, request);
+
+        assertTrue(result.getIsTailored());
+        assertEquals(50.0, result.getAtsScore());
+        assertEquals(List.of("Java"), result.getMatchedKeywords());
+        assertEquals(List.of("Docker"), result.getMissingKeywords());
+        verify(atsScoreCalculator, never()).calculateDetailed(any());
+    }
+
+    @Test
+    @DisplayName("generateResume: a blank jobDescription still uses best-match scoring, not tailored")
+    void generateResume_BlankJobDescription_UsesDetailedScoring() throws Exception {
+        stubHappyGeneration();
+        when(resumeRepository.findTopByStudentIdOrderByVersionDesc(STUDENT_ID)).thenReturn(Optional.empty());
+        when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of());
+
+        ResumeGenerateRequest request = ResumeGenerateRequest.builder().jobDescription("   ").build();
+        ResumeResponse result = resumeService.generateResume("STUDENT", STUDENT_ID, request);
+
+        assertFalse(result.getIsTailored());
+        verify(atsScoreCalculator, never()).calculateTailored(any(), any());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // setDefaultResume
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("setDefaultResume: flips the target to default and every other resume to non-default")
+    void setDefaultResume_Owned_FlipsDefaults() {
+        StudentResume target = resume(RESUME_ID, STUDENT_ID, 1, false);
+        StudentResume currentDefault = resume(2L, STUDENT_ID, 2, true);
+
+        when(resumeRepository.findByIdAndStudentId(RESUME_ID, STUDENT_ID)).thenReturn(Optional.of(target));
+        when(resumeRepository.findAllByStudentId(STUDENT_ID)).thenReturn(List.of(target, currentDefault));
+        when(resumeRepository.save(any(StudentResume.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ResumeResponse result = resumeService.setDefaultResume("STUDENT", STUDENT_ID, RESUME_ID);
+
+        assertTrue(result.getIsDefault());
+        assertFalse(currentDefault.getIsDefault());
+    }
+
+    @Test
+    @DisplayName("setDefaultResume: already-default is a no-op, not an error")
+    void setDefaultResume_AlreadyDefault_NoOp() {
+        StudentResume target = resume(RESUME_ID, STUDENT_ID, 1, true);
+        when(resumeRepository.findByIdAndStudentId(RESUME_ID, STUDENT_ID)).thenReturn(Optional.of(target));
+
+        resumeService.setDefaultResume("STUDENT", STUDENT_ID, RESUME_ID);
+
+        verify(resumeRepository, never()).findAllByStudentId(anyLong());
+        verify(resumeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("setDefaultResume: another student's resume is a 404")
+    void setDefaultResume_NotOwner_Throws404() {
+        when(resumeRepository.findByIdAndStudentId(RESUME_ID, OTHER_STUDENT_ID)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> resumeService.setDefaultResume("STUDENT", OTHER_STUDENT_ID, RESUME_ID));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("setDefaultResume: a RECRUITER is refused with 403")
+    void setDefaultResume_WrongRole_Throws403() {
+        CustomException ex = assertThrows(CustomException.class,
+                () -> resumeService.setDefaultResume("RECRUITER", STUDENT_ID, RESUME_ID));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(resumeRepository, never()).findByIdAndStudentId(anyLong(), anyLong());
     }
 }

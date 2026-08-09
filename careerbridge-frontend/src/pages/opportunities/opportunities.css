@@ -1,0 +1,30 @@
+@keyframes cbOpFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.cb-op-fade { animation: cbOpFadeIn 340ms cubic-bezier(.2, 0, .2, 1) both; }
+
+.cb-op-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  transition: grid-template-columns 220ms cubic-bezier(.2, 0, .2, 1);
+}
+
+.cb-op-board { grid-template-columns: minmax(260px, 320px) minmax(260px, 1fr); }
+.cb-op-detail-stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+
+.cb-op-job-row:hover { background: var(--bone-100) !important; }
+
+@media (max-width: 900px) {
+  .cb-op-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
+  .cb-op-sidebar-label, .cb-op-sidebar-footer, .cb-op-toggle-row { display: none !important; }
+  .cb-op-search { display: none !important; }
+  .cb-op-header { padding: 0 16px !important; gap: 12px !important; }
+  .cb-op-main-pad { padding: 22px 16px 48px !important; }
+  .cb-op-board { grid-template-columns: 1fr !important; }
+  .cb-op-job-list { max-height: 420px !important; }
+  .cb-op-detail { position: static !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-op-avatar-name { display: none !important; }
+  .cb-op-main-pad { padding: 16px 12px 40px !important; }
+  .cb-op-detail-title { font-size: 26px !important; }
+}

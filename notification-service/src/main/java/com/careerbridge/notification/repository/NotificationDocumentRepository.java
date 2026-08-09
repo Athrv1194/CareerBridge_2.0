@@ -27,6 +27,13 @@ public interface NotificationDocumentRepository extends MongoRepository<Notifica
     Optional<NotificationDocument> findByUserIdAndRecommendationId(Long userId, Long recommendationId);
 
     /**
+     * Same best-effort idempotency guard as findByUserIdAndRecommendationId, for subscription
+     * invoice notifications -- races redelivery rather than closing it, which is acceptable here
+     * for the same reason it is acceptable there.
+     */
+    Optional<NotificationDocument> findByUserIdAndPaymentId(Long userId, Long paymentId);
+
+    /**
      * Ownership folded into the query, so another student's notification is simply not found
      * rather than fetched and then compared -- there is no window where the wrong document sits
      * in memory. Id is a String because Mongo's @Id is a 24-char ObjectId hex.

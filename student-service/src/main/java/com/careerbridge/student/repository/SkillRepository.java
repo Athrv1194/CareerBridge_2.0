@@ -13,4 +13,7 @@ public interface SkillRepository extends JpaRepository<Skill, Long> {
 
     /** Batch load for candidate search: one query for every public profile's skills, not N. */
     List<Skill> findByStudentProfileIdIn(List<Long> studentProfileIds);
+
+    /** See EducationRepository.deleteByIdAndStudentProfileId for why this returns long, not List. */
+    long deleteByIdAndStudentProfileId(Long id, Long studentProfileId);
 }

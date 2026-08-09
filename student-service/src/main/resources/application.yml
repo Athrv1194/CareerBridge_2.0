@@ -26,6 +26,12 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    # Boot's default is 1MB/10MB, too small for a photo straight off a phone camera. Avatars and
+    # project covers are the only multipart uploads in this service.
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
 
 springdoc:
   api-docs:

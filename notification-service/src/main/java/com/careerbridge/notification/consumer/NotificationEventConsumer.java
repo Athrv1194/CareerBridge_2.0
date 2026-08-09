@@ -1,8 +1,13 @@
 package com.careerbridge.notification.consumer;
 
 import com.careerbridge.notification.constants.NotificationConstants;
+import com.careerbridge.notification.event.OrgAdminInvitedEvent;
+import com.careerbridge.notification.event.PasswordChangedEvent;
+import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
+import com.careerbridge.notification.event.SubscriptionActivatedEvent;
+import com.careerbridge.notification.service.EmailService;
 import com.careerbridge.notification.service.NotificationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,9 +28,11 @@ public class NotificationEventConsumer {
     private static final Logger log = LoggerFactory.getLogger(NotificationEventConsumer.class);
 
     private final NotificationService notificationService;
+    private final EmailService emailService;
 
-    public NotificationEventConsumer(NotificationService notificationService) {
+    public NotificationEventConsumer(NotificationService notificationService, EmailService emailService) {
         this.notificationService = notificationService;
+        this.emailService = emailService;
     }
 
     /**
@@ -81,6 +88,97 @@ public class NotificationEventConsumer {
             log.error("Failed to handle {} for userId={}: {}",
                     NotificationConstants.ROUTING_KEY_STUDENT_REGISTERED,
                     event == null ? null : event.getUserId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Straight to EmailService, not through NotificationService -- an OTP is not something that
+     * belongs in the in-app notification feed or the NotificationRecord audit trail. There is
+     * nothing durable worth writing about a code that is dead again in ten minutes either way.
+     */
+    @RabbitListener(queues = NotificationConstants.PASSWORD_RESET_QUEUE_NAME)
+    public void onPasswordResetRequested(PasswordResetRequestedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null || event.getOtp() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED, event);
+                return;
+            }
+
+            emailService.sendPasswordResetOtpEmail(
+                    event.getEmail(), event.getFirstName(), event.getOtp(), event.getExpiresInMinutes());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_PASSWORD_RESET_REQUESTED,
+                    event == null ? null : event.getEmail(),
+                    ex.getMessage());
+        }
+    }
+
+    @RabbitListener(queues = NotificationConstants.PASSWORD_CHANGED_QUEUE_NAME)
+    public void onPasswordChanged(PasswordChangedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED, event);
+                return;
+            }
+
+            emailService.sendPasswordChangedEmail(event.getEmail(), event.getFirstName());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_PASSWORD_CHANGED,
+                    event == null ? null : event.getEmail(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * A third queue, not a second listener on either queue above -- see RabbitMQConfig for why.
+     * paymentId is guarded because it is what the internal invoice-download call is keyed on; a
+     * payment.service.url outage inside processSubscriptionInvoice is handled there (fail-soft,
+     * email still sent without an attachment), not here.
+     */
+    @RabbitListener(queues = NotificationConstants.SUBSCRIPTION_QUEUE_NAME)
+    public void onSubscriptionActivated(SubscriptionActivatedEvent event) {
+        try {
+            if (event == null || event.getUserId() == null || event.getPaymentId() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED, event);
+                return;
+            }
+
+            notificationService.processSubscriptionInvoice(event);
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for paymentId={}: {}",
+                    NotificationConstants.ROUTING_KEY_SUBSCRIPTION_ACTIVATED,
+                    event == null ? null : event.getPaymentId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * A sixth queue, not a second listener on any queue above -- see RabbitMQConfig for why. Straight
+     * to EmailService, not through NotificationService: an admin invite is not something that belongs
+     * in the in-app feed, and the recipient has no session yet to read a feed with anyway -- same
+     * reasoning as onPasswordResetRequested.
+     */
+    @RabbitListener(queues = NotificationConstants.ORG_ADMIN_QUEUE_NAME)
+    public void onOrgAdminInvited(OrgAdminInvitedEvent event) {
+        try {
+            if (event == null || event.getEmail() == null || event.getResetToken() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED, event);
+                return;
+            }
+
+            emailService.sendOrgAdminInviteEmail(event.getEmail(), event.getFirstName(),
+                    event.getOrganizationName(), event.getResetToken(), event.getExpiresInHours());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for email={}: {}",
+                    NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED,
+                    event == null ? null : event.getEmail(),
                     ex.getMessage());
         }
     }

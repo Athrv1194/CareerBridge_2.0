@@ -82,6 +82,18 @@
 			MessageDigest.isEqual for a constant-time comparison, which the SDK does not do.
 		-->
 
+		<!--
+			OpenPDF, NOT iText 7: iText Community is AGPL v3, and serving a generated PDF over HTTP
+			is "conveying" under AGPL, which would oblige publishing this entire repository's
+			source. OpenPDF is an LGPL/MPL fork of the iText 4 lineage (com.lowagie.text.*), same
+			API shape resume-service already uses for resume PDFs, no licence exposure.
+		-->
+		<dependency>
+			<groupId>com.github.librepdf</groupId>
+			<artifactId>openpdf</artifactId>
+			<version>2.2.2</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>

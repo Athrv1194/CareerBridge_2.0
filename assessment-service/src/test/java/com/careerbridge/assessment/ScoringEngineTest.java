@@ -53,22 +53,26 @@ class ScoringEngineTest {
     }
 
     @Test
-    @DisplayName("career match: a career naming the category in requiredSkills scores at full weight")
+    @DisplayName("career match: relevance is graduated by how much of the career's own skill list "
+            + "the category covers, not a flat full weight for any match")
     void calculateCareerMatches_RelevantCareer_GetsFullWeight() {
+        // 1 of 2 skill tokens ("logical reasoning") matches -- relevance = 0.3 + 0.7*(1/2) = 0.65.
         List<CareerPath> careers = List.of(career("Data Scientist", "Python, Logical Reasoning"));
 
         Map<String, Double> scores =
                 ScoringEngine.calculateCareerMatches("Logical Reasoning", 80.0, careers);
 
-        assertEquals(80.0, scores.get("Data Scientist"));
+        assertEquals(52.0, scores.get("Data Scientist"));
         // Matching is case-insensitive, so seed data casing cannot silently downgrade a career.
-        assertEquals(80.0,
+        assertEquals(52.0,
                 ScoringEngine.calculateCareerMatches("logical reasoning", 80.0, careers)
                         .get("Data Scientist"));
     }
 
     @Test
-    @DisplayName("career match: an unrelated career is damped to 30%, and null skills do not blow up")
+    @DisplayName("career match: an unrelated career is damped to the 30% floor, null skills do not "
+            + "blow up, and careers with ZERO real signal get the identical score, not an "
+            + "alphabetical tiebreak")
     void calculateCareerMatches_IrrelevantCareer_GetsPartialWeight() {
         List<CareerPath> careers = List.of(
                 career("Chef", "Cooking, Plating"),
@@ -77,8 +81,36 @@ class ScoringEngineTest {
         Map<String, Double> scores =
                 ScoringEngine.calculateCareerMatches("Logical Reasoning", 80.0, careers);
 
+        // Both are equally irrelevant (0.3 floor) -- the category name shares no keyword with
+        // EITHER career, so there is no real signal to rank them by. Applying the per-rank
+        // tiebreak here would silently favor whichever name sorts first alphabetically for every
+        // student, every time -- the exact bug that made "Backend Developer" the default answer
+        // regardless of actual assessment content. Both must score identically instead.
         assertEquals(24.0, scores.get("Chef"));
         assertEquals(24.0, scores.get("Unseeded"));
+    }
+
+    @Test
+    @DisplayName("career match: when relevance genuinely differs, the tiebreak still applies to "
+            + "careers coincidentally tied at the SAME non-floor relevance")
+    void calculateCareerMatches_PartialTieAmongRealSignal_StillTiebreaks() {
+        // "Python" and "Java" both hit exactly 1 of 2 skill tokens against "Programming" -- a real,
+        // non-floor relevance (0.65) shared by two careers -- while a third career is fully
+        // irrelevant (0.3 floor). Real signal exists (relevance varies across the set), so the
+        // near-tie between Python and Java should still be broken to avoid a duplicate percentage.
+        List<CareerPath> careers = List.of(
+                career("Python Dev", "Programming, Testing"),
+                career("Java Dev", "Programming, Testing"),
+                career("Chef", "Cooking, Plating"));
+
+        Map<String, Double> scores =
+                ScoringEngine.calculateCareerMatches("Programming", 80.0, careers);
+
+        assertEquals(52.0, scores.get("Java Dev"));
+        assertEquals(51.0, scores.get("Python Dev"));
+        // Rank 2 (not tied with anyone), but the tiebreak is a per-rank penalty applied across the
+        // whole ranking once real signal exists, so it still lands here: 80*0.3 - 2 = 22.0.
+        assertEquals(22.0, scores.get("Chef"));
     }
 
     @Test

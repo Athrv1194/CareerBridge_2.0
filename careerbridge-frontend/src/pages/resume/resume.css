@@ -1,0 +1,63 @@
+.cb-rs-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  transition: grid-template-columns 220ms cubic-bezier(.2, 0, .2, 1);
+  min-height: calc(100vh - 64px);
+}
+
+.cb-rs-shell > aside {
+  position: sticky;
+  top: 64px;
+  height: calc(100vh - 64px);
+}
+
+.cb-rs-main {
+  min-height: calc(100vh - 64px);
+}
+
+/* Version-history column headers: fixed px tracks don't shrink on their own when the panel gets
+   narrow, so without a hard clip the text overflows into the next column instead of wrapping --
+   two labels visually run together ("VERSIONGENERATED..."). Ellipsis + a minmax(0,...) track (set
+   inline alongside this class) is what actually fixes it; this is the clip half of that pair. */
+.cb-rs-col-head {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* The Size column is a permanent "--" placeholder (no real file-size data) -- the first thing to
+   drop when the panel is too narrow for a 5-column row, not the score or the actions. */
+@media (max-width: 1180px) {
+  .cb-rs-col-size { display: none; }
+}
+
+@media (max-width: 1024px) {
+  .cb-rs-body { flex-direction: column; }
+  .cb-rs-list-panel { width: 100% !important; border-right: 0 !important; border-bottom: 1px solid var(--line-hairline); }
+  .cb-rs-list-panel:not(.collapsed) > div { width: 100% !important; max-height: 320px; }
+  .cb-rs-list-panel.collapsed { display: none; }
+  .cb-rs-ats-grid { grid-template-columns: 1fr !important; justify-items: center; text-align: center; }
+}
+
+@media (max-width: 900px) {
+  .cb-rs-shell { grid-template-columns: 64px minmax(0, 1fr) !important; }
+  .cb-rs-sidebar-label, .cb-rs-sidebar-footer, .cb-rs-toggle-row { display: none !important; }
+  .cb-rs-search { display: none !important; }
+  .cb-rs-header { padding: 0 16px !important; gap: 12px !important; }
+  .cb-rs-topbar { padding: 20px 16px !important; }
+  .cb-rs-detail { gap: 20px !important; }
+  .cb-rs-card { padding: 18px !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-rs-avatar-name { display: none !important; }
+  .cb-rs-topbar h1 { font-size: 24px !important; }
+  .cb-rs-preview-page { max-width: 100% !important; }
+}
