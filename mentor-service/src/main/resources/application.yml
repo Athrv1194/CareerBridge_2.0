@@ -1,0 +1,70 @@
+server:
+  # 8094, the next free port after payment-service's 8093. 8086 is unused and is not a gap --
+  # organization-service took 8087, roadmap-service 8088.
+  port: 8094
+
+spring:
+  application:
+    name: mentor-service
+  profiles:
+    # Defaults to the gitignored application-local.yml; docker-compose sets SPRING_PROFILES_ACTIVE=docker.
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    # PostgreSQL has no createDatabaseIfNotExist equivalent -- the database must already exist
+    # (CREATE DATABASE careerbridge_mentor;). docker/init.sql creates it for the compose stack, but
+    # only on a FRESH postgres volume; an existing one needs the CREATE DATABASE run by hand.
+    url: jdbc:postgresql://localhost:5432/careerbridge_mentor
+    username: postgres
+    # Defaulted rather than bare ${DB_PASSWORD}: an unresolvable placeholder fails startup outright,
+    # which would break `mvnw spring-boot:run` for anyone who has not exported the variable. The real
+    # value comes from the gitignored application-local.yml, or SPRING_DATASOURCE_PASSWORD in Docker.
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  rabbitmq:
+    # localhost:5672 with guest/guest, matching every other service's local default -- NOT the
+    # host-published 5673 and NOT the real compose credentials. docker-compose's backend-env anchor
+    # supplies SPRING_RABBITMQ_HOST/PORT/USERNAME/PASSWORD inside the network; a real password
+    # committed here would be a secret in a tracked file for no gain.
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    # No defer-datasource-initialization here, deliberately. That flag only orders a data.sql or
+    # schema.sql against ddl-auto, and this service has neither -- mentor profiles are created by
+    # mentors, not seeded.
+
+  # No spring.autoconfigure.exclude. auth-service excludes UserDetailsServiceAutoConfiguration
+  # because it carries the security starter; with no security on this classpath that class does not
+  # exist, and naming an absent class here fails startup outright.
+
+# No cross-service HTTP client here -- unlike prs-service and recruiter-service, mentor-service
+# needs nothing from another service synchronously. The mentor's own name is supplied on the profile
+# they create, and the student is identified by the gateway-injected X-User-Id alone.
+
+springdoc:
+  api-docs:
+    # /api-docs, NOT springdoc's /v3/api-docs default. api-gateway's mentor-service-docs route
+    # rewrites /api-docs/mentor to exactly this path; /v3/api-docs would leave the aggregated
+    # Swagger dropdown at http://localhost:8080/swagger-ui.html silently broken for this service.
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  # No management.health.rabbit.enabled entry: the RabbitMQ indicator is enabled by default, so
+  # writing `true` would be inert. Note /actuator/health does aggregate RabbitMQ and returns 503
+  # while the broker is down; the compose healthcheck points at /actuator/health/liveness instead.
