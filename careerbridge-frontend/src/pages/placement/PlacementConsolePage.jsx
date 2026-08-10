@@ -5,6 +5,7 @@ import { getOrgApplications, getCandidates, getJobs, getJobDetail } from '../../
 import { getUnreadCount } from '../../api/notificationApi';
 import { submitJoinRequest } from '../../api/orgJoinApi';
 import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import './placement-console.css';
 
 const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', ORG_ADMIN: '/college-dashboard', SUPER_ADMIN: '/super-admin', MENTOR: '/dashboard' };
 const STATUS_TONE = { APPLIED: 'default', SHORTLISTED: 'info', INTERVIEWED: 'accent', OFFERED: 'accent', REJECTED: 'danger' };
@@ -214,7 +215,7 @@ export default function PlacementConsolePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bone-100)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
-      <header style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--bone-100)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', gap: 24, padding: '0 28px', boxSizing: 'border-box' }}>
+      <header className="cb-pc-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--bone-100)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', gap: 24, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)', paddingLeft: 24, borderLeft: '1px solid var(--line-hairline)' }}>Placement</span>
         <div style={{ flex: 1 }} />
@@ -228,7 +229,7 @@ export default function PlacementConsolePage() {
             )}
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="cb-pc-avatar-name" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="user" size={15} />
             </div>
@@ -241,10 +242,10 @@ export default function PlacementConsolePage() {
       </header>
 
       <div style={{ background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+        <div className="cb-pc-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Placement officer</span>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Placement Console</h1>
+            <h1 className="cb-pc-company-title" style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Placement Console</h1>
             <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>Monitor your institution&apos;s students in the job market.</span>
           </div>
           <Badge tone="default" title="You can view and search — changes are made by recruiters.">Read only</Badge>
@@ -252,7 +253,7 @@ export default function PlacementConsolePage() {
       </div>
 
       <div style={{ position: 'sticky', top: 64, zIndex: 30, background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box' }}>
+        <div className="cb-pc-tabs-row" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box' }}>
           <Tabs
             value={activeTab}
             onChange={goToTab}
@@ -261,7 +262,7 @@ export default function PlacementConsolePage() {
         </div>
       </div>
 
-      <main style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 90px', boxSizing: 'border-box' }}>
+      <main className="cb-pc-main" style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 90px', boxSizing: 'border-box' }}>
 
         {activeTab === 'APPLICATIONS' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
@@ -301,7 +302,7 @@ export default function PlacementConsolePage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
+                <div className="cb-pc-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
                   <StatTile value={stats.total} label="Total applications" />
                   <StatTile value={stats.shortlisted} label="Shortlisted" />
                   <StatTile value={stats.offered} label="Offered" />
@@ -314,7 +315,7 @@ export default function PlacementConsolePage() {
                 )}
                 {filteredApps.length > 0 && (
                   <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', gap: 0, padding: '10px 16px', borderBottom: '1px solid var(--line-hairline)', fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>
+                    <div className="cb-pc-app-row cb-pc-app-row-head" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', gap: 0, padding: '10px 16px', borderBottom: '1px solid var(--line-hairline)', fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>
                       <span>Student</span><span>Job</span><span style={{ textAlign: 'center' }}>Status</span><span style={{ textAlign: 'right' }}>Offer</span><span style={{ textAlign: 'center' }}>Outcome</span><span style={{ textAlign: 'right' }}>Applied</span>
                     </div>
                     {filteredApps.map((a) => (
@@ -322,14 +323,15 @@ export default function PlacementConsolePage() {
                         key={a.id}
                         type="button"
                         onClick={() => setSelectedAppId(a.id)}
+                        className="cb-pc-app-row"
                         style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', width: '100%', padding: '14px 16px', border: 0, borderBottom: '1px solid var(--line-hairline)', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', boxSizing: 'border-box' }}
                       >
                         <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>Student #{a.studentId}</span>
                         <span style={{ fontSize: 13, color: 'var(--ink-700)' }}>{a.jobTitle}</span>
-                        <span style={{ textAlign: 'center' }}><Badge tone={STATUS_TONE[a.status]}>{a.status}</Badge></span>
-                        <span style={{ fontSize: 13, color: 'var(--ink-700)', textAlign: 'right' }}>{fmtCtc(a.offeredCtc)}</span>
-                        <span style={{ textAlign: 'center' }}>{a.offerOutcome ? <Badge tone={a.offerOutcome === 'ACCEPTED' ? 'success' : 'danger'}>{a.offerOutcome}</Badge> : <span style={{ color: 'var(--ink-300)' }}>—</span>}</span>
-                        <span style={{ fontSize: 12, color: 'var(--ink-400)', textAlign: 'right' }}>{fmtDate(a.appliedAt)}</span>
+                        <span className="cb-pc-app-row-meta" style={{ textAlign: 'center' }}><Badge tone={STATUS_TONE[a.status]}>{a.status}</Badge></span>
+                        <span className="cb-pc-app-row-meta" style={{ fontSize: 13, color: 'var(--ink-700)', textAlign: 'right' }}>{fmtCtc(a.offeredCtc)}</span>
+                        <span className="cb-pc-app-row-meta" style={{ textAlign: 'center' }}>{a.offerOutcome ? <Badge tone={a.offerOutcome === 'ACCEPTED' ? 'success' : 'danger'}>{a.offerOutcome}</Badge> : <span style={{ color: 'var(--ink-300)' }}>—</span>}</span>
+                        <span className="cb-pc-app-row-meta" style={{ fontSize: 12, color: 'var(--ink-400)', textAlign: 'right' }}>{fmtDate(a.appliedAt)}</span>
                       </button>
                     ))}
                   </div>
@@ -408,7 +410,7 @@ export default function PlacementConsolePage() {
             <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Showing {candidates.length} student{candidates.length === 1 ? '' : 's'}</span>
 
             {candLoading && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="cb-pc-cand-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {[1, 2, 3, 4, 5, 6].map((k) => <Skeleton key={k} height={180} />)}
               </div>
             )}
@@ -418,7 +420,7 @@ export default function PlacementConsolePage() {
             )}
 
             {!candLoading && candidates.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="cb-pc-cand-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 {candidates.map((c) => {
                   const unavailable = c.prsScore === -1;
                   const skills = c.skills || [];
@@ -491,8 +493,8 @@ export default function PlacementConsolePage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '360px minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
+            <div className="cb-pc-jobs-grid" style={{ display: 'grid', gridTemplateColumns: '360px minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
+              <div className="cb-pc-jobs-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
                 {!jobsLoaded && <Skeleton height={300} />}
                 {jobsLoaded && filteredJobs.length === 0 && <EmptyState icon="briefcase" title="No roles match" message="Try a different search or filter." />}
                 {filteredJobs.map((job) => (
@@ -527,7 +529,7 @@ export default function PlacementConsolePage() {
                       {jobDetail.location && <Badge tone="default" icon="map-pin">{jobDetail.location}</Badge>}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', marginTop: 28 }}>
+                    <div className="cb-pc-detail-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', marginTop: 28 }}>
                       <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>Salary band</span><div style={{ fontSize: 15, color: 'var(--ink-900)', marginTop: 8 }}>{fmtSalary(jobDetail.salaryMin, jobDetail.salaryMax)}</div></div>
                       <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>Closes</span><div style={{ fontSize: 15, color: 'var(--ink-900)', marginTop: 8 }}>{fmtDateFull(jobDetail.applicationDeadline)}</div></div>
                       <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>Work mode</span><div style={{ fontSize: 15, color: 'var(--ink-900)', marginTop: 8 }}>{WORKMODE_LABEL[jobDetail.workMode] || jobDetail.workMode}</div></div>

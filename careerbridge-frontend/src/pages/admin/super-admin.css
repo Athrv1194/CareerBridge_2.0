@@ -1,0 +1,19 @@
+@media (max-width: 900px) {
+  .cb-sa-header { padding: 0 16px !important; gap: 12px !important; }
+  .cb-sa-topbar { padding: 20px 16px !important; }
+  .cb-sa-tabs-row { padding: 0 16px !important; }
+  .cb-sa-main { padding: 22px 16px 60px !important; }
+  .cb-sa-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .cb-sa-field-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 1024px) {
+  .cb-sa-split { grid-template-columns: 1fr !important; }
+  .cb-sa-split-list { max-height: 320px !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-sa-page-title { font-size: 26px !important; }
+  .cb-sa-stat-grid { grid-template-columns: 1fr !important; }
+  .cb-sa-detail-stat-grid { grid-template-columns: 1fr !important; }
+}
