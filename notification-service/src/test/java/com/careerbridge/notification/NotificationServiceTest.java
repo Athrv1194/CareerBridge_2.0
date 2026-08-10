@@ -4,6 +4,9 @@ import com.careerbridge.notification.constants.NotificationConstants;
 import com.careerbridge.notification.dto.NotificationResponse;
 import com.careerbridge.notification.dto.UnreadCountResponse;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
+import com.careerbridge.notification.event.SessionAcceptedEvent;
+import com.careerbridge.notification.event.SessionBookedEvent;
+import com.careerbridge.notification.event.SessionCompletedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
 import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.exception.CustomException;
@@ -434,6 +437,113 @@ class NotificationServiceTest {
         when(emailService.sendInvoiceEmail(any(), any(), any(), any(), any(), any())).thenReturn(false);
 
         assertDoesNotThrow(() -> notificationService.processSubscriptionInvoice(subscriptionEvent));
+
+        assertNotNull(captureSavedDocument());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Mentorship sessions
+    // -------------------------------------------------------------------------------------------
+
+    private static final Long MENTOR_USER_ID = 99L;
+    private static final Long SESSION_ID = 555L;
+    private static final LocalDateTime SCHEDULED_AT = LocalDateTime.of(2026, 9, 15, 14, 0);
+
+    private SessionBookedEvent sessionBookedEvent() {
+        return SessionBookedEvent.builder()
+                .sessionId(SESSION_ID).studentId(USER_ID).mentorUserId(MENTOR_USER_ID)
+                .mentorFirstName("Raj").mentorLastName("Sharma")
+                .topic("Java backend interviews").scheduledAt(SCHEDULED_AT)
+                .build();
+    }
+
+    /**
+     * The recipient here is the MENTOR, not the student -- the one session event addressed to the
+     * other side. A regression that looked up studentId instead would still pass a naive "an email
+     * was sent" assertion, so the contact lookup id is asserted explicitly.
+     */
+    @Test
+    @DisplayName("session booked: notifies the MENTOR, not the student")
+    void processSessionBooked_NotifiesMentorNotStudent() {
+        when(userContactRepository.findByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(contact()));
+        when(emailService.sendSessionBookedEmail(eq(EMAIL), any(), any(), any(), eq(SESSION_ID)))
+                .thenReturn(true);
+
+        notificationService.processSessionBooked(sessionBookedEvent());
+
+        verify(userContactRepository).findByUserId(MENTOR_USER_ID);
+        verify(userContactRepository, never()).findByUserId(USER_ID);
+
+        NotificationDocument doc = captureSavedDocument();
+        assertEquals(MENTOR_USER_ID, doc.getUserId());
+        assertEquals(NotificationConstants.TYPE_SESSION_BOOKED, doc.getNotificationType());
+        assertNotNull(doc.getCreatedAt());
+        assertNull(doc.getRecommendationId());
+        // No Postgres audit row for this event type -- recommendationId is NOT NULL there.
+        verify(notificationRecordRepository, never()).save(any(NotificationRecord.class));
+    }
+
+    @Test
+    @DisplayName("session booked: no contact row skips the email but still creates the in-app notification")
+    void processSessionBooked_NoContact_StillCreatesInAppNotification() {
+        when(userContactRepository.findByUserId(MENTOR_USER_ID)).thenReturn(Optional.empty());
+
+        notificationService.processSessionBooked(sessionBookedEvent());
+
+        assertNotNull(captureSavedDocument());
+        verify(emailService, never()).sendSessionBookedEmail(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("session accepted: notifies the student and passes the meeting link through")
+    void processSessionAccepted_PassesMeetingLinkToEmail() {
+        String link = "https://meet.google.com/abc-defg-hij";
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(emailService.sendSessionAcceptedEmail(eq(EMAIL), any(), any(), any(), eq(link), eq(SESSION_ID)))
+                .thenReturn(true);
+
+        notificationService.processSessionAccepted(SessionAcceptedEvent.builder()
+                .sessionId(SESSION_ID).studentId(USER_ID).mentorUserId(MENTOR_USER_ID)
+                .mentorFirstName("Raj").topic("Java backend interviews")
+                .scheduledAt(SCHEDULED_AT).meetingLink(link)
+                .build());
+
+        // The link is the entire point of this notification -- the only place the student gets it.
+        verify(emailService).sendSessionAcceptedEmail(eq(EMAIL), any(), any(), any(), eq(link), eq(SESSION_ID));
+        assertEquals(USER_ID, captureSavedDocument().getUserId());
+    }
+
+    @Test
+    @DisplayName("session completed: nudges the student for a review")
+    void processSessionCompleted_NotifiesStudent() {
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(emailService.sendSessionCompletedEmail(eq(EMAIL), any(), any(), eq(SESSION_ID)))
+                .thenReturn(true);
+
+        notificationService.processSessionCompleted(SessionCompletedEvent.builder()
+                .sessionId(SESSION_ID).studentId(USER_ID).mentorUserId(MENTOR_USER_ID)
+                .mentorFirstName("Raj").topic("Java backend interviews")
+                .studentSessionsCompleted(1)
+                .build());
+
+        NotificationDocument doc = captureSavedDocument();
+        assertEquals(USER_ID, doc.getUserId());
+        assertEquals(NotificationConstants.TYPE_SESSION_COMPLETED, doc.getNotificationType());
+        verify(emailService).sendSessionCompletedEmail(eq(EMAIL), any(), any(), eq(SESSION_ID));
+    }
+
+    @Test
+    @DisplayName("session completed: an SMTP failure does not throw")
+    void processSessionCompleted_EmailFails_DoesNotThrow() {
+        when(userContactRepository.findByUserId(USER_ID)).thenReturn(Optional.of(contact()));
+        when(emailService.sendSessionCompletedEmail(any(), any(), any(), any())).thenReturn(false);
+
+        assertDoesNotThrow(() -> notificationService.processSessionCompleted(
+                SessionCompletedEvent.builder()
+                        .sessionId(SESSION_ID).studentId(USER_ID).mentorUserId(MENTOR_USER_ID)
+                        .mentorFirstName("Raj").topic("Java backend interviews")
+                        .studentSessionsCompleted(1)
+                        .build()));
 
         assertNotNull(captureSavedDocument());
     }

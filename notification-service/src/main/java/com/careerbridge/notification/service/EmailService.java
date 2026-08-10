@@ -11,6 +11,8 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 /**
@@ -28,6 +30,14 @@ import java.util.Locale;
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
+    /**
+     * Locale.ROOT and no zone: LocalDateTime carries neither, and the times mentor-service stores
+     * are wall-clock values the two participants agreed on. Formatting them against the server's
+     * default locale would render the same instant differently per deployment.
+     */
+    private static final DateTimeFormatter SCHEDULE_FORMAT =
+            DateTimeFormatter.ofPattern("EEE d MMM yyyy 'at' HH:mm", Locale.ROOT);
 
     private final JavaMailSender mailSender;
 
@@ -344,5 +354,173 @@ public class EmailService {
                   </body>
                 </html>
                 """, name, career, match);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Mentorship sessions
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * To the MENTOR: a student has requested a session with them.
+     *
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendSessionBookedEmail(String toEmail, String mentorFirstName, String topic,
+                                          LocalDateTime scheduledAt, Long sessionId) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.SESSION_BOOKED_EMAIL_SUBJECT);
+            helper.setText(buildSessionBookedBody(mentorFirstName, topic, scheduledAt), true);
+
+            mailSender.send(message);
+
+            log.info("Sent session booked email to {} for sessionId={}", toEmail, sessionId);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send session booked email to {} for sessionId={}: {}",
+                    toEmail, sessionId, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * To the STUDENT: the mentor accepted, and here is the meeting link.
+     *
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendSessionAcceptedEmail(String toEmail, String mentorFirstName, String topic,
+                                            LocalDateTime scheduledAt, String meetingLink,
+                                            Long sessionId) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.SESSION_ACCEPTED_EMAIL_SUBJECT);
+            helper.setText(buildSessionAcceptedBody(mentorFirstName, topic, scheduledAt, meetingLink), true);
+
+            mailSender.send(message);
+
+            log.info("Sent session accepted email to {} for sessionId={}", toEmail, sessionId);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send session accepted email to {} for sessionId={}: {}",
+                    toEmail, sessionId, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * To the STUDENT: the session is done, please leave a review.
+     *
+     * @return true if the message was handed to the SMTP server, false on any failure.
+     */
+    public boolean sendSessionCompletedEmail(String toEmail, String mentorFirstName, String topic,
+                                             Long sessionId) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(NotificationConstants.SESSION_COMPLETED_EMAIL_SUBJECT);
+            helper.setText(buildSessionCompletedBody(mentorFirstName, topic), true);
+
+            mailSender.send(message);
+
+            log.info("Sent session completed email to {} for sessionId={}", toEmail, sessionId);
+            return true;
+        } catch (Exception ex) {
+            log.error("Failed to send session completed email to {} for sessionId={}: {}",
+                    toEmail, sessionId, ex.getMessage());
+            return false;
+        }
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildSessionBookedBody(String mentorFirstName, String topic, LocalDateTime scheduledAt) {
+        String name = blankTo(mentorFirstName, "there");
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">New mentorship session request</h2>
+                    <p>Hi %s,</p>
+                    <p>A student has requested a mentorship session with you.</p>
+                    <p style="margin: 16px 0;">
+                      <strong>Topic:</strong> %s<br/>
+                      <strong>Proposed time:</strong> %s
+                    </p>
+                    <p>
+                      Sign in to CareerBridge to accept or decline. Accepting asks you for a meeting
+                      link, which we send straight to the student.
+                    </p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, name, blankTo(topic, "Not specified"), formatSchedule(scheduledAt));
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildSessionAcceptedBody(String mentorFirstName, String topic,
+                                           LocalDateTime scheduledAt, String meetingLink) {
+        String mentor = blankTo(mentorFirstName, "Your mentor");
+
+        // The link is rendered as plain text as well as an anchor: some clients strip anchors, and
+        // this URL is the only way the student can actually attend.
+        String linkBlock = (meetingLink == null || meetingLink.isBlank())
+                ? "<p>Your mentor will share the meeting link before the session.</p>"
+                : String.format(Locale.ROOT,
+                        "<p style=\"margin: 16px 0;\"><strong>Meeting link:</strong><br/>"
+                                + "<a href=\"%s\">%s</a></p>", meetingLink, meetingLink);
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">Your session is confirmed</h2>
+                    <p>Good news -- %s accepted your mentorship session request.</p>
+                    <p style="margin: 16px 0;">
+                      <strong>Topic:</strong> %s<br/>
+                      <strong>When:</strong> %s
+                    </p>
+                    %s
+                    <p>Come with specific questions -- you will get far more out of the time.</p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, mentor, blankTo(topic, "Not specified"), formatSchedule(scheduledAt), linkBlock);
+    }
+
+    /** Public for the same test-reachability reason as buildHtmlBody above. */
+    public String buildSessionCompletedBody(String mentorFirstName, String topic) {
+        String mentor = blankTo(mentorFirstName, "your mentor");
+
+        return String.format(Locale.ROOT, """
+                <html>
+                  <body style="font-family: Arial, Helvetica, sans-serif; color: #1f2933; line-height: 1.6;">
+                    <h2 style="color: #1c6ea4; margin-bottom: 4px;">How was your session?</h2>
+                    <p>Your mentorship session with %s on "%s" is complete.</p>
+                    <p>
+                      Sign in to CareerBridge to leave a rating and a short review. It takes under a
+                      minute, and it is what helps other students pick the right mentor.
+                    </p>
+                    <p style="margin-top: 24px;">The CareerBridge Team</p>
+                  </body>
+                </html>
+                """, mentor, blankTo(topic, "your topic"));
+    }
+
+    private static String blankTo(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
+    }
+
+    /** A null scheduledAt is a malformed event rather than a normal state, but must not throw here. */
+    private static String formatSchedule(LocalDateTime scheduledAt) {
+        return scheduledAt == null ? "To be confirmed" : scheduledAt.format(SCHEDULE_FORMAT);
     }
 }
