@@ -56,3 +56,7 @@ SELECT 'CREATE DATABASE careerbridge_resume'
 -- ai-coach-service is deliberately absent from this file: it uses MongoDB Atlas only.
 SELECT 'CREATE DATABASE careerbridge_payment'
  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_payment')\gexec
+
+-- mentor-service (P2). Mentor profiles, mentorship sessions and session reviews.
+SELECT 'CREATE DATABASE careerbridge_mentor'
+ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'careerbridge_mentor')\gexec
