@@ -4,6 +4,9 @@ import com.careerbridge.notification.constants.NotificationConstants;
 import com.careerbridge.notification.dto.NotificationResponse;
 import com.careerbridge.notification.dto.UnreadCountResponse;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
+import com.careerbridge.notification.event.SessionAcceptedEvent;
+import com.careerbridge.notification.event.SessionBookedEvent;
+import com.careerbridge.notification.event.SessionCompletedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
 import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.exception.CustomException;
@@ -202,6 +205,118 @@ public class NotificationServiceImpl implements NotificationService {
         log.info("Processed subscription invoice notification userId={} paymentId={} attachment={} emailStatus={}",
                 userId, paymentId, invoicePdf != null,
                 sent ? NotificationConstants.STATUS_SENT : NotificationConstants.STATUS_FAILED);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Mentorship sessions
+    //
+    // All three follow processSubscriptionInvoice's shape: Mongo document first, email second, and
+    // no NotificationRecord audit row -- that table's recommendationId is NOT NULL and half of
+    // uk_notification_records_user_recommendation, so these event types cannot write to it without a
+    // constraint change on a populated table, which is the failure mode logged four times already.
+    //
+    // Deliberately NOT idempotent-guarded the way the subscription path is. There is no natural
+    // (userId, sessionId) key on NotificationDocument, and a duplicate feed entry from a redelivery
+    // is a cosmetic annoyance rather than the double-charge risk that justified the guard there.
+    // Add a sessionId field and a findByUserIdAndSessionId if duplicates ever become a real problem.
+    // ---------------------------------------------------------------------------------------------
+
+    @Override
+    public void processSessionBooked(SessionBookedEvent event) {
+        Long mentorUserId = event.getMentorUserId();
+
+        // The MENTOR is the recipient here, not the student -- this is the one session event whose
+        // audience is the other side of the relationship.
+        Optional<UserContact> contact = userContactRepository.findByUserId(mentorUserId);
+        String mentorFirstName = contact.map(UserContact::getFirstName).orElse(event.getMentorFirstName());
+
+        notificationDocumentRepository.save(NotificationDocument.builder()
+                .userId(mentorUserId)
+                .title(NotificationConstants.SESSION_BOOKED_EMAIL_SUBJECT)
+                .message(String.format("A student requested a session on \"%s\".", safeTopic(event.getTopic())))
+                .notificationType(NotificationConstants.TYPE_SESSION_BOOKED)
+                .createdAt(LocalDateTime.now())
+                .build());
+
+        boolean sent = false;
+        if (contact.isPresent()) {
+            sent = emailService.sendSessionBookedEmail(contact.get().getEmail(), mentorFirstName,
+                    event.getTopic(), event.getScheduledAt(), event.getSessionId());
+        } else {
+            log.warn("No contact record for mentorUserId={} -- in-app notification still created "
+                    + "for sessionId={}", mentorUserId, event.getSessionId());
+        }
+
+        log.info("Processed session booked notification mentorUserId={} sessionId={} emailStatus={}",
+                mentorUserId, event.getSessionId(),
+                sent ? NotificationConstants.STATUS_SENT : NotificationConstants.STATUS_FAILED);
+    }
+
+    @Override
+    public void processSessionAccepted(SessionAcceptedEvent event) {
+        Long studentId = event.getStudentId();
+
+        Optional<UserContact> contact = userContactRepository.findByUserId(studentId);
+
+        notificationDocumentRepository.save(NotificationDocument.builder()
+                .userId(studentId)
+                .title(NotificationConstants.SESSION_ACCEPTED_EMAIL_SUBJECT)
+                .message(String.format("%s accepted your session on \"%s\".",
+                        safeMentor(event.getMentorFirstName()), safeTopic(event.getTopic())))
+                .notificationType(NotificationConstants.TYPE_SESSION_ACCEPTED)
+                .createdAt(LocalDateTime.now())
+                .build());
+
+        boolean sent = false;
+        if (contact.isPresent()) {
+            sent = emailService.sendSessionAcceptedEmail(contact.get().getEmail(),
+                    event.getMentorFirstName(), event.getTopic(), event.getScheduledAt(),
+                    event.getMeetingLink(), event.getSessionId());
+        } else {
+            log.warn("No contact record for studentId={} -- in-app notification still created "
+                    + "for sessionId={}", studentId, event.getSessionId());
+        }
+
+        log.info("Processed session accepted notification studentId={} sessionId={} emailStatus={}",
+                studentId, event.getSessionId(),
+                sent ? NotificationConstants.STATUS_SENT : NotificationConstants.STATUS_FAILED);
+    }
+
+    @Override
+    public void processSessionCompleted(SessionCompletedEvent event) {
+        Long studentId = event.getStudentId();
+
+        Optional<UserContact> contact = userContactRepository.findByUserId(studentId);
+
+        notificationDocumentRepository.save(NotificationDocument.builder()
+                .userId(studentId)
+                .title(NotificationConstants.SESSION_COMPLETED_EMAIL_SUBJECT)
+                .message(String.format("Leave a review for your session with %s.",
+                        safeMentor(event.getMentorFirstName())))
+                .notificationType(NotificationConstants.TYPE_SESSION_COMPLETED)
+                .createdAt(LocalDateTime.now())
+                .build());
+
+        boolean sent = false;
+        if (contact.isPresent()) {
+            sent = emailService.sendSessionCompletedEmail(contact.get().getEmail(),
+                    event.getMentorFirstName(), event.getTopic(), event.getSessionId());
+        } else {
+            log.warn("No contact record for studentId={} -- in-app notification still created "
+                    + "for sessionId={}", studentId, event.getSessionId());
+        }
+
+        log.info("Processed session completed notification studentId={} sessionId={} emailStatus={}",
+                studentId, event.getSessionId(),
+                sent ? NotificationConstants.STATUS_SENT : NotificationConstants.STATUS_FAILED);
+    }
+
+    private static String safeTopic(String topic) {
+        return (topic == null || topic.isBlank()) ? "your session" : topic;
+    }
+
+    private static String safeMentor(String mentorFirstName) {
+        return (mentorFirstName == null || mentorFirstName.isBlank()) ? "Your mentor" : mentorFirstName;
     }
 
     /**

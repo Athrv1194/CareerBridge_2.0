@@ -6,7 +6,7 @@ public class NotificationConstants {
     public static final String EXCHANGE_NAME = "careerbridge.exchange";
 
     /**
-     * This service owns two queues, one per event type -- not one queue with two listeners.
+     * This service owns nine queues, one per event type -- never one queue with several listeners.
      *
      * Two @RabbitListener methods on a single queue create two independent containers consuming it,
      * and RabbitMQ round-robins deliveries between them. Roughly half of every event would be handed
@@ -56,6 +56,23 @@ public class NotificationConstants {
     /** Literal must equal auth-service's RabbitMQConfig.ORG_ADMIN_INVITED_ROUTING_KEY. */
     public static final String ROUTING_KEY_ORG_ADMIN_INVITED = "organization.admin.invited";
 
+    /**
+     * Seventh, eighth and ninth queues, for mentor-service's three session events. Same
+     * one-queue-per-event-type rule as the six above -- three more listeners bolted onto an existing
+     * queue would round-robin against its current one and misroute both event types.
+     *
+     * prs-service binds its own careerbridge.prs.mentor.queue to session.completed as well. Both
+     * queues receive every copy, since each is bound independently to the topic exchange.
+     */
+    public static final String SESSION_BOOKED_QUEUE_NAME = "careerbridge.notification.session.booked.queue";
+    public static final String SESSION_ACCEPTED_QUEUE_NAME = "careerbridge.notification.session.accepted.queue";
+    public static final String SESSION_COMPLETED_QUEUE_NAME = "careerbridge.notification.session.completed.queue";
+
+    /** Literals must equal mentor-service's MentorRabbitMQConfig routing keys. */
+    public static final String ROUTING_KEY_SESSION_BOOKED = "session.booked";
+    public static final String ROUTING_KEY_SESSION_ACCEPTED = "session.accepted";
+    public static final String ROUTING_KEY_SESSION_COMPLETED = "session.completed";
+
     public static final String EMAIL_SUBJECT = "Your Career Recommendation is Ready!";
     public static final String PASSWORD_RESET_EMAIL_SUBJECT = "Your CareerBridge password reset code";
     public static final String PASSWORD_CHANGED_EMAIL_SUBJECT = "Your CareerBridge password was changed";
@@ -64,8 +81,17 @@ public class NotificationConstants {
 
     public static final String INVOICE_EMAIL_SUBJECT = "Your CareerBridge Subscription Invoice";
 
+    public static final String SESSION_BOOKED_EMAIL_SUBJECT = "New mentorship session request";
+    public static final String SESSION_ACCEPTED_EMAIL_SUBJECT = "Your mentorship session is confirmed";
+    public static final String SESSION_COMPLETED_EMAIL_SUBJECT = "How was your mentorship session?";
+
     /** NotificationDocument.notificationType for a subscription invoice in-app notification. */
     public static final String TYPE_SUBSCRIPTION = "SUBSCRIPTION";
+
+    /** NotificationDocument.notificationType values for the three mentorship session events. */
+    public static final String TYPE_SESSION_BOOKED = "SESSION_BOOKED";
+    public static final String TYPE_SESSION_ACCEPTED = "SESSION_ACCEPTED";
+    public static final String TYPE_SESSION_COMPLETED = "SESSION_COMPLETED";
 
     /** NotificationRecord.notificationType -- the delivery channel being audited. */
     public static final String TYPE_EMAIL = "EMAIL";
