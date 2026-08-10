@@ -14,7 +14,6 @@ import { getUnreadCount } from '../../api/notificationApi';
 import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
 import './recruiter-console.css';
 
-const ROLE_REDIRECT = { STUDENT: '/dashboard', PLACEMENT_OFFICER: '/placement-console', ORG_ADMIN: '/college-dashboard', SUPER_ADMIN: '/super-admin', MENTOR: '/dashboard' };
 const WORKMODE_LABEL = { REMOTE: 'Remote', HYBRID: 'Hybrid', ON_SITE: 'On-site' };
 const JOBTYPE_LABEL = { FULL_TIME: 'Full time', PART_TIME: 'Part time', INTERNSHIP: 'Internship', CONTRACT: 'Contract' };
 const STATUS_TONE = { APPLIED: 'default', SHORTLISTED: 'info', INTERVIEWED: 'accent', OFFERED: 'accent', REJECTED: 'danger' };
@@ -155,7 +154,7 @@ export default function RecruiterConsolePage() {
       return;
     }
     if (payload.role !== 'RECRUITER') {
-      navigate(ROLE_REDIRECT[payload.role] || '/dashboard', { replace: true });
+      navigate('/login', { replace: true });
       return;
     }
     setRecruiterName(getDisplayName('Recruiter'));

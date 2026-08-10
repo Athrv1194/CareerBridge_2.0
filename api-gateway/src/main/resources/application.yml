@@ -112,6 +112,13 @@ spring:
                 # shown to visitors before login. Every other endpoint here authorizes on the
                 # X-User-Id and X-User-Role this gateway injects.
                 - Path=/api/payment/**
+            - id: mentor-service
+              uri: ${MENTOR_SERVICE_URI:http://localhost:8094}
+              predicates:
+                # Singular, matching mentor-service's @RequestMapping("/api/mentor"). Nothing here
+                # is public: browsing mentors still requires a logged-in user, since the service
+                # reads X-User-Role on every endpoint.
+                - Path=/api/mentor/**
             # Swagger aggregation: /api-docs/<service> at the gateway -> each service's own
             # /api-docs (its springdoc.api-docs.path). Needs an explicit path rewrite -- unlike the
             # 5 routes above, the incoming and target paths differ, and this gateway's default
@@ -190,6 +197,12 @@ spring:
                 - Path=/api-docs/payment
               filters:
                 - RewritePath=/api-docs/payment,/api-docs
+            - id: mentor-service-docs
+              uri: ${MENTOR_SERVICE_URI:http://localhost:8094}
+              predicates:
+                - Path=/api-docs/mentor
+              filters:
+                - RewritePath=/api-docs/mentor,/api-docs
 
 gateway:
   # MUST stay byte-identical to auth-service's jwt.secret -- that service signs the tokens this
@@ -278,6 +291,8 @@ springdoc:
         url: /api-docs/ai-coach
       - name: payment-service
         url: /api-docs/payment
+      - name: mentor-service
+        url: /api-docs/mentor
 
 management:
   endpoints:

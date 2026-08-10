@@ -26,6 +26,16 @@ public interface PrsService {
     /** 10% input. Recomputes the total and grade, then publishes prs.updated fail-soft. */
     void updateResumeScore(Long studentId, Double atsScore);
 
+    /**
+     * Mentoring engagement, tracked but UNWEIGHTED -- it does not enter totalScore. See
+     * PlacementReadinessScore.mentoringScore for why.
+     *
+     * sessionsCompleted is an absolute running total from mentor-service, never a delta: this
+     * method SETS mentoringScore to min(100, count x 5), so a RabbitMQ redelivery recomputes the
+     * same value instead of awarding another five points.
+     */
+    void updateMentoringScore(Long studentId, Integer sessionsCompleted);
+
     PrsResponse getMyPrs(Long studentId);
 
     PrsResponse getPrsByStudentId(Long callerId, String callerRole, Long targetStudentId);
