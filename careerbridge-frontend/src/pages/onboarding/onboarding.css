@@ -1,0 +1,16 @@
+.cb-ob-grid {
+  transition: grid-template-columns 220ms cubic-bezier(.2, 0, .2, 1);
+}
+
+@media (max-width: 860px) {
+  .cb-ob-grid { grid-template-columns: 1fr !important; }
+  .cb-ob-side { padding: 28px 24px !important; }
+  .cb-ob-main { padding: 0 24px !important; }
+  .cb-ob-field-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 560px) {
+  .cb-ob-main { padding: 0 16px !important; }
+  .cb-ob-steps { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 14px !important; }
+  .cb-ob-heading { font-size: 24px !important; }
+}

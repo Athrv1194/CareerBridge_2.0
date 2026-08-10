@@ -7,6 +7,7 @@ import { useAuthState } from '../../hooks/useAuth';
 import {
   Alert, Button, Field, Icon, Input, Logo, ScoreRing, Select, StatTile, Switch, Tag, Textarea,
 } from '../../components/ui';
+import './onboarding.css';
 
 const STEP_LABELS = ['Education', 'Skills', 'Basic info', 'Assessment'];
 const LEVELS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'];
@@ -280,8 +281,8 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.86fr) minmax(0,1.14fr)', minHeight: '100vh', width: '100%', background: 'var(--bone-100)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
-      <div style={{ position: 'relative', overflowY: 'auto', background: '#1B1A18', display: 'flex', flexDirection: 'column', padding: '44px 48px 40px', gap: 36 }}>
+    <div className="cb-ob-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.86fr) minmax(0,1.14fr)', minHeight: '100vh', width: '100%', background: 'var(--bone-100)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
+      <div className="cb-ob-side" style={{ position: 'relative', overflowY: 'auto', background: '#1B1A18', display: 'flex', flexDirection: 'column', padding: '44px 48px 40px', gap: 36 }}>
         <div style={{ alignSelf: 'flex-start' }}>
           <Logo size={34} tone="inverse" />
         </div>
@@ -323,14 +324,14 @@ export default function OnboardingPage() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 56px', overflowY: 'auto' }}>
+      <div className="cb-ob-main" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 56px', overflowY: 'auto' }}>
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, padding: '36px 0 20px', width: '100%', maxWidth: 620 }}>
           <span className="cb-num" style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-300)' }}>
             Step {step + 1} of 4
           </span>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 20, width: '100%', maxWidth: 620 }}>
+        <div className="cb-ob-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 20, width: '100%', maxWidth: 620 }}>
           {STEP_LABELS.map((label, i) => (
             <button
               key={label}
@@ -353,7 +354,7 @@ export default function OnboardingPage() {
 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 48, maxWidth: 620, width: '100%' }}>
           <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>{HEADINGS[step]}</h1>
+            <h1 className="cb-ob-heading" style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>{HEADINGS[step]}</h1>
             <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-600)', margin: '12px 0 0', maxWidth: 460 }}>{SUBHEADINGS[step]}</p>
           </div>
 
@@ -377,7 +378,7 @@ export default function OnboardingPage() {
                   <Field label="College or university" error={educationErrors[i]?.institution}>
                     <Input placeholder="RV College of Engineering" value={e.institution} onChange={(ev) => updateEducationField(i, 'institution', ev.target.value)} />
                   </Field>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
+                  <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                     <Field label="Degree">
                       <Input placeholder="B.E. Computer Science" value={e.degree} onChange={(ev) => updateEducationField(i, 'degree', ev.target.value)} />
                     </Field>
@@ -385,7 +386,7 @@ export default function OnboardingPage() {
                       <Input placeholder="Computer Science" value={e.fieldOfStudy} onChange={(ev) => updateEducationField(i, 'fieldOfStudy', ev.target.value)} />
                     </Field>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
+                  <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                     <Field label="Graduation year">
                       <Input type="number" placeholder="2026" value={e.graduationYear} onChange={(ev) => updateEducationField(i, 'graduationYear', ev.target.value)} />
                     </Field>
@@ -469,7 +470,7 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <section style={{ background: 'var(--bone-50)', border: 'var(--border-hairline)', padding: '26px 26px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
+              <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                 <Field label="Full name">
                   <Input value={[profile?.firstName, profile?.lastName].filter(Boolean).join(' ') || '—'} onChange={() => {}} />
                 </Field>
@@ -477,7 +478,7 @@ export default function OnboardingPage() {
                   <Input value={profile?.email || '—'} onChange={() => {}} />
                 </Field>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
+              <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                 <Field label="Phone number">
                   <Input placeholder="+91 90000 00000" value={basic.phone} onChange={(ev) => updateBasicField('phone', ev.target.value)} />
                 </Field>
@@ -485,7 +486,7 @@ export default function OnboardingPage() {
                   <Input placeholder="Bengaluru" value={basic.city} onChange={(ev) => updateBasicField('city', ev.target.value)} />
                 </Field>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
+              <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                 <Field label="State">
                   <Input placeholder="Karnataka" value={basic.state} onChange={(ev) => updateBasicField('state', ev.target.value)} />
                 </Field>
