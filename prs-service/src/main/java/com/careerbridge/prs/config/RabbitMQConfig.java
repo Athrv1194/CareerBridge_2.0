@@ -12,8 +12,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Four consumer queues and one publisher -- the most connected service in CareerBridge, since the
- * Placement Readiness Score is a composite of what four other services produce.
+ * Five consumer queues and one publisher -- the most connected service in CareerBridge, since the
+ * Placement Readiness Score is a composite of what five other services produce.
  *
  * One queue per event type, never one queue with multiple listeners. Two @RabbitListener methods on
  * a single queue create two containers consuming it and RabbitMQ round-robins between them, so
@@ -36,6 +36,7 @@ public class RabbitMQConfig {
     public static final String PRS_RECOMMENDATION_QUEUE = "careerbridge.prs.recommendation.queue";
     public static final String PRS_ROADMAP_QUEUE = "careerbridge.prs.roadmap.queue";
     public static final String PRS_RESUME_QUEUE = "careerbridge.prs.resume.queue";
+    public static final String PRS_MENTOR_QUEUE = "careerbridge.prs.mentor.queue";
 
     /**
      * "student.registered", NOT "user.registered".
@@ -52,6 +53,13 @@ public class RabbitMQConfig {
     public static final String RECOMMENDATION_GENERATED_ROUTING_KEY = "recommendation.generated";
     public static final String ROADMAP_UPDATED_ROUTING_KEY = "roadmap.updated";
     public static final String RESUME_GENERATED_ROUTING_KEY = "resume.generated";
+
+    /**
+     * Published by mentor-service when a mentor marks a session COMPLETED. notification-service
+     * binds its own queue to this same key to nudge the student for a review -- two consumers, two
+     * queues, which is the rule this class already follows four times over.
+     */
+    public static final String SESSION_COMPLETED_ROUTING_KEY = "session.completed";
 
     public static final String PRS_UPDATED_ROUTING_KEY = "prs.updated";
 
@@ -92,6 +100,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue prsMentorQueue() {
+        return new Queue(PRS_MENTOR_QUEUE, true);
+    }
+
+    @Bean
     public Binding prsStudentRegisteredBinding(Queue prsUserQueue, TopicExchange careerBridgeExchange) {
         return BindingBuilder.bind(prsUserQueue)
                 .to(careerBridgeExchange)
@@ -120,8 +133,15 @@ public class RabbitMQConfig {
                 .with(RESUME_GENERATED_ROUTING_KEY);
     }
 
+    @Bean
+    public Binding prsSessionCompletedBinding(Queue prsMentorQueue, TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(prsMentorQueue)
+                .to(careerBridgeExchange)
+                .with(SESSION_COMPLETED_ROUTING_KEY);
+    }
+
     /**
-     * Only four bindings are declared. prs.updated is published, never consumed here, and a queue
+     * Only five bindings are declared. prs.updated is published, never consumed here, and a queue
      * bound to it with no listener would accrue every event forever and read as an unprocessed
      * backlog -- the same reason organization-service declares no queue for organization.created
      * and roadmap-service none for roadmap.updated. A future dashboard service declares its own.

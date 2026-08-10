@@ -11,6 +11,7 @@ import {
   listCategories, listAdminQuestions, addQuestion, editQuestion, activateQuestion, deactivateQuestion,
   getLeaderboard, listSubscriptions, getPlacementStats, refreshAiCoachResources,
 } from '../../api/adminApi';
+import './super-admin.css';
 
 const TABS = [
   { key: 'overview', label: 'Overview' },
@@ -117,7 +118,7 @@ function OverviewTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
+      <div className="cb-sa-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
         {[
           [stats.totalUsers, 'Total users'], [stats.activeUsers, 'Active users'],
           [stats.totalStudents, 'Total students'], [stats.totalOrgAdmins + '', 'Organisations touched'],
@@ -397,8 +398,8 @@ function OrganisationsTab() {
         <Button variant="primary" iconAfter="plus" onClick={() => { setShowCreate(true); setSelectedId(null); }}>Create organisation</Button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
+      <div className="cb-sa-split" style={{ display: 'grid', gridTemplateColumns: '320px minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
+        <div className="cb-sa-split-list" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
           {orgs.length === 0 && <EmptyState icon="building-2" title="No organisations yet" />}
           {orgs.map((org) => (
             <div
@@ -425,12 +426,12 @@ function OrganisationsTab() {
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>New organisation</h2>
               <Field label="Name"><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Institution name" /></Field>
               <Field label="Type"><Input value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })} placeholder="University / College / Institute" /></Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="cb-sa-field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Contact email"><Input type="email" value={draft.contactEmail} onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })} /></Field>
                 <Field label="Contact phone"><Input value={draft.contactPhone} onChange={(e) => setDraft({ ...draft, contactPhone: e.target.value })} /></Field>
               </div>
               <Field label="Address"><Textarea rows={2} value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} /></Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="cb-sa-field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="City"><Input value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></Field>
                 <Field label="State"><Input value={draft.state} onChange={(e) => setDraft({ ...draft, state: e.target.value })} /></Field>
               </div>
@@ -449,7 +450,7 @@ function OrganisationsTab() {
                 <span className="cb-num" style={{ fontSize: 12, color: 'var(--ink-400)' }}>{fmtDate(selected.createdAt)}</span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', marginTop: 28 }}>
+              <div className="cb-sa-detail-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', marginTop: 28 }}>
                 <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span className="cb-eyebrow">Departments</span><div className="cb-num" style={{ fontSize: 22, color: 'var(--ink-900)', marginTop: 6 }}>{selected.departments?.length ?? 0}</div></div>
                 <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span className="cb-eyebrow">Contact</span><div style={{ marginTop: 6, fontSize: 13 }}>{selected.contactEmail || '—'}</div></div>
                 <div style={{ background: 'var(--bone-50)', padding: '16px 18px' }}><span className="cb-eyebrow">ID</span><div className="cb-num" style={{ fontSize: 15, color: 'var(--ink-900)', marginTop: 6 }}>{selected.id}</div></div>
@@ -477,12 +478,12 @@ function OrganisationsTab() {
                   <div style={{ background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14, maxWidth: 560 }}>
                     <Field label="Name"><Input value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} /></Field>
                     <Field label="Type"><Input value={editDraft.type} onChange={(e) => setEditDraft({ ...editDraft, type: e.target.value })} /></Field>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div className="cb-sa-field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       <Field label="Contact email"><Input type="email" value={editDraft.contactEmail} onChange={(e) => setEditDraft({ ...editDraft, contactEmail: e.target.value })} /></Field>
                       <Field label="Contact phone"><Input value={editDraft.contactPhone} onChange={(e) => setEditDraft({ ...editDraft, contactPhone: e.target.value })} /></Field>
                     </div>
                     <Field label="Address"><Textarea rows={2} value={editDraft.address} onChange={(e) => setEditDraft({ ...editDraft, address: e.target.value })} /></Field>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div className="cb-sa-field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       <Field label="City"><Input value={editDraft.city} onChange={(e) => setEditDraft({ ...editDraft, city: e.target.value })} /></Field>
                       <Field label="State"><Input value={editDraft.state} onChange={(e) => setEditDraft({ ...editDraft, state: e.target.value })} /></Field>
                     </div>
@@ -691,8 +692,8 @@ function AssessmentTab() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '340px minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
+      <div className="cb-sa-split" style={{ display: 'grid', gridTemplateColumns: '340px minmax(0,1fr)', gap: 28, alignItems: 'start' }}>
+        <div className="cb-sa-split-list" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
           {!questions ? <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>Loading…</span> : questions.length === 0 ? (
             <EmptyState icon="help-circle" title="No questions yet." />
           ) : questions.map((q) => (
@@ -729,7 +730,7 @@ function AssessmentTab() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 620 }}>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>{formMode === 'add' ? 'New question' : 'Edit question'}</h2>
               <Field label="Question text"><Textarea rows={2} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} /></Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="cb-sa-field-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Category">
                   <select
                     value={draft.categoryId}
@@ -857,7 +858,7 @@ function PlacementTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
       <SectionHeader label="Platform placement stats" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
+      <div className="cb-sa-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
         {tiles.map(([v, l]) => (
           <div key={l} style={{ background: 'var(--bone-50)', padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 100 }}>
             <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 28, color: 'var(--ink-900)' }}>{v}</span>
@@ -938,7 +939,7 @@ export default function SuperAdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bone-100)', color: 'var(--ink-900)', fontFamily: 'var(--font-sans)' }}>
-      <header style={{
+      <header className="cb-sa-header" style={{
         position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--bone-50)',
         borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', gap: 24, padding: '0 28px', boxSizing: 'border-box',
       }}
@@ -959,10 +960,10 @@ export default function SuperAdminPage() {
       </header>
 
       <div style={{ background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+        <div className="cb-sa-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--status-danger)' }}>Super admin</span>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Platform control</h1>
+            <h1 className="cb-sa-page-title" style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Platform control</h1>
             <span style={{ fontSize: 14, color: 'var(--ink-400)' }}>Global scope · all organisations · all users.</span>
           </div>
           <Badge tone="danger">Super admin</Badge>
@@ -970,7 +971,7 @@ export default function SuperAdminPage() {
       </div>
 
       <div style={{ position: 'sticky', top: 64, zIndex: 30, background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
+        <div className="cb-sa-tabs-row" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -988,7 +989,7 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      <main style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 120px', boxSizing: 'border-box' }}>
+      <main className="cb-sa-main" style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 120px', boxSizing: 'border-box' }}>
         {activeTab === 'overview' && <OverviewTab />}
         {activeTab === 'users' && <UsersTab />}
         {activeTab === 'organisations' && <OrganisationsTab />}

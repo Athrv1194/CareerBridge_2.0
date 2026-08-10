@@ -45,6 +45,17 @@ public class PrsServiceImpl implements PrsService {
     private static final int PROFILE_WEIGHT_PCT = 20;
     private static final int RESUME_WEIGHT_PCT = 10;
 
+    /**
+     * Mentoring has NO weight constant, and that omission is the design rather than an oversight.
+     * The four weights above already sum to 1.00, so giving mentoring a share would mean re-cutting
+     * them, which would move every existing student's totalScore on deploy for a reason unrelated to
+     * anything they did. mentoringScore is stored and surfaced on PrsResponse but excluded from
+     * computeTotalScore; giving it real weight is a deliberate product decision to be taken on its
+     * own, not folded into the change that introduced mentor-service.
+     */
+    private static final double POINTS_PER_MENTORSHIP_SESSION = 5.0;
+    private static final double MENTORING_SCORE_CEILING = 100.0;
+
     private static final double GRADE_A_MIN = 80.0;
     private static final double GRADE_B_MIN = 60.0;
     private static final double GRADE_C_MIN = 40.0;
@@ -140,6 +151,28 @@ public class PrsServiceImpl implements PrsService {
         recomputeAndSave(prs, "resume");
     }
 
+    @Override
+    @Transactional
+    public void updateMentoringScore(Long studentId, Integer sessionsCompleted) {
+        if (studentId == null || sessionsCompleted == null) {
+            log.warn("Ignoring {} with null studentId or studentSessionsCompleted",
+                    RabbitMQConfig.SESSION_COMPLETED_ROUTING_KEY);
+            return;
+        }
+
+        PlacementReadinessScore prs = loadOrCreate(studentId);
+
+        // SET from an absolute count, never "+= POINTS_PER_MENTORSHIP_SESSION". RabbitMQ is
+        // at-least-once, and an accumulating update would award a redelivered session twice with
+        // nothing anywhere to detect it. mentor-service owns the sessions and counts them, so the
+        // arithmetic lives there and this service only projects it onto a 0-100 scale.
+        double capped = Math.min(MENTORING_SCORE_CEILING,
+                sessionsCompleted * POINTS_PER_MENTORSHIP_SESSION);
+        prs.setMentoringScore(round2(capped));
+
+        recomputeAndSave(prs, "mentoring");
+    }
+
     /**
      * Defensive creation, deliberately fail-open. A recommendation or roadmap event for a student
      * with no PRS row means student.registered was missed -- most likely because they registered
@@ -212,7 +245,13 @@ public class PrsServiceImpl implements PrsService {
     // Scoring
     // ---------------------------------------------------------------------------------------------
 
-    /** Always recomputed from the four stored inputs, never incremented, so it cannot drift. */
+    /**
+     * Always recomputed from the four WEIGHTED stored inputs, never incremented, so it cannot drift.
+     *
+     * mentoringScore is a fifth stored input and is deliberately absent from this sum -- see the
+     * weight-constants block above. If it is ever given a weight, the other four have to be re-cut
+     * to keep the total at 1.00, and PrsBreakdown gains a fifth contribution at the same time.
+     */
     private double computeTotalScore(PlacementReadinessScore prs) {
         double total = nullSafe(prs.getAssessmentScore()) * ASSESSMENT_WEIGHT
                 + nullSafe(prs.getRoadmapScore()) * ROADMAP_WEIGHT
@@ -370,7 +409,10 @@ public class PrsServiceImpl implements PrsService {
         double roadmap = nullSafe(prs.getRoadmapScore());
         double profile = nullSafe(prs.getProfileScore());
         double resume = nullSafe(prs.getResumeScore());
+        double mentoring = nullSafe(prs.getMentoringScore());
 
+        // mentoring is deliberately NOT added to the breakdown: PrsBreakdown's contract is that its
+        // contributions sum to totalScore exactly, and an unweighted entry would break that.
         PrsBreakdown breakdown = PrsBreakdown.builder()
                 .assessmentWeight(ASSESSMENT_WEIGHT_PCT)
                 .assessmentScore(assessment)
@@ -393,6 +435,7 @@ public class PrsServiceImpl implements PrsService {
                 .roadmapScore(roadmap)
                 .profileScore(profile)
                 .resumeScore(resume)
+                .mentoringScore(mentoring)
                 .totalScore(prs.getTotalScore())
                 .grade(prs.getGrade())
                 .breakdown(breakdown)

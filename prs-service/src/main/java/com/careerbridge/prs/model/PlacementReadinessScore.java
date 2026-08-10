@@ -32,6 +32,9 @@ import java.time.LocalDateTime;
  * student who has never generated a resume keeps resumeScore at its default 0.0, so nothing about
  * an existing score changes on its own; totalScore only rises once a resume actually exists.
  *
+ * mentoringScore is a FIFTH stored input that is deliberately NOT part of that formula -- see its
+ * own javadoc below. "The four raw inputs" above means the four weighted ones.
+ *
  * The unique constraint is the real idempotency guarantee for the student.registered consumer, not
  * the existsByStudentId check in initialisePrs -- RabbitMQ is at-least-once, so a redelivery can
  * race that check and the loser raises DataIntegrityViolationException, which the consumer's
@@ -102,6 +105,31 @@ public class PlacementReadinessScore {
     @Builder.Default
     @Column(nullable = false, columnDefinition = "double precision not null default 0")
     private Double resumeScore = 0.0;
+
+    /**
+     * Mentoring engagement, 0-100: 5.0 per completed mentorship session, capped at 100. Fed by
+     * mentor-service's session.completed on careerbridge.prs.mentor.queue.
+     *
+     * TRACKED BUT NOT WEIGHTED, deliberately. The four weights above already sum to 1.00, so giving
+     * mentoring a share would mean re-cutting them, and that would move every existing student's
+     * totalScore the moment this deployed -- for a reason unrelated to anything they did. This field
+     * is surfaced on PrsResponse so the number is visible and the mentor-service event chain is
+     * genuinely proven end to end, while computeTotalScore stays a four-input calculation. Whether
+     * mentoring should earn a weight is an open product decision, not an oversight; see
+     * PrsServiceImpl.computeTotalScore.
+     *
+     * Because it is unweighted it is also absent from PrsBreakdown, whose stated contract is that
+     * its contributions sum to totalScore exactly.
+     *
+     * Written by SETTING an absolute value derived from a count carried on the event, never by
+     * incrementing -- see PrsServiceImpl.updateMentoringScore.
+     *
+     * The DEFAULT 0 in columnDefinition is mandatory for the same reason as resumeScore above: this
+     * column is being added to a table that already has rows.
+     */
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "double precision not null default 0")
+    private Double mentoringScore = 0.0;
 
     /** Derived, recomputed on every update. 0-100 since the resume slot activated. */
     @Builder.Default

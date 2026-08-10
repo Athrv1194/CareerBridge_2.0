@@ -31,7 +31,14 @@ public class PrsResponse {
 
     private Double resumeScore;
 
-    /** Weighted composite, 0-100 since the resume slot activated 2026-08-01. */
+    /**
+     * 5.0 per completed mentorship session, capped at 100. Reported here but NOT included in
+     * totalScore or in breakdown -- the four weights already sum to 1.00. See
+     * PlacementReadinessScore.mentoringScore.
+     */
+    private Double mentoringScore;
+
+    /** Weighted composite of the four weighted inputs, 0-100. Excludes mentoringScore. */
     private Double totalScore;
 
     /** A / B / C / D / F. */
