@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Icon, Logo, MatchScore, ProgressMeter, Skeleton, StatTile,
+  AnimatedWords, Alert, Badge, Button, Icon, Logo, MatchScore, ProgressMeter, revealStyle,
+  Skeleton, StatTile, useRevealOnMount,
 } from '../../components/ui';
 import { startAttempt, submitAttempt } from '../../api/assessmentApi';
 import './assessment.css';
@@ -79,6 +80,7 @@ export default function AssessmentPage() {
   const [animatedPct, setAnimatedPct] = useState(null);
   const [typedPath, setTypedPath] = useState('');
   const [isMobile, setIsMobile] = useState(false);
+  const introIn = useRevealOnMount();
 
   const pctRafRef = useRef(null);
   const typeTimerRef = useRef(null);
@@ -289,7 +291,7 @@ export default function AssessmentPage() {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 48, padding: '56px 32px' }}>
           <div style={{ maxWidth: 1160, width: '100%', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '320px minmax(0,1fr)', gap: isMobile ? 32 : 64, alignItems: isMobile ? 'stretch' : 'center' }}>
 
-            <div style={{ background: 'var(--ink-900)', padding: '36px 28px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div style={{ background: 'var(--ink-900)', padding: '36px 28px', display: 'flex', flexDirection: 'column', gap: 24, ...revealStyle(introIn, 0, { distance: 24 }) }}>
               <OrbitGraphic />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <span className="cb-eyebrow" style={{ color: 'var(--taupe-300)' }}>AI insight</span>
@@ -322,19 +324,22 @@ export default function AssessmentPage() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22, alignItems: 'flex-start' }}>
-              <span className="cb-eyebrow">Before you start</span>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-lg)', lineHeight: 'var(--leading-display)', letterSpacing: 'var(--tracking-display)', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
-                Twenty questions, and we can <i>rank</i> your careers.
-              </h1>
-              <p style={{ fontSize: 14, lineHeight: 'var(--leading-normal)', color: 'var(--text-secondary)', margin: 0, maxWidth: 480 }}>
+              <span className="cb-eyebrow" style={revealStyle(introIn, 1, { distance: 12, duration: 500 })}>Before you start</span>
+              <AnimatedWords
+                tag="h1"
+                revealed={introIn}
+                text="Twenty questions, and we can rank your careers."
+                style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-lg)', lineHeight: 'var(--leading-display)', letterSpacing: 'var(--tracking-display)', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}
+              />
+              <p style={{ fontSize: 14, lineHeight: 'var(--leading-normal)', color: 'var(--text-secondary)', margin: 0, maxWidth: 480, ...revealStyle(introIn, 2, { distance: 12, duration: 500 }) }}>
                 Three categories &mdash; aptitude, domain knowledge and soft skills. Answer honestly rather than optimally; the recommendation is only as good as the input.
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', width: '100%', marginTop: 6 }}>
-                <StatTile value="20" label="Questions" />
-                <StatTile value="18 min" label="Time" />
-                <StatTile value="Unlimited" label="Attempts" />
+                <StatTile value="20" label="Questions" style={revealStyle(introIn, 3)} />
+                <StatTile value="18 min" label="Time" style={revealStyle(introIn, 4)} />
+                <StatTile value="Unlimited" label="Attempts" style={revealStyle(introIn, 5)} />
               </div>
-              <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)', fontStyle: 'italic', margin: '2px 0 0' }}>
+              <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)', fontStyle: 'italic', margin: '2px 0 0', ...revealStyle(introIn, 6, { distance: 8, duration: 450 }) }}>
                 Progress is saved as you go. Leaving mid-way keeps the attempt open; it is only scored once you submit.
               </p>
               {beginError && (
@@ -362,8 +367,8 @@ export default function AssessmentPage() {
               { icon: 'chart-no-axes-column', title: 'Aptitude', body: 'Logic, numbers and pattern recognition under time pressure.' },
               { icon: 'file-text', title: 'Domain knowledge', body: "What you actually know about the field you're pointed at." },
               { icon: 'users', title: 'Soft skills', body: 'How you handle ambiguity, disagreement and stakeholders.' },
-            ].map((c) => (
-              <div key={c.title} style={{ background: 'var(--surface-card)', padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            ].map((c, i) => (
+              <div key={c.title} style={{ background: 'var(--surface-card)', padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: 12, ...revealStyle(introIn, 7 + i) }}>
                 <Icon name={c.icon} size={20} style={{ color: 'var(--taupe-700)' }} />
                 <span style={{ fontSize: 15, color: 'var(--ink-900)' }}>{c.title}</span>
                 <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text-secondary)', margin: 0 }}>{c.body}</p>

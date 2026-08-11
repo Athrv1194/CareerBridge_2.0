@@ -13,11 +13,13 @@ import OpportunitiesPage from './pages/opportunities/OpportunitiesPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import ResumePage from './pages/resume/ResumePage';
 import CoachPage from './pages/coach/CoachPage';
+import MentorsPage from './pages/mentor/MentorsPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import RegisterInstitutionPage from './pages/institution/RegisterInstitutionPage';
 import CollegeDashboardPage from './pages/institution/CollegeDashboardPage';
 import PlacementConsolePage from './pages/placement/PlacementConsolePage';
 import RecruiterConsolePage from './pages/recruiter/RecruiterConsolePage';
+import MentorConsolePage from './pages/mentor/MentorConsolePage';
 import PlansPage from './pages/plans/PlansPage';
 import SuperAdminPage from './pages/admin/SuperAdminPage';
 
@@ -39,11 +41,13 @@ function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/resume" element={<ResumePage />} />
         <Route path="/coach" element={<CoachPage />} />
+        <Route path="/mentors" element={<MentorsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/register-institution" element={<RegisterInstitutionPage />} />
         <Route path="/college-dashboard" element={<CollegeDashboardPage />} />
         <Route path="/placement-console" element={<PlacementConsolePage />} />
         <Route path="/recruiter-console" element={<RecruiterConsolePage />} />
+        <Route path="/mentor-console" element={<MentorConsolePage />} />
         <Route path="/plans" element={<PlansPage />} />
         <Route path="/super-admin" element={<SuperAdminPage />} />
       </Routes>

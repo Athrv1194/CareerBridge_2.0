@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Checkbox, Field, Icon, IconButton, Input, Logo,
-  Skeleton, Switch, Tag, Textarea,
+  revealStyle, Skeleton, Switch, Tag, Textarea,
 } from '../../components/ui';
 import {
   getMyProfile, updateMyProfile,
@@ -15,6 +15,8 @@ import {
 } from '../../api/studentApi';
 import { getMyResumes, generateResume, deleteResume, downloadResume } from '../../api/resumeApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './profile.css';
 
 const NAV_ITEMS = [
@@ -25,6 +27,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile', active: true },
 ];
 
@@ -184,13 +187,167 @@ const EMPTY_EDU = { institution: '', degree: '', fieldOfStudy: '', startYear: ''
 const EMPTY_PROJECT = { title: '', description: '', techStack: '', projectUrl: '', githubUrl: '', startDate: '', endDate: '', isOngoing: false, coverImageUrl: '' };
 const EMPTY_CERT = { name: '', issuingOrganization: '', issueDate: '', expiryDate: '', credentialUrl: '' };
 
+// Fixed on-screen size of the circular crop viewport, in px.
+const CROP_VIEW = 260;
+// Exported square, in px -- the circular preview everywhere else is just this square masked with
+// border-radius:50%, so the file itself doesn't need to carry real alpha-transparency corners.
+const CROP_OUTPUT = 480;
+const CROP_MIN_ZOOM = 1;
+const CROP_MAX_ZOOM = 3;
+
+function AvatarCropModal({ imageUrl, onCancel, onSave, saving }) {
+  const imgRef = useRef(null);
+  const viewRef = useRef(null);
+  const [natural, setNatural] = useState(null); // { w, h }
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef(null); // { startX, startY, startOffset }
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
+  const onImgLoad = () => {
+    const img = imgRef.current;
+    setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  };
+
+  // Without this, scrolling/wheeling to zoom the crop also scrolls the page underneath the overlay.
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, []);
+
+  // Scale that makes the image cover the CROP_VIEW circle at zoom = 1, same as CSS object-fit:cover.
+  const baseScale = natural ? Math.max(CROP_VIEW / natural.w, CROP_VIEW / natural.h) : 1;
+  const baseW = natural ? natural.w * baseScale : CROP_VIEW;
+  const baseH = natural ? natural.h * baseScale : CROP_VIEW;
+
+  const clamp = (val, max) => Math.max(-max, Math.min(max, val));
+  const maxOffsetAt = (z) => ({
+    x: Math.max(0, (baseW * z - CROP_VIEW) / 2),
+    y: Math.max(0, (baseH * z - CROP_VIEW) / 2),
+  });
+
+  const applyZoom = (nextZoom) => {
+    const z = Math.max(CROP_MIN_ZOOM, Math.min(CROP_MAX_ZOOM, nextZoom));
+    const max = maxOffsetAt(z);
+    setZoom(z);
+    setOffset((o) => ({ x: clamp(o.x, max.x), y: clamp(o.y, max.y) }));
+  };
+
+  // React 18 registers wheel listeners as passive by default, so preventDefault() inside a plain
+  // onWheel prop silently fails (and throws in some engines) -- a native listener with
+  // { passive: false } is the only reliable way to stop the page from scrolling behind the modal
+  // while also using the wheel gesture to zoom.
+  useEffect(() => {
+    const el = viewRef.current;
+    if (!el) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      applyZoom(zoomRef.current - e.deltaY * 0.0015);
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [natural]);
+
+  const onPointerDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startOffset: offset };
+  };
+  const onPointerMove = (e) => {
+    if (!dragRef.current) return;
+    const { startX, startY, startOffset } = dragRef.current;
+    const max = maxOffsetAt(zoom);
+    setOffset({
+      x: clamp(startOffset.x + (e.clientX - startX), max.x),
+      y: clamp(startOffset.y + (e.clientY - startY), max.y),
+    });
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
+  const handleSave = () => {
+    const img = imgRef.current;
+    if (!img || !natural) return;
+    // The visible CROP_VIEW window maps back to this natural-pixel square of the source image.
+    const srcSize = CROP_VIEW / (baseScale * zoom);
+    const srcX = natural.w / 2 - offset.x / (baseScale * zoom) - srcSize / 2;
+    const srcY = natural.h / 2 - offset.y / (baseScale * zoom) - srcSize / 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = CROP_OUTPUT;
+    canvas.height = CROP_OUTPUT;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, CROP_OUTPUT, CROP_OUTPUT);
+    canvas.toBlob((blob) => { if (blob) onSave(blob); }, 'image/jpeg', 0.92);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'var(--surface-overlay)', zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onCancel}>
+      <div
+        style={{ width: 400, maxWidth: '100%', background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28, display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ alignSelf: 'flex-start' }}>
+          <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>Profile photo</span>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, color: 'var(--ink-900)', margin: '6px 0 0' }}>Drag to reposition, zoom to fit</h2>
+        </div>
+
+        <div
+          ref={viewRef}
+          style={{ width: CROP_VIEW, height: CROP_VIEW, borderRadius: '50%', overflow: 'hidden', position: 'relative', background: 'var(--bone-300)', cursor: dragRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <img
+            ref={imgRef}
+            src={imageUrl}
+            onLoad={onImgLoad}
+            draggable={false}
+            style={{
+              position: 'absolute', left: '50%', top: '50%', width: baseW, height: baseH,
+              transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+              userSelect: 'none', pointerEvents: 'none',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+          <Icon name="user" size={14} style={{ flexShrink: 0 }} />
+          <input
+            type="range"
+            min={CROP_MIN_ZOOM}
+            max={CROP_MAX_ZOOM}
+            step={0.01}
+            value={zoom}
+            onChange={(e) => applyZoom(Number(e.target.value))}
+            style={{ flex: 1, accentColor: 'var(--ink-900)' }}
+          />
+          <Icon name="user" size={22} style={{ flexShrink: 0 }} />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, width: '100%' }}>
+          <Button variant="ghost" size="md" onClick={onCancel} disabled={saving}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={handleSave} disabled={saving || !natural}>{saving ? 'Saving…' : 'Save photo'}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [loading, setLoading] = useState(true);
   const [fadeIn, setFadeIn] = useState(false);
   const [avatarSrc, setAvatarSrc] = useState('');
+  const [cropSrc, setCropSrc] = useState(null);
+  const [cropSaving, setCropSaving] = useState(false);
 
   const [profile, setProfile] = useState(null);
   const [skills, setSkills] = useState([]);
@@ -572,15 +729,26 @@ export default function ProfilePage() {
     }
   }, [showToast]);
 
-  const onAvatarFileChange = async (e) => {
+  const onAvatarFileChange = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // lets picking the same file again re-trigger onChange
     if (!file) return;
-    setAvatarSrc(URL.createObjectURL(file));
+    setCropSrc(URL.createObjectURL(file));
+  };
+
+  const onCropCancel = () => setCropSrc(null);
+
+  const onCropSave = async (blob) => {
+    setCropSaving(true);
+    setAvatarSrc(URL.createObjectURL(blob));
     try {
-      await uploadAvatar(file);
+      await uploadAvatar(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
       showToast('Photo updated', 'Your new profile photo is saved.');
     } catch (err) {
       showToast('Could not upload photo', err.message, 'danger');
+    } finally {
+      setCropSaving(false);
+      setCropSrc(null);
     }
   };
 
@@ -617,6 +785,8 @@ export default function ProfilePage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
@@ -626,7 +796,7 @@ export default function ProfilePage() {
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setNavCollapsed((v) => !v)}
+              onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })}
               iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
             />
           </div>
@@ -690,7 +860,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <section style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 26, alignItems: 'start' }} className="cb-pf-hero">
+                <section style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 26, alignItems: 'start', ...revealStyle(fadeIn, 0) }} className="cb-pf-hero">
                   <div style={{ position: 'relative', width: 104, height: 104, flexShrink: 0 }}>
                     <div style={{ width: 104, height: 104, borderRadius: '50%', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={40} />}
@@ -719,7 +889,7 @@ export default function ProfilePage() {
                   <Button variant="secondary" size="sm" onClick={openEditDialog}>Edit profile</Button>
                 </section>
 
-                <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.4fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }} className="cb-pf-score-grid">
+                <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.4fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', ...revealStyle(fadeIn, 1) }} className="cb-pf-score-grid">
                   <div style={{ background: 'var(--surface-card)', padding: '28px 26px', display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center', justifyContent: 'center' }}>
                     <ScoreRingSmall value={completion} />
                     <span style={{ fontSize: 12, color: 'var(--ink-400)', textAlign: 'center' }}>Profile depth is 20% of your placement readiness</span>
@@ -748,7 +918,7 @@ export default function ProfilePage() {
                   </div>
                 </section>
 
-                <section id="sec-skills">
+                <section id="sec-skills" style={revealStyle(fadeIn, 2)}>
                   <SectionHeader label="Skills" />
                   <div className="cb-pf-skill-form" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 20 }}>
                     <div style={{ position: 'relative', width: 280 }}>
@@ -810,7 +980,7 @@ export default function ProfilePage() {
                   )}
                 </section>
 
-                <section id="sec-education">
+                <section id="sec-education" style={revealStyle(fadeIn, 3)}>
                   <SectionHeader label="Education" actionLabel={showEduForm ? 'Cancel' : 'Add entry'} onAction={() => (showEduForm ? resetEduForm() : setShowEduForm(true))} />
 
                   {showEduForm && (
@@ -858,7 +1028,7 @@ export default function ProfilePage() {
                   )}
                 </section>
 
-                <section id="sec-projects">
+                <section id="sec-projects" style={revealStyle(fadeIn, 4)}>
                   <SectionHeader label="Projects" actionLabel={showProjectForm ? 'Cancel' : 'Add project'} onAction={() => (showProjectForm ? resetProjectForm() : setShowProjectForm(true))} />
 
                   {showProjectForm && (
@@ -928,7 +1098,7 @@ export default function ProfilePage() {
                   )}
                 </section>
 
-                <section id="sec-certificates">
+                <section id="sec-certificates" style={revealStyle(fadeIn, 5)}>
                   <SectionHeader label="Certificates" actionLabel={showCertForm ? 'Cancel' : 'Add certificate'} onAction={() => (showCertForm ? resetCertForm() : setShowCertForm(true))} />
 
                   {showCertForm && (
@@ -968,7 +1138,7 @@ export default function ProfilePage() {
                   )}
                 </section>
 
-                <section id="sec-resume">
+                <section id="sec-resume" style={revealStyle(fadeIn, 6)}>
                   <SectionHeader label="Résumé" actionLabel="Open résumé workspace" onAction={() => { window.location.href = '/resume'; }} />
                   {resumes.length === 0 ? (
                     <EmptyRow icon="file-text" title="No résumé attached yet" message="Build and score your résumé, then set a version as default to attach it here." actionLabel={generating ? 'Generating…' : 'Attach résumé from workspace'} onAction={handleGenerateResume} />
@@ -1013,6 +1183,10 @@ export default function ProfilePage() {
         onClose={() => setEditOpen(false)}
         onSave={saveEditDialog}
       />
+
+      {cropSrc && (
+        <AvatarCropModal imageUrl={cropSrc} saving={cropSaving} onCancel={onCropCancel} onSave={onCropSave} />
+      )}
 
       {toast.visible && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 60, maxWidth: 360 }}>
