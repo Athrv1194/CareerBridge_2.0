@@ -46,7 +46,14 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'docker-compose build'
+                // COMPOSE_PARALLEL_LIMIT caps how many of the 13 services build at once. Left at
+                // its default (unbounded), all 13 JDK/Maven processes compete for this box's CPU
+                // simultaneously, on top of Jenkins' own JVM already running -- enough contention
+                // that Jenkins' own "is the build still alive" heartbeat starves and the build gets
+                // marked failed after ~14 minutes even though it's still genuinely progressing
+                // (JENKINS-48300). 2 at a time trades wall-clock time for a build that actually
+                // finishes instead of timing out.
+                sh 'COMPOSE_PARALLEL_LIMIT=2 docker-compose build'
             }
         }
 
