@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Field, Icon, IconButton, Input, Logo, ScoreRing, Skeleton, StatTile, Textarea } from '../../components/ui';
+import {
+  Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, ScoreRing, Skeleton, StatTile,
+  Textarea, useRevealOnMount,
+} from '../../components/ui';
 import {
   getOrganization, listDepartments, createDepartment, updateOrganization,
   getPlatformStats, getLeaderboard, listUsers, deactivateUser, activateUser, getPlacementStats,
@@ -9,7 +12,7 @@ import { listOrgJoinRequests, approveOrgJoinRequest, rejectOrgJoinRequest } from
 import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
 import './college.css';
 
-const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', PLACEMENT_OFFICER: '/placement-console', SUPER_ADMIN: '/super-admin', MENTOR: '/dashboard' };
+const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', PLACEMENT_OFFICER: '/placement-console', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
 const PLAN_BADGE = { FREE: { tone: 'default', label: 'FREE' }, STUDENT_PREMIUM: { tone: 'accent', label: 'PLUS' } };
 const GRADE_TONE = { A: 'success', B: 'info', C: 'warning', D: 'danger', F: 'danger' };
 const TABS = [{ value: 'OVERVIEW', label: 'Overview' }, { value: 'STUDENTS', label: 'Students' }, { value: 'DEPARTMENTS', label: 'Departments' }, { value: 'PLACEMENT', label: 'Placement' }, { value: 'SETTINGS', label: 'Settings' }];
@@ -77,6 +80,14 @@ export default function CollegeDashboardPage() {
   const [orgId, setOrgId] = useState(null);
   const [activeTab, setActiveTab] = useState('OVERVIEW');
   const [ready, setReady] = useState(false);
+  const [tabIn, setTabIn] = useState(false);
+  const topbarIn = useRevealOnMount();
+
+  useEffect(() => {
+    setTabIn(false);
+    const t = setTimeout(() => setTabIn(true), 20);
+    return () => clearTimeout(t);
+  }, [activeTab]);
 
   const [org, setOrg] = useState(null);
   const [stats, setStats] = useState(null);
@@ -276,7 +287,7 @@ export default function CollegeDashboardPage() {
       </header>
 
       <div style={{ background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box', ...revealStyle(topbarIn, 0, { distance: 16 }) }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>College dashboard</span>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>{org?.name || 'Loading…'}</h1>
@@ -303,6 +314,7 @@ export default function CollegeDashboardPage() {
       </div>
 
       <main style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 90px', boxSizing: 'border-box' }}>
+        <div style={revealStyle(tabIn, 0, { distance: 16, duration: 380 })}>
 
         {activeTab === 'OVERVIEW' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -329,10 +341,10 @@ export default function CollegeDashboardPage() {
 
             {!overviewLoaded ? <Skeleton height={110} /> : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }} className="cb-college-stat4-grid">
-                <StatTile value={stats?.totalStudents ?? 0} label="Total students" />
-                <StatTile value={stats?.activeUsers ?? 0} label="Active members" />
-                <StatTile value={stats?.totalPlacementOfficers ?? 0} label="Placement officers" />
-                <StatTile value={stats?.totalMentors ?? 0} label="Mentors" />
+                <StatTile value={stats?.totalStudents ?? 0} label="Total students" style={revealStyle(overviewLoaded, 0)} />
+                <StatTile value={stats?.activeUsers ?? 0} label="Active members" style={revealStyle(overviewLoaded, 1)} />
+                <StatTile value={stats?.totalPlacementOfficers ?? 0} label="Placement officers" style={revealStyle(overviewLoaded, 2)} />
+                <StatTile value={stats?.totalMentors ?? 0} label="Mentors" style={revealStyle(overviewLoaded, 3)} />
               </div>
             )}
 
@@ -593,6 +605,7 @@ export default function CollegeDashboardPage() {
           </div>
         )}
 
+        </div>
       </main>
 
       {toast && (

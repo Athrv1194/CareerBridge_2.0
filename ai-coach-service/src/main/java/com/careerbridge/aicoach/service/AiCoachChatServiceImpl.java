@@ -197,6 +197,10 @@ public class AiCoachChatServiceImpl implements AiCoachChatService {
 
                 Give advice tailored to their specific career path and scores. Suggest concrete next \
                 steps. Be encouraging but realistic.
+
+                If the student's message is gibberish, random characters, or otherwise doesn't form \
+                a real question or statement, say so plainly and ask them to rephrase -- do NOT fall \
+                back to generic career advice just because a career path and scores are available.
                 """.formatted(firstName, lastName, session.getCareerPath(), skills,
                 assessmentScore, profileCompletion, prsScore);
     }

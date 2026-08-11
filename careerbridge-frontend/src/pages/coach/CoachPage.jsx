@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, IconButton, Input, Logo, Skeleton, Tag } from '../../components/ui';
+import { Alert, Badge, Button, Icon, IconButton, Logo, revealStyle, Skeleton, Tag } from '../../components/ui';
 import { getSessions, getSession, createSession, deleteSession, sendCoachMessage, getMyResources } from '../../api/aiCoachApi';
 import { getUnreadCount } from '../../api/notificationApi';
-import { getDisplayName } from '../../utils/tokenUtils';
+import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './coach.css';
 
 const NAV_ITEMS = [
@@ -14,6 +16,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach', active: true },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -41,12 +44,58 @@ function fmtClock(iso) {
   return h + ':' + m + ' ' + ap;
 }
 
+// The coach's replies are LLM markdown (**bold**, "1. " / "* " lists) -- rendering it as plain
+// text left the literal asterisks and list markers on screen. No markdown library for this: the
+// coach's own output is the only source, so a tiny inline parser covering just what it actually
+// produces is smaller and safer than pulling in a full markdown renderer for one chat bubble.
+function renderInline(text, keyPrefix) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => (
+    part.startsWith('**') && part.endsWith('**') && part.length > 4
+      // eslint-disable-next-line react/no-array-index-key
+      ? <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>
+      // eslint-disable-next-line react/no-array-index-key
+      : <span key={`${keyPrefix}-${i}`}>{part}</span>
+  ));
+}
+function MarkdownLite({ text }) {
+  const blocks = text.split(/\n{2,}/);
+  return blocks.map((block, bi) => {
+    const lines = block.split('\n').filter((l) => l.trim() !== '');
+    const isOrdered = lines.length > 0 && lines.every((l) => /^\d+\.\s/.test(l.trim()));
+    const isUnordered = lines.length > 0 && lines.every((l) => /^[*-]\s/.test(l.trim()));
+    const marginBottom = bi === blocks.length - 1 ? 0 : 10;
+    if (isOrdered || isUnordered) {
+      const ListTag = isOrdered ? 'ol' : 'ul';
+      return (
+        // eslint-disable-next-line react/no-array-index-key
+        <ListTag key={bi} style={{ margin: `0 0 ${marginBottom}px`, paddingLeft: 20 }}>
+          {lines.map((line, li) => (
+            // eslint-disable-next-line react/no-array-index-key
+            <li key={li} style={{ marginBottom: 4 }}>{renderInline(line.trim().replace(/^(\d+\.|[*-])\s+/, ''), `${bi}-${li}`)}</li>
+          ))}
+        </ListTag>
+      );
+    }
+    return (
+      // eslint-disable-next-line react/no-array-index-key
+      <p key={bi} style={{ margin: `0 0 ${marginBottom}px` }}>
+        {block.split('\n').map((line, li, arr) => (
+          // eslint-disable-next-line react/no-array-index-key
+          <span key={li}>{renderInline(line, `${bi}-${li}`)}{li < arr.length - 1 && <br />}</span>
+        ))}
+      </p>
+    );
+  });
+}
+
 const GROUP_LABELS = ['Today', 'This week', 'Earlier'];
 
 export default function CoachPage() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [studentName, setStudentName] = useState('');
+  const [avatarSrc, setAvatarSrc] = useState('');
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [resourcesCollapsed, setResourcesCollapsed] = useState(false);
 
@@ -63,6 +112,10 @@ export default function CoachPage() {
   const [draftText, setDraftText] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [micError, setMicError] = useState('');
+  const recognitionRef = useRef(null);
+  const draftBeforeRecordingRef = useRef('');
 
   const [streamingIndex, setStreamingIndex] = useState(null);
   const [streamingWords, setStreamingWords] = useState(0);
@@ -76,6 +129,7 @@ export default function CoachPage() {
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [resourceGroups, setResourceGroups] = useState([]);
   const [resourcesEntered, setResourcesEntered] = useState(false);
+  const [welcomeIn, setWelcomeIn] = useState(false);
 
   const reducedMotion = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -219,6 +273,8 @@ export default function CoachPage() {
     loadResources();
     scheduleBlink();
     getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {});
+    getMyProfile().then((p) => { if (p) setStudentName(`${p.firstName || ''} ${p.lastName || ''}`.trim()); }).catch(() => {});
+    getAvatarBlobUrl().then((url) => { if (url) setAvatarSrc(url); }).catch(() => {});
     return () => {
       clearRobotTimers();
       clearInterval(dotsTimer.current);
@@ -287,8 +343,65 @@ export default function CoachPage() {
     });
   }, [draftText, sending, activeSession, robotThinking, startDots, stopDots, startStreaming, robotHappy, touchSession, robotSurprised]);
 
+  const draftInputRef = useRef(null);
   const onDraftChange = (e) => setDraftText(e.target.value.slice(0, 2000));
-  const onDraftKeyDown = (e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } };
+  const onDraftKeyDown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } };
+
+  // Height is derived from draftText (not just the onChange handler) so it also resizes when
+  // voice input or send() sets draftText directly, without going through a real input event.
+  useEffect(() => {
+    const el = draftInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [draftText]);
+
+  // Web Speech API only -- it doesn't expose input-device selection (unlike getUserMedia), it just
+  // uses whatever the OS/browser treats as the default mic. There is no way to replicate a
+  // device picker like a native app's from a web page.
+  const toggleRecording = useCallback(() => {
+    if (recording) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionImpl) {
+      setMicError('Voice input is not supported in this browser -- try Chrome or Edge.');
+      return;
+    }
+    setMicError('');
+    const recognition = new SpeechRecognitionImpl();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || 'en-US';
+    draftBeforeRecordingRef.current = draftText;
+    let finalText = draftText;
+
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText = `${finalText}${finalText && !finalText.endsWith(' ') ? ' ' : ''}${transcript.trim()}`;
+        } else {
+          interim += transcript;
+        }
+      }
+      const combined = `${finalText}${interim ? (finalText ? ' ' : '') + interim : ''}`;
+      setDraftText(combined.slice(0, 2000));
+    };
+    recognition.onerror = (event) => {
+      setMicError(event.error === 'not-allowed' ? 'Microphone access was denied.' : 'Could not hear you -- try again.');
+      setRecording(false);
+    };
+    recognition.onend = () => setRecording(false);
+
+    recognitionRef.current = recognition;
+    setRecording(true);
+    recognition.start();
+  }, [recording, draftText]);
+
+  useEffect(() => () => recognitionRef.current?.stop(), []);
 
   const onDeleteClick = (id, e) => { e.stopPropagation(); setConfirmDeleteId(id); };
   const onCancelDelete = () => setConfirmDeleteId(null);
@@ -328,6 +441,13 @@ export default function CoachPage() {
   const firstAssistantIdx = messagesRaw.findIndex((m) => m.role === 'assistant');
   const welcomeVisible = !!activeSession && messagesRaw.length === 0;
   const dockedRobotVisible = !!activeSession && messagesRaw.length > 0;
+
+  useEffect(() => {
+    if (!welcomeVisible) return;
+    setWelcomeIn(false);
+    const raf1 = requestAnimationFrame(() => requestAnimationFrame(() => setWelcomeIn(true)));
+    return () => cancelAnimationFrame(raf1);
+  }, [welcomeVisible, activeSessionId]);
   const eye = robotExpression;
   const outerAnim = reducedMotion ? 'none'
     : robotPhase === 'peek' ? 'cbPeek 420ms cubic-bezier(.2,0,.2,1) forwards'
@@ -356,13 +476,15 @@ export default function CoachPage() {
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="user" size={15} />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
             </div>
             <div className="cb-co-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{getDisplayName('Student')}</span>
+              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
@@ -372,7 +494,7 @@ export default function CoachPage() {
       >
         <aside style={{ borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
           <div className="cb-co-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
-            <IconButton icon="chevron-right" label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setNavCollapsed((v) => !v)} iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }} />
+            <IconButton icon="chevron-right" label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })} iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }} />
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {NAV_ITEMS.map((item) => (
@@ -455,13 +577,13 @@ export default function CoachPage() {
                 {welcomeVisible && (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22, textAlign: 'center', padding: '20px 0' }}>
                     <RobotSvg size={160} outerAnim={outerAnim} armAnim={armAnim} antennaAnim={antennaAnim} eye={eye} blinking={blinking} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', ...revealStyle(welcomeIn, 0, { distance: 16 }) }}>
                       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.15, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, maxWidth: 480 }}>Ask me anything about your <i>{activeSession?.careerPath}</i> plan.</h1>
                       <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-500)', margin: 0, maxWidth: 400 }}>I have your assessment result, roadmap and readiness score. I know where you are. Ask me where to go next.</p>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 480 }}>
-                      {SUGGESTION_CHIPS.map((chip) => (
-                        <button key={chip} type="button" onClick={() => send(chip)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>
+                      {SUGGESTION_CHIPS.map((chip, i) => (
+                        <button key={chip} type="button" onClick={() => send(chip)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', ...revealStyle(welcomeIn, i + 1, { distance: 10, duration: 450 }) }}>
                           <Tag>{chip}</Tag>
                         </button>
                       ))}
@@ -488,10 +610,10 @@ export default function CoachPage() {
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-start', animation: enterAnim }}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                                 <div style={{ maxWidth: 480, background: 'var(--ink-900)', color: 'var(--bone-50)', padding: '12px 16px', fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
-                                <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>{fmtClock(msg.timestamp)}</span>
+                                <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>{studentName ? `${studentName} · ` : ''}{fmtClock(msg.timestamp)}</span>
                               </div>
-                              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                                <Icon name="user" size={13} />
+                              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bone-300)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                                {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={13} />}
                               </div>
                             </div>
                           ) : (
@@ -500,7 +622,7 @@ export default function CoachPage() {
                                 <Icon name="sparkles" size={14} style={{ color: 'var(--bone-50)' }} />
                               </span>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, minWidth: 0 }}>
-                                <div style={{ maxWidth: 560, background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', color: 'var(--ink-900)', padding: '14px 17px', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{displayContent}</div>
+                                <div style={{ maxWidth: 560, background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', color: 'var(--ink-900)', padding: '14px 17px', fontSize: 14, lineHeight: 1.6, wordBreak: 'break-word' }}><MarkdownLite text={displayContent} /></div>
                                 <span style={{ fontSize: 11, color: 'var(--ink-400)' }}>{fmtClock(msg.timestamp)}</span>
                               </div>
                             </div>
@@ -530,11 +652,37 @@ export default function CoachPage() {
                 <Alert tone="danger" title={error} />
               </div>
             )}
+            {micError && (
+              <div style={{ maxWidth: 760, margin: '0 auto', width: '100%' }}>
+                <Alert tone="danger" title={micError} />
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, maxWidth: 760, margin: '0 auto', width: '100%' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <Input placeholder="Ask your coach..." value={draftText} onChange={onDraftChange} onKeyDown={onDraftKeyDown} />
+                <textarea
+                  ref={draftInputRef}
+                  rows={1}
+                  placeholder={recording ? 'Listening…' : 'Ask your coach...'}
+                  value={draftText}
+                  onChange={onDraftChange}
+                  onKeyDown={onDraftKeyDown}
+                  style={{
+                    width: '100%', boxSizing: 'border-box', padding: '9px 12px', fontSize: 14,
+                    fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+                    border: '1px solid var(--line-hairline)', borderRadius: 'var(--radius-sm)', outline: 'none',
+                    resize: 'none', overflowY: 'auto', maxHeight: 160, lineHeight: 1.4,
+                  }}
+                />
               </div>
-              <IconButton icon="arrow-right" label="Send message" variant="secondary" onClick={() => send()} iconStyle={{ color: 'var(--ink-900)' }} disabled={!draftText.trim() || sending} />
+              <IconButton
+                icon={recording ? 'mic-off' : 'mic'}
+                label={recording ? 'Stop recording' : 'Speak your message'}
+                variant={recording ? 'primary' : 'secondary'}
+                onClick={toggleRecording}
+                iconStyle={{ color: recording ? 'var(--bone-50)' : 'var(--status-danger)' }}
+                disabled={sending}
+              />
+              <IconButton icon="arrow-right" label="Send message" variant="primary" onClick={() => send()} disabled={!draftText.trim() || sending} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', minHeight: 14, maxWidth: 760, margin: '0 auto', width: '100%' }}>
               {draftLen >= 1800 && <span className="cb-num" style={{ fontSize: 11, color: 'var(--ink-400)' }}>{2000 - draftLen} left</span>}
@@ -581,9 +729,9 @@ export default function CoachPage() {
               )}
 
               {!resourcesLoading && resourceGroups.length > 0 && (
-                <div style={{ opacity: resourcesEntered ? 1 : 0, transition: 'opacity 220ms cubic-bezier(.2,0,.2,1)', paddingBottom: 16 }}>
-                  {resourceGroups.map((grp) => (
-                    <div key={grp.milestoneTitle}>
+                <div style={{ paddingBottom: 16 }}>
+                  {resourceGroups.map((grp, gi) => (
+                    <div key={grp.milestoneTitle} style={revealStyle(resourcesEntered, gi, { step: 70, distance: 14 })}>
                       <div style={{ padding: '16px 22px 8px' }}>
                         <span style={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--ink-900)' }}>{grp.milestoneTitle}</span>
                       </div>

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Icon, IconButton, Logo, MatchScore,
-  ProgressMeter, ScoreRing, Skeleton, StatTile, Tag,
+  ProgressMeter, revealStyle, ScoreRing, Skeleton, StatTile, Tag,
 } from '../../components/ui';
 import { getCareerCatalog, getMyRecommendation, getRecommendationHistory } from '../../api/recommendationApi';
-import { getMyProfile } from '../../api/studentApi';
+import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
 import { buildRoadmap } from '../../api/roadmapApi';
+import { getUnreadCount } from '../../api/notificationApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './recommendation.css';
 
 const NAV_ITEMS = [
@@ -17,6 +20,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -48,17 +52,21 @@ function RoadmapButton({ careerName, status, onBuild, size = 'sm' }) {
 }
 
 export default function RecommendationPage() {
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [studentName, setStudentName] = useState('');
+  const [avatarSrc, setAvatarSrc] = useState('');
   const [skillsByCareer, setSkillsByCareer] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [typedTop, setTypedTop] = useState('');
   const [roadmapStatus, setRoadmapStatus] = useState({});
+  const [contentIn, setContentIn] = useState(false);
 
   const typeTimerRef = useRef(null);
 
@@ -83,8 +91,11 @@ export default function RecommendationPage() {
           setSkillsByCareer(map);
         }
         setLoading(false);
+        setTimeout(() => setContentIn(true), 20);
       },
     );
+    getAvatarBlobUrl().then((url) => { if (!cancelled && url) setAvatarSrc(url); }).catch(() => {});
+    getUnreadCount().then((r) => { if (!cancelled) setUnreadCount(r.unreadCount); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -126,72 +137,82 @@ export default function RecommendationPage() {
     }
   }, []);
 
-  const sidebarWidth = navCollapsed ? '60px' : '300px';
+  const sidebarWidth = navCollapsed ? '60px' : '248px';
 
   return (
-    <div className="cb-rec-shell" style={{ '--sidebar-w': sidebarWidth }}>
+    <div style={{ minHeight: '100vh', background: 'var(--surface-page)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
 
-      <aside style={{ borderRight: '1px solid var(--line-hairline)', overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh' }}>
-        <div style={{ height: 82, display: 'flex', alignItems: 'center', justifyContent: navCollapsed ? 'center' : 'flex-start', padding: navCollapsed ? '0 8px' : '0 12px', borderBottom: '1px solid var(--line-hairline)', boxSizing: 'border-box', overflow: 'hidden' }}>
-          <Logo size={navCollapsed ? 32 : 44} showText={!navCollapsed} />
+      <header className="cb-rec-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
+        <Logo size={32} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+          <div style={{ position: 'relative', display: 'flex' }}>
+            <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
+            {unreadCount > 0 && (
+              <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 15, height: 15, padding: '0 3px', borderRadius: '50%', background: 'var(--status-danger)', color: '#FCFBF9', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
+            </div>
+            <div className="cb-rec-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+              <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
+              <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
+            </div>
+          </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
-        <div className="cb-sidebar-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', padding: '10px 12px 0' }}>
-          <IconButton
-            icon="chevron-right"
-            label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => setNavCollapsed((v) => !v)}
-            iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
-          />
-        </div>
-        <nav style={{ display: 'flex', flexDirection: 'column', padding: '8px 12px 18px', gap: 2 }}>
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              title={item.label}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 11,
-                justifyContent: navCollapsed ? 'center' : 'flex-start',
-                padding: navCollapsed ? '10px 0' : '10px 12px', fontSize: 14,
-                background: item.active ? 'var(--ink-900)' : 'transparent',
-                color: item.active ? 'var(--bone-50)' : 'var(--ink-700)', border: 'none',
-              }}
-            >
-              <Icon name={item.icon} size={16} style={{ color: item.active ? 'var(--bone-50)' : 'var(--ink-700)' }} />
-              {!navCollapsed && <span className="cb-sidebar-label">{item.label}</span>}
-            </Link>
-          ))}
-        </nav>
-        {!navCollapsed && (
-          <div className="cb-sidebar-footer" style={{ marginTop: 'auto' }}>
-            <div style={{ padding: 18, borderTop: '1px solid var(--line-hairline)' }}>
-              <div style={{ background: 'var(--bone-200)', padding: 16 }}>
-                <Icon name="sparkles" size={16} />
-                <div style={{ fontSize: 13, color: 'var(--ink-900)', marginTop: 8, lineHeight: 1.4 }}>
-                  Roadmap pacing and coach follow-ups need Plus.
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4, lineHeight: 1.4 }}>
-                  Free covers your top 3 matches. Upgrade for the full roadmap and unlimited coach sessions.
-                </div>
-                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 12 }}>
-                  <Button variant="primary" size="sm" fullWidth>See plans</Button>
+      </header>
+
+      <div className="cb-rec-shell" style={{ '--sidebar-w': sidebarWidth }}>
+        <aside style={{ borderRight: '1px solid var(--line-hairline)', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+          <div className="cb-rec-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
+            <IconButton
+              icon="chevron-right"
+              label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })}
+              iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
+            />
+          </div>
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                title={item.label}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 11,
+                  justifyContent: navCollapsed ? 'center' : 'flex-start',
+                  padding: navCollapsed ? '10px 0' : '10px 14px', fontSize: 13,
+                  letterSpacing: '.06em', textTransform: 'uppercase',
+                  background: item.active ? 'var(--ink-900)' : 'transparent',
+                  color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)', border: 'none',
+                }}
+              >
+                <Icon name={item.icon} size={16} style={{ color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)' }} />
+                {!navCollapsed && <span className="cb-rec-sidebar-label">{item.label}</span>}
+              </Link>
+            ))}
+          </nav>
+          {!navCollapsed && (
+            <div className="cb-rec-sidebar-footer" style={{ marginTop: 'auto', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: 24 }}>
+              <div style={{ background: 'var(--taupe-100)', padding: '28px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
+                <p style={{ fontSize: 15, lineHeight: 1.5, color: 'var(--ink-900)', margin: 0, fontWeight: 500 }}>Roadmap pacing and coach follow-ups need Plus.</p>
+                <p style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--ink-600)', margin: 0 }}>Free covers your top 3 matches. Upgrade for the full roadmap and unlimited coach sessions.</p>
+                <Link to="/plans" style={{ display: 'block', textDecoration: 'none', border: 0, marginTop: 8 }}>
+                  <Button variant="primary" size="sm" fullWidth iconAfter="arrow-right">See plans</Button>
                 </Link>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', background: 'var(--surface-card)' }}>
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Icon name="user" size={16} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
-                <span style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
 
-      <main style={{ minWidth: 0 }}>
+        <main style={{ minWidth: 0, background: 'var(--surface-page)' }}>
         <div className="cb-topbar" style={{ height: 64, borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', position: 'sticky', top: 0, background: 'var(--surface-page)', zIndex: 10 }}>
           <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>
             Recommendations{recommendation ? ` · generated ${formatDate(recommendation.createdAt)}` : ''}
@@ -203,7 +224,7 @@ export default function RecommendationPage() {
           )}
         </div>
 
-        <div className="cb-main-pad" style={{ padding: '34px 32px 64px', maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: 34 }}>
+        <div className="cb-main-pad" style={{ padding: '34px 32px 64px', maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 34 }}>
           {loading && <Skeleton height={240} />}
 
           {!loading && error && <Alert tone="danger" title="Couldn't load your recommendations" message={error} />}
@@ -245,7 +266,7 @@ export default function RecommendationPage() {
 
           {!loading && !error && recommendation && !showHistory && (
             <>
-              <div>
+              <div style={revealStyle(contentIn, 0, { distance: 24, duration: 600 })}>
                 <h1 className="cb-hero-title" style={{ fontFamily: 'var(--font-display)', fontSize: 44, lineHeight: 1.05, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
                   Three careers fit you. <i>{typedTop}</i> fits best.
                 </h1>
@@ -255,14 +276,18 @@ export default function RecommendationPage() {
               </div>
 
               <div className="cb-stat-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
-                <StatTile value={recommendation.topCareerName} label="Top match" />
-                <StatTile value={`${Math.round(recommendation.overallMatchPercentage)}%`} label="Best score" />
-                <StatTile value="3" label="Categories assessed" />
-                <StatTile value={formatDate(recommendation.createdAt)} label="Generated" />
+                <StatTile value={recommendation.topCareerName} label="Top match" style={revealStyle(contentIn, 0)} />
+                <StatTile value={`${Math.round(recommendation.overallMatchPercentage)}%`} label="Best score" style={revealStyle(contentIn, 1)} />
+                <StatTile value="3" label="Categories assessed" style={revealStyle(contentIn, 2)} />
+                <StatTile value={formatDate(recommendation.createdAt)} label="Generated" style={revealStyle(contentIn, 3)} />
               </div>
 
               {recommendation.insight && (
-                <div style={{ background: 'var(--bone-300)', border: '1px solid var(--taupe-300)', padding: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{
+                  background: 'var(--bone-300)', border: '1px solid var(--taupe-300)', padding: 28, display: 'flex', flexDirection: 'column', gap: 14,
+                  ...revealStyle(contentIn, 4),
+                }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--ink-900)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Icon name="sparkles" size={15} style={{ color: 'var(--bone-50)' }} />
@@ -299,6 +324,7 @@ export default function RecommendationPage() {
                         padding: '28px 26px', display: 'grid',
                         gap: 26, alignItems: 'start',
                         borderBottom: i < recommendation.topRecommendations.length - 1 ? '1px solid var(--line-hairline)' : 0,
+                        ...revealStyle(contentIn, i),
                       }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -345,8 +371,14 @@ export default function RecommendationPage() {
                   </span>
                   <hr style={{ height: 1, background: 'var(--line-hairline)', border: 0, margin: '8px 0 0' }} />
                   <div className="cb-also-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', borderTop: 0, marginTop: 20 }}>
-                    {recommendation.otherCareers.map((career) => (
-                      <div key={career.careerName} style={{ background: 'var(--surface-card)', padding: '20px 22px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
+                    {recommendation.otherCareers.map((career, i) => (
+                      <div
+                        key={career.careerName}
+                        style={{
+                          background: 'var(--surface-card)', padding: '20px 22px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12,
+                          ...revealStyle(contentIn, i),
+                        }}
+                      >
                         <ScoreRing value={Math.round(career.matchPercentage)} size="sm" />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                           <span className="cb-num" style={{ fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
@@ -368,6 +400,7 @@ export default function RecommendationPage() {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 }

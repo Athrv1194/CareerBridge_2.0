@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Checkbox, Field, Icon, IconButton, Input, Logo,
-  Skeleton, Switch, Tag, Textarea,
+  revealStyle, Skeleton, Switch, Tag, Textarea,
 } from '../../components/ui';
-import { getMyProfile, addExperience, updateExperience, deleteExperience, addCertificate, deleteCertificate, uploadCertificateFile } from '../../api/studentApi';
+import { getMyProfile, getAvatarBlobUrl, addExperience, updateExperience, deleteExperience, addCertificate, deleteCertificate, uploadCertificateFile } from '../../api/studentApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import { getMyResumes, generateResume, deleteResume, downloadResume, setDefaultResume } from '../../api/resumeApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import './resume.css';
@@ -17,6 +19,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume', active: true },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -63,12 +66,13 @@ export default function ResumePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [listCollapsed, setListCollapsed] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [resumes, setResumes] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [avatarSrc, setAvatarSrc] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
@@ -78,6 +82,7 @@ export default function ResumePage() {
   const [fullViewOpen, setFullViewOpen] = useState(false);
 
   const [toast, setToast] = useState({ visible: false, title: '', message: '', tone: 'success' });
+  const [contentIn, setContentIn] = useState(false);
 
   // Builder form -- section toggles/contact toggles/summary/job description.
   const [summary, setSummary] = useState('');
@@ -117,11 +122,13 @@ export default function ResumePage() {
       setSelectedId((prev) => (prev && resumeList.some((r) => r.id === prev)) ? prev : (resumeList[0]?.id ?? null));
     } finally {
       setLoading(false);
+      setTimeout(() => setContentIn(true), 20);
     }
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
   useEffect(() => { getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {}); }, []);
+  useEffect(() => { getAvatarBlobUrl().then((url) => { if (url) setAvatarSrc(url); }).catch(() => {}); }, []);
 
   const selected = useMemo(() => resumes.find((r) => r.id === selectedId) || null, [resumes, selectedId]);
 
@@ -311,21 +318,23 @@ export default function ResumePage() {
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="user" size={15} />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
             </div>
             <div className="cb-rs-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{displayName}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
       <div className="cb-rs-shell" style={{ '--sidebar-w': sidebarWidth }}>
         <aside style={{ borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
           <div className="cb-rs-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
-            <IconButton icon="chevron-right" label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setNavCollapsed((v) => !v)} iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }} />
+            <IconButton icon="chevron-right" label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })} iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }} />
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {NAV_ITEMS.map((item) => (
@@ -351,7 +360,7 @@ export default function ResumePage() {
 
         <main className="cb-rs-main" style={{ minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface-page)' }}>
 
-          <div className="cb-rs-topbar" style={{ flexShrink: 0, background: 'var(--surface-card)', borderBottom: '1px solid var(--line-hairline)', padding: '26px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+          <div className="cb-rs-topbar" style={{ flexShrink: 0, background: 'var(--surface-card)', borderBottom: '1px solid var(--line-hairline)', padding: '26px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box', ...revealStyle(contentIn, 0, { distance: 16 }) }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
               <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Résumé</span>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Your résumés</h1>
@@ -396,7 +405,7 @@ export default function ResumePage() {
                         <span className="cb-rs-col-head cb-rs-col-size">Size</span>
                         <span className="cb-rs-col-head" style={{ textAlign: 'right' }}>Actions</span>
                       </div>
-                      {resumes.map((r) => (
+                      {resumes.map((r, idx) => (
                         <div key={r.id}>
                           <div
                             onClick={() => setSelectedId(r.id)}
@@ -406,6 +415,7 @@ export default function ResumePage() {
                               padding: '11px 4px', cursor: 'pointer', borderBottom: '1px solid var(--line-hairline)',
                               background: r.id === selectedId ? 'var(--bone-200)' : 'transparent',
                               borderLeft: `2px solid ${r.id === selectedId ? 'var(--taupe-600)' : 'transparent'}`,
+                              ...revealStyle(contentIn, idx, { step: 40, distance: 12, duration: 450 }),
                             }}
                           >
                             <span className="cb-num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-900)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>v{r.version}</span>
@@ -459,7 +469,7 @@ export default function ResumePage() {
                   <>
                     {genError && <Alert tone="danger" title="Couldn't generate résumé" message={genError} />}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', ...revealStyle(contentIn, 0, { distance: 16 }) }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
                         <h1 title={selected.fileName} style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.15, color: 'var(--ink-900)', margin: 0, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 480 }}>{selected.fileName}</h1>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -478,7 +488,7 @@ export default function ResumePage() {
                       </div>
                     </div>
 
-                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28 }}>
+                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28, ...revealStyle(contentIn, 1) }}>
                       <div className="cb-rs-ats-grid" style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', gap: 36, alignItems: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                           <AtsRing value={score} />
@@ -520,7 +530,7 @@ export default function ResumePage() {
                       </div>
                     </div>
 
-                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28 }}>
+                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28, ...revealStyle(contentIn, 2) }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
                         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>Résumé preview</span>
                         <Button variant="ghost" size="sm" iconAfter="external-link" onClick={() => setFullViewOpen(true)}>Full view</Button>
@@ -553,7 +563,7 @@ export default function ResumePage() {
                       <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--ink-400)', fontStyle: 'italic', margin: '14px 0 0' }}>This is a layout preview. Open full view to read every section, or download the PDF.</p>
                     </div>
 
-                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28 }}>
+                    <div className="cb-rs-card" style={{ background: 'var(--surface-card)', border: '1px solid var(--line-hairline)', padding: 28, ...revealStyle(contentIn, 3) }}>
                       <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-600)' }}>Build your résumé</div>
                       <hr style={{ marginTop: 8, marginBottom: 18, height: 1, background: 'var(--line-ink)', border: 0 }} />
 
