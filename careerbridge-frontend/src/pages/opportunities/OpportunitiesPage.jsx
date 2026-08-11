@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, MatchScore, Skeleton, StatTile,
-  Tag, Textarea,
+  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, MatchScore, revealStyle, Skeleton,
+  StatTile, Tag, Textarea,
 } from '../../components/ui';
 import { getJobs, getJobDetail, getMyApplications, applyToJob } from '../../api/recruiterApi';
-import { getMyProfile } from '../../api/studentApi';
+import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
 import { getMyResumes } from '../../api/resumeApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './opportunities.css';
 
 const NAV_ITEMS = [
@@ -18,6 +20,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities', active: true },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -121,7 +124,9 @@ function FilterChip({ label, selected, onClick }) {
   );
 }
 
-function JobRow({ job, isSelected, onSelect }) {
+function JobRow({
+  job, isSelected, onSelect, index, revealed,
+}) {
   return (
     <button
       type="button"
@@ -133,6 +138,7 @@ function JobRow({ job, isSelected, onSelect }) {
         borderLeft: `2px solid ${isSelected ? 'var(--ink-900)' : 'transparent'}`,
         background: isSelected ? 'var(--bone-200)' : 'transparent',
         font: 'inherit', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box',
+        ...revealStyle(revealed, index, { step: 40, distance: 14, duration: 500 }),
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
@@ -153,9 +159,10 @@ function JobRow({ job, isSelected, onSelect }) {
 export default function OpportunitiesPage() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [loading, setLoading] = useState(true);
   const [studentName, setStudentName] = useState('');
+  const [avatarSrc, setAvatarSrc] = useState('');
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
   const [profileSkills, setProfileSkills] = useState([]);
@@ -180,6 +187,7 @@ export default function OpportunitiesPage() {
   const [dragOver, setDragOver] = useState(false);
 
   const [toast, setToast] = useState({ visible: false, title: '', message: '', tone: 'success' });
+  const [contentIn, setContentIn] = useState(false);
   const toastTimerRef = useRef(null);
   const detailTokenRef = useRef(0);
 
@@ -199,10 +207,12 @@ export default function OpportunitiesPage() {
         }
         if (resumesRes.status === 'fulfilled') setResumes(resumesRes.value);
         setLoading(false);
+        setTimeout(() => setContentIn(true), 20);
         const firstActive = jobList.find((j) => j.isActive !== false);
         if (firstActive) selectJob(firstActive.id);
       },
     );
+    getAvatarBlobUrl().then((url) => { if (!cancelled && url) setAvatarSrc(url); }).catch(() => {});
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -353,14 +363,16 @@ export default function OpportunitiesPage() {
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="user" size={15} />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
             </div>
             <div className="cb-op-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
@@ -370,7 +382,7 @@ export default function OpportunitiesPage() {
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setNavCollapsed((v) => !v)}
+              onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })}
               iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
             />
           </div>
@@ -416,7 +428,7 @@ export default function OpportunitiesPage() {
             {!loading && (
               <div className="cb-op-fade" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', ...revealStyle(contentIn, 0, { distance: 16 }) }}>
                   <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>
                     Opportunities · {jobRows.length} matched role{jobRows.length === 1 ? '' : 's'}
                   </span>
@@ -458,8 +470,8 @@ export default function OpportunitiesPage() {
                         <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Try clearing a filter or searching a broader term.</span>
                       </div>
                     )}
-                    {jobRows.map((job) => (
-                      <JobRow key={job.id} job={job} isSelected={job.id === selectedId} onSelect={() => selectJob(job.id)} />
+                    {jobRows.map((job, idx) => (
+                      <JobRow key={job.id} job={job} isSelected={job.id === selectedId} onSelect={() => selectJob(job.id)} index={idx} revealed={contentIn} />
                     ))}
                   </div>
 
@@ -583,8 +595,14 @@ export default function OpportunitiesPage() {
                     </div>
                   ) : (
                     <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--surface-page)' }}>
-                      {applications.map((a) => (
-                        <div key={a.id} style={{ padding: '14px 18px', borderBottom: '1px solid var(--line-hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14 }}>
+                      {applications.map((a, idx) => (
+                        <div
+                          key={a.id}
+                          style={{
+                            padding: '14px 18px', borderBottom: '1px solid var(--line-hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 14,
+                            ...revealStyle(contentIn, idx, { step: 40 }),
+                          }}
+                        >
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             <span style={{ fontSize: 14, color: 'var(--ink-900)' }}>{a.jobTitle}</span>
                             <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>{fmtAppliedDate(a.appliedAt)}</span>

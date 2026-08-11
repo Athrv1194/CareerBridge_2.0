@@ -1,0 +1,16 @@
+.mc-grid { grid-template-columns: minmax(300px, 35%) 1fr; }
+
+@media (max-width: 880px) {
+  .mc-grid { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 900px) {
+  .mc-header { padding: 0 16px !important; gap: 12px !important; }
+  .mc-main { padding: 22px 16px 48px !important; }
+  .mc-avatar-name { display: none !important; }
+  .mc-eyebrow-sep { display: none !important; }
+}
+
+@media (max-width: 560px) {
+  .mc-name-title { font-size: 24px !important; }
+}

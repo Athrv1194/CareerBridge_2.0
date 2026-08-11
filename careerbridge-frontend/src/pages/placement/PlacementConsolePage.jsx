@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, Skeleton, StatTile, Tag } from '../../components/ui';
+import {
+  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, Skeleton, StatTile, Tag,
+  useRevealOnMount,
+} from '../../components/ui';
 import { getOrgApplications, getCandidates, getJobs, getJobDetail } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { submitJoinRequest } from '../../api/orgJoinApi';
 import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
 import './placement-console.css';
 
-const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', ORG_ADMIN: '/college-dashboard', SUPER_ADMIN: '/super-admin', MENTOR: '/dashboard' };
+const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', ORG_ADMIN: '/college-dashboard', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
 const STATUS_TONE = { APPLIED: 'default', SHORTLISTED: 'info', INTERVIEWED: 'accent', OFFERED: 'accent', REJECTED: 'danger' };
 const WORKMODE_LABEL = { REMOTE: 'Remote', HYBRID: 'Hybrid', ON_SITE: 'On-site' };
 const JOBTYPE_LABEL = { FULL_TIME: 'Full-time', PART_TIME: 'Part-time', INTERNSHIP: 'Internship', CONTRACT: 'Contract' };
@@ -118,6 +121,10 @@ export default function PlacementConsolePage() {
   const [workModeFilter, setWorkModeFilter] = useState('ANY');
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [jobDetail, setJobDetail] = useState(null);
+  const [appsIn, setAppsIn] = useState(false);
+  const [candIn, setCandIn] = useState(false);
+  const [jobsIn, setJobsIn] = useState(false);
+  const topbarIn = useRevealOnMount();
 
   useEffect(() => {
     const payload = getTokenPayload();
@@ -132,19 +139,20 @@ export default function PlacementConsolePage() {
     setOrgIdMissing(!payload?.organizationId && !payload?.orgId);
     setOfficerName(getDisplayName('Placement officer'));
     getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {});
-    getOrgApplications().then((data) => { setApps(data); setAppsLoaded(true); }).catch(() => setAppsLoaded(true));
+    getOrgApplications().then((data) => { setApps(data); setAppsLoaded(true); setTimeout(() => setAppsIn(true), 20); }).catch(() => setAppsLoaded(true));
   }, [navigate]);
 
   const loadCandidates = useCallback((skillsStr, min, max) => {
     setCandLoading(true);
+    setCandIn(false);
     getCandidates({ skills: skillsStr, minScore: min, maxScore: max })
       .then((data) => setCandidates(data))
       .catch(() => setCandidates([]))
-      .finally(() => { setCandLoading(false); setCandLoaded(true); });
+      .finally(() => { setCandLoading(false); setCandLoaded(true); setTimeout(() => setCandIn(true), 20); });
   }, []);
 
   const loadJobs = useCallback(() => {
-    getJobs().then((data) => { setJobs(data.filter((j) => j.isActive !== false)); setJobsLoaded(true); }).catch(() => setJobsLoaded(true));
+    getJobs().then((data) => { setJobs(data.filter((j) => j.isActive !== false)); setJobsLoaded(true); setTimeout(() => setJobsIn(true), 20); }).catch(() => setJobsLoaded(true));
   }, []);
 
   const submitJoin = () => {
@@ -242,7 +250,7 @@ export default function PlacementConsolePage() {
       </header>
 
       <div style={{ background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div className="cb-pc-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+        <div className="cb-pc-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box', ...revealStyle(topbarIn, 0, { distance: 16 }) }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Placement officer</span>
             <h1 className="cb-pc-company-title" style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.1, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Placement Console</h1>
@@ -303,10 +311,10 @@ export default function PlacementConsolePage() {
                 </div>
 
                 <div className="cb-pc-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
-                  <StatTile value={stats.total} label="Total applications" />
-                  <StatTile value={stats.shortlisted} label="Shortlisted" />
-                  <StatTile value={stats.offered} label="Offered" />
-                  <StatTile value={stats.accepted} label="Accepted" />
+                  <StatTile value={stats.total} label="Total applications" style={revealStyle(appsIn, 0)} />
+                  <StatTile value={stats.shortlisted} label="Shortlisted" style={revealStyle(appsIn, 1)} />
+                  <StatTile value={stats.offered} label="Offered" style={revealStyle(appsIn, 2)} />
+                  <StatTile value={stats.accepted} label="Accepted" style={revealStyle(appsIn, 3)} />
                 </div>
 
                 {!appsLoaded && <Skeleton height={300} />}
@@ -318,13 +326,16 @@ export default function PlacementConsolePage() {
                     <div className="cb-pc-app-row cb-pc-app-row-head" style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', gap: 0, padding: '10px 16px', borderBottom: '1px solid var(--line-hairline)', fontSize: 11, fontWeight: 500, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>
                       <span>Student</span><span>Job</span><span style={{ textAlign: 'center' }}>Status</span><span style={{ textAlign: 'right' }}>Offer</span><span style={{ textAlign: 'center' }}>Outcome</span><span style={{ textAlign: 'right' }}>Applied</span>
                     </div>
-                    {filteredApps.map((a) => (
+                    {filteredApps.map((a, idx) => (
                       <button
                         key={a.id}
                         type="button"
                         onClick={() => setSelectedAppId(a.id)}
                         className="cb-pc-app-row"
-                        style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', width: '100%', padding: '14px 16px', border: 0, borderBottom: '1px solid var(--line-hairline)', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', boxSizing: 'border-box' }}
+                        style={{
+                          display: 'grid', gridTemplateColumns: '1fr 1.4fr 0.9fr 0.7fr 0.8fr 0.7fr', width: '100%', padding: '14px 16px', border: 0, borderBottom: '1px solid var(--line-hairline)', background: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', boxSizing: 'border-box',
+                          ...revealStyle(appsIn, idx, { step: 35, distance: 12, duration: 450 }),
+                        }}
                       >
                         <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>Student #{a.studentId}</span>
                         <span style={{ fontSize: 13, color: 'var(--ink-700)' }}>{a.jobTitle}</span>
@@ -421,14 +432,20 @@ export default function PlacementConsolePage() {
 
             {!candLoading && candidates.length > 0 && (
               <div className="cb-pc-cand-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {candidates.map((c) => {
+                {candidates.map((c, idx) => {
                   const unavailable = c.prsScore === -1;
                   const skills = c.skills || [];
                   const shown = skills.slice(0, 5);
                   const more = Math.max(0, skills.length - 5);
                   const band = unavailable ? 'success' : scoreBand(c.prsScore);
                   return (
-                    <div key={c.studentId} style={{ background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div
+                      key={c.studentId}
+                      style={{
+                        background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12,
+                        ...revealStyle(candIn, idx),
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 44, height: 44, background: 'var(--ink-900)', color: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 600, flexShrink: 0 }}>
                           {`${(c.firstName?.[0] || '')}${(c.lastName?.[0] || '')}`.toUpperCase()}
@@ -497,12 +514,15 @@ export default function PlacementConsolePage() {
               <div className="cb-pc-jobs-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
                 {!jobsLoaded && <Skeleton height={300} />}
                 {jobsLoaded && filteredJobs.length === 0 && <EmptyState icon="briefcase" title="No roles match" message="Try a different search or filter." />}
-                {filteredJobs.map((job) => (
+                {filteredJobs.map((job, idx) => (
                   <button
                     key={job.id}
                     type="button"
                     onClick={() => selectJob(job.id)}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 14, boxSizing: 'border-box', background: selectedJobId === job.id ? 'var(--bone-200)' : 'var(--bone-50)', border: '1px solid var(--line-hairline)', borderLeft: selectedJobId === job.id ? '2px solid var(--taupe-500)' : '1px solid var(--line-hairline)', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+                    style={{
+                      display: 'flex', flexDirection: 'column', gap: 6, padding: 14, boxSizing: 'border-box', background: selectedJobId === job.id ? 'var(--bone-200)' : 'var(--bone-50)', border: '1px solid var(--line-hairline)', borderLeft: selectedJobId === job.id ? '2px solid var(--taupe-500)' : '1px solid var(--line-hairline)', cursor: 'pointer', textAlign: 'left', font: 'inherit',
+                      ...revealStyle(jobsIn, idx, { step: 40, distance: 12, duration: 450 }),
+                    }}
                   >
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{job.title}</span>
                     <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>{job.companyName}</span>

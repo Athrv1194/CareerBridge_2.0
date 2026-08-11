@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, IconButton, Logo, Skeleton } from '../../components/ui';
+import {
+  Alert, Badge, Button, Icon, IconButton, Logo, revealStyle, Skeleton, useRevealOnMount,
+} from '../../components/ui';
 import { getMyNotifications, markNotificationRead } from '../../api/notificationApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './notifications.css';
 
 const ROLE_LABEL = { STUDENT: 'Student', PLACEMENT_OFFICER: 'Placement officer', RECRUITER: 'Recruiter', ORG_ADMIN: 'Org admin', SUPER_ADMIN: 'Super admin', MENTOR: 'Mentor' };
@@ -56,6 +58,7 @@ export default function NotificationsPage() {
   const isStudent = role === 'STUDENT';
   const roleLabel = ROLE_LABEL[role] || 'Account';
   const userName = getDisplayName(roleLabel);
+  const topbarIn = useRevealOnMount();
 
   const loadAll = useCallback(() => {
     setLoading(true); setError(false);
@@ -147,13 +150,15 @@ export default function NotificationsPage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>{roleLabel}</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
       <main style={{ minWidth: 0, background: 'var(--surface-page)' }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
 
-          <div className="cb-no-topbar" style={{ background: 'var(--surface-card)', borderBottom: '1px solid var(--line-hairline)', padding: '28px 32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+          <div className="cb-no-topbar" style={{ background: 'var(--surface-card)', borderBottom: '1px solid var(--line-hairline)', padding: '28px 32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', ...revealStyle(topbarIn, 0, { distance: 16 }) }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Notifications</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

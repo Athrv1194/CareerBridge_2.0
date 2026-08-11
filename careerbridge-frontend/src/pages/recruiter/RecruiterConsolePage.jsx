@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, Select, Skeleton, StatTile, Tag, Textarea,
+  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, Select, Skeleton, StatTile, Tag, Textarea,
 } from '../../components/ui';
 import {
   createCompany, getMyCompanies, updateCompany,
@@ -146,6 +146,10 @@ export default function RecruiterConsolePage() {
 
   const [statsOpen, setStatsOpen] = useState(false);
   const [stats, setStats] = useState(null);
+  const [companyIn, setCompanyIn] = useState(false);
+  const [jobsIn, setJobsIn] = useState(false);
+  const [candIn, setCandIn] = useState(false);
+  const [ivIn, setIvIn] = useState(false);
 
   useEffect(() => {
     const payload = getTokenPayload();
@@ -159,12 +163,12 @@ export default function RecruiterConsolePage() {
     }
     setRecruiterName(getDisplayName('Recruiter'));
     getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {});
-    getMyCompanies().then((list) => { setCompany(list[0] || null); setCompanyLoaded(true); }).catch(() => setCompanyLoaded(true));
+    getMyCompanies().then((list) => { setCompany(list[0] || null); setCompanyLoaded(true); setTimeout(() => setCompanyIn(true), 20); }).catch(() => setCompanyLoaded(true));
   }, [navigate]);
 
   const loadJobs = useCallback(() => {
     setJobsLoaded(false);
-    getMyJobs().then((data) => { setJobs(data); setJobsLoaded(true); if (data[0]) setSelectedJobId((cur) => cur || data[0].id); }).catch(() => setJobsLoaded(true));
+    getMyJobs().then((data) => { setJobs(data); setJobsLoaded(true); if (data[0]) setSelectedJobId((cur) => cur || data[0].id); setTimeout(() => setJobsIn(true), 20); }).catch(() => setJobsLoaded(true));
   }, []);
 
   const loadApps = useCallback((jobId) => {
@@ -175,13 +179,14 @@ export default function RecruiterConsolePage() {
 
   const loadCandidates = useCallback((skillsStr, min, max) => {
     setCandLoading(true);
+    setCandIn(false);
     getCandidates({ skills: skillsStr, minScore: min, maxScore: max })
       .then((data) => setCandidates(data)).catch(() => setCandidates([]))
-      .finally(() => { setCandLoading(false); setCandLoaded(true); });
+      .finally(() => { setCandLoading(false); setCandLoaded(true); setTimeout(() => setCandIn(true), 20); });
   }, []);
 
   const loadInterviews = useCallback(() => {
-    getMyInterviews().then((data) => { setInterviews(data); setIvLoaded(true); }).catch(() => setIvLoaded(true));
+    getMyInterviews().then((data) => { setInterviews(data); setIvLoaded(true); setTimeout(() => setIvIn(true), 20); }).catch(() => setIvLoaded(true));
   }, []);
 
   // The Applications tab's job select defaults its VALUE to jobs[0] before appsJobId is ever set --
@@ -365,7 +370,7 @@ export default function RecruiterConsolePage() {
             )}
 
             {companyLoaded && company && !companyForm && (
-              <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 22, ...revealStyle(companyIn, 0, { distance: 20 }) }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20 }}>
                   {company.logoUrl ? (
                     <img src={company.logoUrl} alt="" style={{ width: 64, height: 64, objectFit: 'cover', flexShrink: 0, background: 'var(--bone-100)' }} />
@@ -433,12 +438,15 @@ export default function RecruiterConsolePage() {
                   <Button variant="primary" size="md" fullWidth icon="plus" onClick={startCreateJob}>Post new job</Button>
                   {!jobsLoaded && <Skeleton height={200} />}
                   {jobsLoaded && jobs.length === 0 && <EmptyState icon="briefcase" title="No jobs posted yet" />}
-                  {jobs.map((job) => (
+                  {jobs.map((job, idx) => (
                     <button
                       key={job.id}
                       type="button"
                       onClick={() => { setSelectedJobId(job.id); setJobForm(false); }}
-                      style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 14, boxSizing: 'border-box', background: selectedJobId === job.id && !jobForm ? 'var(--bone-200)' : 'var(--bone-50)', border: '1px solid var(--line-hairline)', borderLeft: selectedJobId === job.id ? '2px solid var(--ink-900)' : '1px solid var(--line-hairline)', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', gap: 6, padding: 14, boxSizing: 'border-box', background: selectedJobId === job.id && !jobForm ? 'var(--bone-200)' : 'var(--bone-50)', border: '1px solid var(--line-hairline)', borderLeft: selectedJobId === job.id ? '2px solid var(--ink-900)' : '1px solid var(--line-hairline)', cursor: 'pointer', textAlign: 'left', font: 'inherit',
+                        ...revealStyle(jobsIn, idx, { step: 40, distance: 12, duration: 450 }),
+                      }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {job.isActive !== false && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--status-success)', flexShrink: 0 }} />}
@@ -641,14 +649,20 @@ export default function RecruiterConsolePage() {
             )}
             {!candLoading && candidates.length > 0 && (
               <div className="cb-rc-cand-grid" style={{ display: 'grid', gap: 14 }}>
-                {candidates.map((c) => {
+                {candidates.map((c, idx) => {
                   const unavailable = c.prsScore === -1;
                   const skills = c.skills || [];
                   const shown = skills.slice(0, 3);
                   const more = Math.max(0, skills.length - 3);
                   const band = unavailable ? 'success' : scoreBand(c.prsScore);
                   return (
-                    <div key={c.studentId} style={{ background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div
+                      key={c.studentId}
+                      style={{
+                        background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 12,
+                        ...revealStyle(candIn, idx),
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 40, height: 40, background: 'var(--ink-900)', color: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
                           {`${(c.firstName?.[0] || '')}${(c.lastName?.[0] || '')}`.toUpperCase()}
@@ -688,8 +702,8 @@ export default function RecruiterConsolePage() {
             {usingSampleInterviews && (
               <Alert tone="info" title="Showing sample data" message="No real interviews scheduled yet — this is what the calendar looks like once you schedule one." />
             )}
-            {interviewGroups.map((grp) => (
-              <div key={grp.date} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {interviewGroups.map((grp, gi) => (
+              <div key={grp.date} style={{ display: 'flex', flexDirection: 'column', gap: 2, ...revealStyle(ivIn, gi, { step: 70, distance: 14 }) }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
                   <span className="cb-eyebrow">{fmtDateFull(grp.date)}</span>
                   <div style={{ flex: 1, height: 1, background: 'var(--line-hairline)' }} />
