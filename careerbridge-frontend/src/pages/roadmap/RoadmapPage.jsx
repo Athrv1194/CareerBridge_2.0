@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Icon, IconButton, Logo, ProgressMeter, Skeleton, StatTile,
+  Alert, Badge, Button, Icon, IconButton, Logo, ProgressMeter, revealStyle, Skeleton, StatTile,
 } from '../../components/ui';
 import { getMyRoadmap, getMyRoadmaps, activateRoadmap, completeMilestone } from '../../api/roadmapApi';
 import { getMyResources } from '../../api/aiCoachApi';
-import { getMyProfile } from '../../api/studentApi';
+import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './roadmap.css';
 
 const NAV_ITEMS = [
@@ -17,6 +19,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -26,6 +29,15 @@ const PACE_OPTIONS = [
   { value: 'aggressive', label: 'Aggressive', description: 'Full focus, 10+ hours.' },
 ];
 
+// Effective "estimated days" of milestone work a student clears per calendar week, by pace.
+const PACE_DAYS_PER_WEEK = { steady: 2, ambitious: 5, aggressive: 7 };
+
+function fmtTargetDate(weeksFromNow) {
+  const d = new Date();
+  d.setDate(d.getDate() + weeksFromNow * 7);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 const STATUS_TONE = { IN_PROGRESS: 'info', COMPLETED: 'accent' };
 const STATUS_LABEL = { IN_PROGRESS: 'In progress', COMPLETED: 'Completed' };
 
@@ -34,17 +46,21 @@ function fmtMonthDay(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function deriveStats(roadmap) {
-  if (!roadmap) return { total: 0, completed: 0, pct: 0, remainingWeeks: 0, weeksSinceStart: 1 };
+function deriveStats(roadmap, pace = 'ambitious') {
+  if (!roadmap) return { total: 0, completed: 0, pct: 0, remainingWeeks: 0, weeksSinceStart: 1, targetDate: '' };
   const ms = roadmap.milestones || [];
   const total = roadmap.totalMilestones ?? ms.length;
   const completed = roadmap.completedMilestones ?? ms.filter((m) => m.isCompleted).length;
   const incompleteDays = ms.filter((m) => !m.isCompleted).reduce((a, m) => a + (m.estimatedDays || 0), 0);
-  const remainingWeeks = total ? Math.ceil(incompleteDays / 5) : 0;
+  const daysPerWeek = PACE_DAYS_PER_WEEK[pace] || PACE_DAYS_PER_WEEK.ambitious;
+  const remainingWeeks = total ? Math.ceil(incompleteDays / daysPerWeek) : 0;
   const started = roadmap.startedAt ? new Date(roadmap.startedAt) : new Date();
   const diffDays = Math.max(0, Math.floor((Date.now() - started.getTime()) / 86400000));
   const weeksSinceStart = Math.max(1, Math.floor(diffDays / 7) + 1);
-  return { total, completed, pct: roadmap.completionPercentage ?? 0, remainingWeeks, weeksSinceStart };
+  return {
+    total, completed, pct: roadmap.completionPercentage ?? 0, remainingWeeks, weeksSinceStart,
+    targetDate: remainingWeeks > 0 ? fmtTargetDate(remainingWeeks) : '',
+  };
 }
 
 function cap(s) {
@@ -90,7 +106,9 @@ function MilestoneCircle({ isCompleted, isCurrent, orderIndex }) {
   );
 }
 
-function MilestoneRow({ milestone, index, isCurrent, isUpcoming, expanded, onToggleExpand, resources, onComplete, completing, rowError }) {
+function MilestoneRow({
+  milestone, index, isCurrent, isUpcoming, expanded, onToggleExpand, resources, onComplete, completing, rowError, revealed,
+}) {
   const m = milestone;
   const showDescription = isCurrent || expanded;
   const expandable = m.isCompleted || isUpcoming;
@@ -103,6 +121,7 @@ function MilestoneRow({ milestone, index, isCurrent, isUpcoming, expanded, onTog
         borderBottom: '1px solid var(--line-hairline)',
         background: m.isCompleted ? 'var(--bone-50)' : 'var(--bone-100)',
         borderLeft: `2px solid ${isCurrent ? 'var(--taupe-600)' : 'transparent'}`,
+        ...revealStyle(revealed, index, { step: 35, distance: 14, duration: 500 }),
       }}
     >
       <div style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -166,7 +185,8 @@ function MilestoneRow({ milestone, index, isCurrent, isUpcoming, expanded, onTog
   );
 }
 
-function PaceDialog({ choice, onChoose, onClose, onSave }) {
+function PaceDialog({ choice, onChoose, onClose, onSave, roadmap }) {
+  const preview = deriveStats(roadmap, choice);
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--surface-overlay)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div
@@ -178,27 +198,37 @@ function PaceDialog({ choice, onChoose, onClose, onSave }) {
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, color: 'var(--ink-900)', margin: '6px 0 0' }}>How fast do you want to move?</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {PACE_OPTIONS.map((opt) => (
-            <label
-              key={opt.value}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer',
-                border: `1px solid ${choice === opt.value ? 'var(--ink-900)' : 'var(--line-hairline)'}`,
-                background: choice === opt.value ? 'var(--taupe-100)' : 'transparent',
-              }}
-            >
-              <input type="radio" name="pace" checked={choice === opt.value} onChange={() => onChoose(opt.value)} style={{ accentColor: 'var(--ink-900)' }} />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-900)' }}>{opt.label}</div>
-                <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>{opt.description}</div>
-              </div>
-            </label>
-          ))}
+          {PACE_OPTIONS.map((opt) => {
+            const optPreview = deriveStats(roadmap, opt.value);
+            return (
+              <label
+                key={opt.value}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer',
+                  border: `1px solid ${choice === opt.value ? 'var(--ink-900)' : 'var(--line-hairline)'}`,
+                  background: choice === opt.value ? 'var(--taupe-100)' : 'transparent',
+                }}
+              >
+                <input type="radio" name="pace" checked={choice === opt.value} onChange={() => onChoose(opt.value)} style={{ accentColor: 'var(--ink-900)' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-900)' }}>{opt.label}</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>{opt.description}</div>
+                </div>
+                {optPreview.remainingWeeks > 0 && (
+                  <div style={{ fontSize: 12, color: 'var(--ink-400)', textAlign: 'right', flexShrink: 0 }}>
+                    {optPreview.remainingWeeks} wks<br />by {optPreview.targetDate}
+                  </div>
+                )}
+              </label>
+            );
+          })}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 16, borderTop: '1px solid var(--line-hairline)' }}>
-          <Badge tone="accent">Proposed state</Badge>
-          <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Pace planning is coming — this sets your preference for when it ships.</span>
-        </div>
+        {preview.remainingWeeks > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 16, borderTop: '1px solid var(--line-hairline)' }}>
+            <Badge tone="accent">At this pace</Badge>
+            <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>You'll finish your roadmap around {preview.targetDate} ({preview.remainingWeeks} weeks from today).</span>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <Button variant="secondary" size="sm" onClick={onClose}>Back</Button>
           <Button size="sm" iconAfter="arrow-right" onClick={onSave}>Set my pace</Button>
@@ -211,12 +241,13 @@ function PaceDialog({ choice, onChoose, onClose, onSave }) {
 export default function RoadmapPage() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [roadmap, setRoadmap] = useState(null);
   const [resourcesByTitle, setResourcesByTitle] = useState({});
   const [studentName, setStudentName] = useState('');
+  const [avatarSrc, setAvatarSrc] = useState('');
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [completingId, setCompletingId] = useState(null);
   const [rowErrorId, setRowErrorId] = useState(null);
@@ -226,6 +257,7 @@ export default function RoadmapPage() {
   const [toast, setToast] = useState({ visible: false, title: '', message: '' });
   const [allRoadmaps, setAllRoadmaps] = useState([]);
   const [switching, setSwitching] = useState(false);
+  const [contentIn, setContentIn] = useState(false);
 
   const toastTimerRef = useRef(null);
 
@@ -250,8 +282,10 @@ export default function RoadmapPage() {
         setResourcesByTitle(map);
       }
       setLoading(false);
+      setTimeout(() => setContentIn(true), 20);
     });
     getMyRoadmaps().then(setAllRoadmaps).catch(() => {});
+    getAvatarBlobUrl().then((url) => { if (!cancelled && url) setAvatarSrc(url); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -302,7 +336,7 @@ export default function RoadmapPage() {
   }, [paceChoice]);
 
   const sidebarWidth = navCollapsed ? '60px' : '248px';
-  const stats = deriveStats(roadmap);
+  const stats = deriveStats(roadmap, paceChoice);
   const milestones = roadmap?.milestones || [];
   const firstOpenIdx = milestones.findIndex((m) => !m.isCompleted);
   const isCompletedStatus = roadmap?.status === 'COMPLETED';
@@ -323,14 +357,16 @@ export default function RoadmapPage() {
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="user" size={15} />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
             </div>
             <div className="cb-rm-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
@@ -340,7 +376,7 @@ export default function RoadmapPage() {
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setNavCollapsed((v) => !v)}
+              onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })}
               iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
             />
           </div>
@@ -435,7 +471,7 @@ export default function RoadmapPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <h1 className="cb-rm-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, maxWidth: 680 }}>
+                    <h1 className="cb-rm-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, maxWidth: 680, ...revealStyle(contentIn, 0, { distance: 24, duration: 600 }) }}>
                       {isCompletedStatus ? (
                         <>You finished. <i>{roadmap.careerName}</i> is within reach.</>
                       ) : (
@@ -466,10 +502,10 @@ export default function RoadmapPage() {
                 )}
 
                 <div className="cb-rm-stat-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
-                  <StatTile value={`${stats.completed} of ${stats.total}`} label="Milestones" />
-                  <StatTile value={`${Math.round(stats.pct)}%`} label="Complete" />
-                  <StatTile value={`${stats.remainingWeeks} wks`} label="Remaining" />
-                  <StatTile value={`Week ${stats.weeksSinceStart}`} label={`Since ${fmtMonthDay(roadmap.startedAt)}`} />
+                  <StatTile value={`${stats.completed} of ${stats.total}`} label="Milestones" style={revealStyle(contentIn, 0)} />
+                  <StatTile value={`${Math.round(stats.pct)}%`} label="Complete" style={revealStyle(contentIn, 1)} />
+                  <StatTile value={`${stats.remainingWeeks} wks`} label={stats.targetDate ? `Remaining · by ${stats.targetDate}` : 'Remaining'} style={revealStyle(contentIn, 2)} />
+                  <StatTile value={`Week ${stats.weeksSinceStart}`} label={`Since ${fmtMonthDay(roadmap.startedAt)}`} style={revealStyle(contentIn, 3)} />
                 </div>
 
                 <ProgressMeter value={stats.pct} max={100} tone="accent" />
@@ -494,6 +530,7 @@ export default function RoadmapPage() {
                           onComplete={() => handleComplete(m)}
                           completing={completingId === m.id}
                           rowError={rowErrorId === m.id ? rowErrorMessage : ''}
+                          revealed={contentIn}
                         />
                       );
                     })}
@@ -508,7 +545,7 @@ export default function RoadmapPage() {
       </div>
 
       {paceOpen && (
-        <PaceDialog choice={paceChoice} onChoose={setPaceChoice} onClose={() => setPaceOpen(false)} onSave={savePace} />
+        <PaceDialog choice={paceChoice} onChoose={setPaceChoice} onClose={() => setPaceOpen(false)} onSave={savePace} roadmap={roadmap} />
       )}
 
       {toast.visible && (

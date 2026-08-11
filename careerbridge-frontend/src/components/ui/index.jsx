@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuArrowRight, LuArrowLeft, LuSlidersHorizontal, LuX, LuBuilding2,
@@ -7,7 +7,7 @@ import {
   LuSparkles, LuBriefcase, LuAward, LuRefreshCw, LuFileText, LuUsers,
   LuSun, LuHistory, LuChevronRight, LuChevronDown, LuExternalLink,
   LuBell, LuSearch, LuBookmark, LuCamera, LuMapPin, LuPencil, LuTrash2,
-  LuCircleHelp,
+  LuCircleHelp, LuCalendar, LuMic, LuMicOff,
 } from 'react-icons/lu';
 
 const iconMap = {
@@ -43,6 +43,9 @@ const iconMap = {
   pencil: LuPencil,
   'trash-2': LuTrash2,
   'help-circle': LuCircleHelp,
+  calendar: LuCalendar,
+  mic: LuMic,
+  'mic-off': LuMicOff,
 };
 
 export function Icon({ name, size = 18, style }) {
@@ -177,13 +180,16 @@ export function Badge({ children, tone = 'default', icon, style }) {
   );
 }
 
-export function StatTile({ value, label, tone = 'default' }) {
+export function StatTile({
+  value, label, tone = 'default', style,
+}) {
   const inverse = tone === 'inverse';
   return (
     <div
       style={{
         background: inverse ? 'var(--ink-900)' : 'var(--bone-50)', padding: '32px 24px',
         display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center', minHeight: 120,
+        ...style,
       }}
     >
       <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 400, color: inverse ? 'var(--bone-50)' : 'var(--ink-900)' }}>
@@ -299,23 +305,23 @@ export function Field({ label, hint, error, children }) {
   );
 }
 
-export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength }) {
+export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength, disabled = false }) {
   const [revealed, setRevealed] = useState(false);
   const isPassword = type === 'password';
   const inputStyle = {
     width: '100%', boxSizing: 'border-box', padding: isPassword ? '9px 40px 9px 12px' : '9px 12px',
-    fontSize: 14, fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: 'var(--bone-50)',
+    fontSize: 14, fontFamily: 'var(--font-sans)', color: 'var(--ink-900)', background: disabled ? 'var(--bone-200)' : 'var(--bone-50)',
     border: `1px solid ${error ? 'var(--status-danger)' : 'var(--line-hairline)'}`,
-    borderRadius: 'var(--radius-sm)', outline: 'none',
+    borderRadius: 'var(--radius-sm)', outline: 'none', cursor: disabled ? 'not-allowed' : 'text',
   };
 
   if (!isPassword) {
-    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} style={inputStyle} />;
+    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} disabled={disabled} style={inputStyle} />;
   }
 
   return (
     <div style={{ position: 'relative' }}>
-      <input type={revealed ? 'text' : 'password'} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} style={inputStyle} />
+      <input type={revealed ? 'text' : 'password'} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} disabled={disabled} style={inputStyle} />
       <button
         type="button"
         onClick={() => setRevealed((r) => !r)}
@@ -527,6 +533,45 @@ export function MatchScore({ value, size = 'sm' }) {
         <div style={{ width: `${Math.max(0, Math.min(100, value))}%`, height: '100%', background: 'var(--taupe-700)' }} />
       </div>
     </div>
+  );
+}
+
+// Entrance-reveal kit, same choreography as the mentors page: fires once on mount
+// (double rAF so the initial CSS state paints before transitioning), consumers
+// stagger children by index. Not a generic animation library -- just this one shape.
+export function useRevealOnMount() {
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    let raf2;
+    const raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => setRevealed(true)); });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, []);
+  return revealed;
+}
+
+export function revealStyle(revealed, index = 0, { step = 60, distance = 20, duration = 700 } = {}) {
+  return {
+    opacity: revealed ? 1 : 0,
+    transform: revealed ? 'translateY(0)' : `translateY(${distance}px)`,
+    transition: `opacity ${duration}ms cubic-bezier(.2,0,.2,1), transform ${duration}ms cubic-bezier(.2,0,.2,1)`,
+    transitionDelay: `${index * step}ms`,
+  };
+}
+
+export function AnimatedWords({ text, tag: Tag = 'span', revealed, style, className }) {
+  return (
+    <Tag style={style} className={className}>
+      {text.split(' ').map((word, i) => (
+        // eslint-disable-next-line react/no-array-index-key
+        <span key={i} style={{
+          display: 'inline-block', opacity: revealed ? 1 : 0, transform: revealed ? 'translateY(0)' : 'translateY(24px)',
+          transition: 'opacity 420ms cubic-bezier(.2,0,.2,1), transform 420ms cubic-bezier(.2,0,.2,1)', transitionDelay: `${i * 80}ms`,
+        }}
+        >
+          {word}&nbsp;
+        </span>
+      ))}
+    </Tag>
   );
 }
 

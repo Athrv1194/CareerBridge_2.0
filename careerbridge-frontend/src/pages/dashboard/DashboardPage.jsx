@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  Badge, Button, Icon, IconButton, Logo, MatchScore, ProgressMeter, ScoreRing, Skeleton,
-  StatTile, Tag,
+  Badge, Button, Icon, IconButton, Logo, MatchScore, ProgressMeter, revealStyle,
+  ScoreRing, Skeleton, StatTile, Tag,
 } from '../../components/ui';
 import { getMyPrs } from '../../api/prsApi';
 import { getMyRecommendation, getCareerCatalog } from '../../api/recommendationApi';
 import { getMyRoadmap, completeMilestone } from '../../api/roadmapApi';
 import { getMyNotifications, getUnreadCount, markNotificationRead } from '../../api/notificationApi';
-import { getMyProfile } from '../../api/studentApi';
+import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
+import { clearTokens } from '../../utils/tokenUtils';
+import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './dashboard.css';
 
 const NAV_ITEMS = [
@@ -19,6 +21,7 @@ const NAV_ITEMS = [
   { icon: 'briefcase', label: 'Opportunities', to: '/opportunities' },
   { icon: 'download', label: 'Résumé', to: '/resume' },
   { icon: 'sparkles', label: 'Coach', to: '/coach' },
+  { icon: 'users', label: 'Mentors', to: '/mentors' },
   { icon: 'user', label: 'Profile', to: '/profile' },
 ];
 
@@ -77,11 +80,17 @@ function CompositionRow({ label, value, weightLabel, tone }) {
   );
 }
 
-function CareerMatchCard({ rank, careerName, matchPercentage, tags }) {
+function CareerMatchCard({
+  rank, careerName, matchPercentage, tags, index, revealed,
+}) {
   const shown = tags.slice(0, 3);
   const overflow = tags.length > 3 ? `+${tags.length - 3} more` : null;
   return (
-    <article style={{ background: 'var(--surface-card)', padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <article style={{
+      background: 'var(--surface-card)', padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 12,
+      ...revealStyle(revealed, index),
+    }}
+    >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <span className="cb-num" style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Rank {String(rank).padStart(2, '0')}</span>
         <Badge tone="accent">AI matched</Badge>
@@ -163,9 +172,11 @@ function NotificationRow({ title, message, notificationType, isRead, timeLabel, 
 }
 
 export default function DashboardPage() {
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [loading, setLoading] = useState(true);
   const [studentName, setStudentName] = useState('');
+  const [avatarSrc, setAvatarSrc] = useState('');
   const [profile, setProfile] = useState(null);
   const [prs, setPrs] = useState(null);
   const [rec, setRec] = useState(null);
@@ -176,6 +187,8 @@ export default function DashboardPage() {
   const [completingId, setCompletingId] = useState(null);
   const [toast, setToast] = useState({ visible: false, title: '', message: '' });
   const toastTimerRef = useRef(null);
+  const [contentIn, setContentIn] = useState(false);
+  const [heroIn, setHeroIn] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,7 +212,10 @@ export default function DashboardPage() {
         setStudentName(`${profileRes.value.firstName || ''} ${profileRes.value.lastName || ''}`.trim());
       }
       setLoading(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => setHeroIn(true)));
+      setTimeout(() => setContentIn(true), 20);
     });
+    getAvatarBlobUrl().then((url) => { if (!cancelled && url) setAvatarSrc(url); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -209,10 +225,6 @@ export default function DashboardPage() {
     clearTimeout(toastTimerRef.current);
     setToast({ visible: true, title, message });
     toastTimerRef.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), 4500);
-  }, []);
-
-  const scrollToNotifications = useCallback(() => {
-    document.getElementById('notif-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
   const handleReadNotification = useCallback((id) => {
@@ -263,7 +275,7 @@ export default function DashboardPage() {
         <Logo size={32} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
-            <IconButton icon="bell" label="Notifications" onClick={scrollToNotifications} />
+            <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
               <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 15, height: 15, padding: '0 3px', borderRadius: '50%', background: 'var(--ink-900)', color: 'var(--bone-50)', fontSize: 9, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, pointerEvents: 'none' }}>
                 {unreadCount}
@@ -272,14 +284,16 @@ export default function DashboardPage() {
           </div>
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Icon name="user" size={15} />
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+              {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
             </div>
             <div className="cb-db-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
@@ -289,7 +303,7 @@ export default function DashboardPage() {
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setNavCollapsed((v) => !v)}
+              onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })}
               iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }}
             />
           </div>
@@ -341,7 +355,7 @@ export default function DashboardPage() {
                       Today · {studentName ? `Welcome back, ${studentName.split(' ')[0]}` : 'Welcome back'}
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span onClick={scrollToNotifications} style={{ cursor: 'pointer' }}>
+                      <span onClick={() => navigate('/notifications')} style={{ cursor: 'pointer' }}>
                         <Badge tone={unreadTone}>{unreadCount} unread</Badge>
                       </span>
                       {hasRoadmap ? (
@@ -355,27 +369,31 @@ export default function DashboardPage() {
                   </div>
 
                   {hasRoadmap && (
-                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
-                      {remainingMilestones} milestones stand between you and a <i>{topCareerName || roadmap.careerName}</i> shortlist.
+                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, ...revealStyle(heroIn, 0, { distance: 24, duration: 600 }) }}>
+                      {remainingMilestones} milestones stand between you and a <i>{roadmap.careerName || topCareerName}</i> shortlist.
                     </h1>
                   )}
                   {!hasRoadmap && hasRec && (
-                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
+                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, ...revealStyle(heroIn, 0, { distance: 24, duration: 600 }) }}>
                       Your top match is <i>{topCareerName}</i>. Build your roadmap to see what's next.
                     </h1>
                   )}
                   {!hasRoadmap && !hasRec && (
-                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
+                    <h1 className="cb-db-hero" style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.04, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: 0, fontWeight: 400, ...revealStyle(heroIn, 0, { distance: 24, duration: 600 }) }}>
                       Take your assessment to find your top career matches.
                     </h1>
                   )}
                   {prs && (
-                    <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-600)', margin: 0, maxWidth: 640 }}>{prsSubtext(prs)}</p>
+                    <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink-600)', margin: 0, maxWidth: 640, ...revealStyle(heroIn, 1, { distance: 14, duration: 500 }) }}>{prsSubtext(prs)}</p>
                   )}
                 </div>
 
                 {showProfileAlert && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '18px 22px', background: 'var(--status-warning-soft)', border: '1px solid var(--status-warning)', flexWrap: 'wrap' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 20, padding: '18px 22px', background: 'var(--status-warning-soft)', border: '1px solid var(--status-warning)', flexWrap: 'wrap',
+                    ...revealStyle(contentIn, 0),
+                  }}
+                  >
                     <Icon name="triangle-alert" size={18} style={{ color: 'var(--status-warning)' }} />
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>Your profile is {Math.round(profile.profileCompletionPercentage)}% complete</div>
@@ -389,12 +407,20 @@ export default function DashboardPage() {
                   {!prs && <Skeleton height={220} />}
                   {prs && (
                     <div className="cb-db-prs-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
-                      <div style={{ background: 'var(--surface-card)', padding: '34px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                      <div style={{
+                        background: 'var(--surface-card)', padding: '34px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
+                        ...revealStyle(contentIn, 0),
+                      }}
+                      >
                         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-600)' }}>Placement readiness</span>
                         <ScoreRing value={Math.round(prs.totalScore)} grade={prs.grade} size="lg" />
                         <span className="cb-num" style={{ fontSize: 12, color: 'var(--ink-400)' }}>Last updated {fmtDate(prs.lastUpdatedAt)}</span>
                       </div>
-                      <div style={{ background: 'var(--surface-card)', padding: '34px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{
+                        background: 'var(--surface-card)', padding: '34px 32px', display: 'flex', flexDirection: 'column', gap: 16,
+                        ...revealStyle(contentIn, 1),
+                      }}
+                      >
                         <div>
                           <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-600)' }}>Score composition</span>
                           <hr style={{ height: 1, background: 'var(--line-hairline)', border: 0, margin: '6px 0 0' }} />
@@ -417,8 +443,8 @@ export default function DashboardPage() {
                   <hr style={{ height: 1, background: 'var(--line-ink)', border: 0, margin: '8px 0 0' }} />
                   {hasRec ? (
                     <div className="cb-db-career-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', borderTop: 0, marginTop: 20 }}>
-                      {rec.topRecommendations.slice(0, 3).map((c) => (
-                        <CareerMatchCard key={c.careerName} rank={c.rank} careerName={c.careerName} matchPercentage={c.matchPercentage} tags={tagsByCareer[c.careerName] || []} />
+                      {rec.topRecommendations.slice(0, 3).map((c, idx) => (
+                        <CareerMatchCard key={c.careerName} rank={c.rank} careerName={c.careerName} matchPercentage={c.matchPercentage} tags={tagsByCareer[c.careerName] || []} index={idx} revealed={contentIn} />
                       ))}
                     </div>
                   ) : (
@@ -430,7 +456,7 @@ export default function DashboardPage() {
                 </section>
 
                 <section id="notif-panel" className="cb-db-lower-grid" style={{ display: 'grid', alignItems: 'start' }}>
-                  <div>
+                  <div style={revealStyle(contentIn, 0)}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20 }}>
                       <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-600)' }}>Your roadmap</span>
                       <Link to="/roadmap" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink-700)' }}>Full roadmap →</Link>
@@ -465,7 +491,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  <div>
+                  <div style={revealStyle(contentIn, 1)}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 20 }}>
                       <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-600)' }}>Notifications</span>
                       <Badge tone={unreadTone}>{unreadCount} unread</Badge>
@@ -504,10 +530,10 @@ export default function DashboardPage() {
             <section style={{ background: 'var(--ink-900)' }}>
               <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 32px' }}>
                 <div className="cb-db-stat-grid" style={{ display: 'grid', gap: 1, background: 'var(--line-hairline)' }}>
-                  <StatTile tone="inverse" value={prs ? `${Math.round(prs.totalScore)}%` : '—'} label="Readiness score" />
-                  <StatTile tone="inverse" value={hasRoadmap ? `${Math.round(roadmapPct)}%` : '—'} label="Roadmap done" />
-                  <StatTile tone="inverse" value={hasRec ? `${topMatchPct}%` : '—'} label="Top match" />
-                  <StatTile tone="inverse" value={String(unreadCount)} label="Unread alerts" />
+                  <StatTile tone="inverse" value={prs ? `${Math.round(prs.totalScore)}%` : '—'} label="Readiness score" style={revealStyle(contentIn, 0)} />
+                  <StatTile tone="inverse" value={hasRoadmap ? `${Math.round(roadmapPct)}%` : '—'} label="Roadmap done" style={revealStyle(contentIn, 1)} />
+                  <StatTile tone="inverse" value={hasRec ? `${topMatchPct}%` : '—'} label="Top match" style={revealStyle(contentIn, 2)} />
+                  <StatTile tone="inverse" value={String(unreadCount)} label="Unread alerts" style={revealStyle(contentIn, 3)} />
                 </div>
               </div>
             </section>

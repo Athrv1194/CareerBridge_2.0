@@ -8,7 +8,7 @@ export const ROLE_REDIRECTS = {
   ORG_ADMIN: '/college-dashboard',
   PLACEMENT_OFFICER: '/placement-console',
   SUPER_ADMIN: '/super-admin',
-  MENTOR: '/dashboard',
+  MENTOR: '/mentor-console',
 };
 
 // Only students walk the onboarding -> assessment -> roadmap chain; other roles go straight to their console.

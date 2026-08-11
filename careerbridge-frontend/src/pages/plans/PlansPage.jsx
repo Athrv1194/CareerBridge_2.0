@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, Badge, Button, Icon, IconButton, Logo, Skeleton } from '../../components/ui';
+import {
+  Alert, Badge, Button, Icon, IconButton, Logo, revealStyle, Skeleton, useRevealOnMount,
+} from '../../components/ui';
 import { getPlans, createOrder, verifyPayment, getMySubscription } from '../../api/paymentApi';
 import { getUnreadCount } from '../../api/notificationApi';
 
@@ -35,12 +37,14 @@ export default function PlansPage() {
   const [subscription, setSubscription] = useState(null);
   const [payingPlanId, setPayingPlanId] = useState(null);
   const [error, setError] = useState('');
+  const [cardsIn, setCardsIn] = useState(false);
+  const headerIn = useRevealOnMount();
 
   useEffect(() => {
     getUnreadCount().then((r) => setUnreadCount(r?.unreadCount || 0)).catch(() => {});
     Promise.all([getPlans(), getMySubscription().catch(() => null)])
       .then(([p, sub]) => { setPlans(p); setSubscription(sub); })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setTimeout(() => setCardsIn(true), 20); });
   }, []);
 
   async function handleUpgrade(plan) {
@@ -106,8 +110,8 @@ export default function PlansPage() {
       <div style={{ minHeight: 'calc(100vh - 64px)', display: 'block' }}>
 
         <main style={{ padding: '40px 32px', maxWidth: 1040, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-          <h1 style={{ fontSize: 28, fontWeight: 600, color: 'var(--ink-900)', margin: '0 0 6px' }}>Plans</h1>
-          <p style={{ fontSize: 14, color: 'var(--ink-600)', margin: '0 0 28px' }}>
+          <h1 style={{ fontSize: 28, fontWeight: 600, color: 'var(--ink-900)', margin: '0 0 6px', ...revealStyle(headerIn, 0, { distance: 14 }) }}>Plans</h1>
+          <p style={{ fontSize: 14, color: 'var(--ink-600)', margin: '0 0 28px', ...revealStyle(headerIn, 1, { distance: 10, duration: 450 }) }}>
             {subscription?.active ? `You're on ${subscription.planName}.` : 'Pick a plan to unlock more of CareerBridge.'}
           </p>
 
@@ -119,11 +123,17 @@ export default function PlansPage() {
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
-              {plans.map((plan) => {
+              {plans.map((plan, idx) => {
                 const isCurrent = subscription?.active && subscription.planName === plan.planName;
                 const isFree = plan.price === 0;
                 return (
-                  <div key={plan.id} style={{ border: '1px solid var(--line-hairline)', borderRadius: 'var(--radius-md)', padding: 24, display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--surface-card, #fff)' }}>
+                  <div
+                    key={plan.id}
+                    style={{
+                      border: '1px solid var(--line-hairline)', borderRadius: 'var(--radius-md)', padding: 24, display: 'flex', flexDirection: 'column', gap: 14, background: 'var(--surface-card, #fff)',
+                      ...revealStyle(cardsIn, idx),
+                    }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)' }}>{plan.planName.replace(/_/g, ' ')}</span>
                       {isCurrent && <Badge tone="success">Current</Badge>}
