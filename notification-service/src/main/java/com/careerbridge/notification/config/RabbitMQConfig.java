@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Two queues, one per event type -- not one queue with two listeners.
+ * Nine queues, one per event type -- never one queue with several listeners.
  *
  * Two @RabbitListener methods on a single queue produce two independent listener containers
  * consuming it, and RabbitMQ round-robins deliveries between them. Roughly half of each event type
@@ -73,6 +73,26 @@ public class RabbitMQConfig {
     }
 
     /**
+     * Three more queues for mentor-service's session lifecycle, same one-queue-per-event-type
+     * reasoning. prs-service binds its own careerbridge.prs.mentor.queue to session.completed too;
+     * both queues get every copy, since each is bound independently to the topic exchange.
+     */
+    @Bean
+    public Queue notificationSessionBookedQueue() {
+        return new Queue(NotificationConstants.SESSION_BOOKED_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Queue notificationSessionAcceptedQueue() {
+        return new Queue(NotificationConstants.SESSION_ACCEPTED_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Queue notificationSessionCompletedQueue() {
+        return new Queue(NotificationConstants.SESSION_COMPLETED_QUEUE_NAME, true);
+    }
+
+    /**
      * durable=true, autoDelete=false must match auth/student/assessment/recommendation exactly. A
      * mismatch is answered with 406 PRECONDITION_FAILED, and because declaration happens
      * asynchronously on the connection callback, the consumers would simply never start rather
@@ -129,6 +149,30 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(notificationOrgAdminQueue)
                 .to(careerBridgeExchange)
                 .with(NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED);
+    }
+
+    @Bean
+    public Binding sessionBookedBinding(Queue notificationSessionBookedQueue,
+                                        TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationSessionBookedQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_SESSION_BOOKED);
+    }
+
+    @Bean
+    public Binding sessionAcceptedBinding(Queue notificationSessionAcceptedQueue,
+                                          TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationSessionAcceptedQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_SESSION_ACCEPTED);
+    }
+
+    @Bean
+    public Binding sessionCompletedBinding(Queue notificationSessionCompletedQueue,
+                                           TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(notificationSessionCompletedQueue)
+                .to(careerBridgeExchange)
+                .with(NotificationConstants.ROUTING_KEY_SESSION_COMPLETED);
     }
 
     /**

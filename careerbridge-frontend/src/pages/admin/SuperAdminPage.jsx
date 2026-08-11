@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, Textarea,
+  Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, Textarea, useRevealOnMount,
 } from '../../components/ui';
 import { getTokenPayload } from '../../utils/tokenUtils';
 import {
@@ -918,6 +918,14 @@ export default function SuperAdminPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [gateChecked, setGateChecked] = useState(false);
   const [adminName, setAdminName] = useState('Admin');
+  const [tabIn, setTabIn] = useState(false);
+  const topbarIn = useRevealOnMount();
+
+  useEffect(() => {
+    setTabIn(false);
+    const t = setTimeout(() => setTabIn(true), 20);
+    return () => clearTimeout(t);
+  }, [activeTab]);
 
   useEffect(() => {
     const payload = getTokenPayload();
@@ -960,7 +968,7 @@ export default function SuperAdminPage() {
       </header>
 
       <div style={{ background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div className="cb-sa-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box' }}>
+        <div className="cb-sa-topbar" style={{ maxWidth: 1320, margin: '0 auto', padding: '26px 32px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', boxSizing: 'border-box', ...revealStyle(topbarIn, 0, { distance: 16 }) }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--status-danger)' }}>Super admin</span>
             <h1 className="cb-sa-page-title" style={{ fontFamily: 'var(--font-display)', fontSize: 32, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>Platform control</h1>
@@ -990,14 +998,16 @@ export default function SuperAdminPage() {
       </div>
 
       <main className="cb-sa-main" style={{ maxWidth: 1320, margin: '0 auto', padding: '32px 32px 120px', boxSizing: 'border-box' }}>
-        {activeTab === 'overview' && <OverviewTab />}
-        {activeTab === 'users' && <UsersTab />}
-        {activeTab === 'organisations' && <OrganisationsTab />}
-        {activeTab === 'requests' && <RequestsTab />}
-        {activeTab === 'assessment' && <AssessmentTab />}
-        {activeTab === 'subscriptions' && <SubscriptionsTab />}
-        {activeTab === 'placement' && <PlacementTab />}
-        {activeTab === 'aicoach' && <AiCoachTab />}
+        <div style={revealStyle(tabIn, 0, { distance: 16, duration: 380 })}>
+          {activeTab === 'overview' && <OverviewTab />}
+          {activeTab === 'users' && <UsersTab />}
+          {activeTab === 'organisations' && <OrganisationsTab />}
+          {activeTab === 'requests' && <RequestsTab />}
+          {activeTab === 'assessment' && <AssessmentTab />}
+          {activeTab === 'subscriptions' && <SubscriptionsTab />}
+          {activeTab === 'placement' && <PlacementTab />}
+          {activeTab === 'aicoach' && <AiCoachTab />}
+        </div>
       </main>
     </div>
   );

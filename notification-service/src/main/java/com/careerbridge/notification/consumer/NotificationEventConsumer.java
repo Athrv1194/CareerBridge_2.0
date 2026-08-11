@@ -5,6 +5,9 @@ import com.careerbridge.notification.event.OrgAdminInvitedEvent;
 import com.careerbridge.notification.event.PasswordChangedEvent;
 import com.careerbridge.notification.event.PasswordResetRequestedEvent;
 import com.careerbridge.notification.event.RecommendationGeneratedEvent;
+import com.careerbridge.notification.event.SessionAcceptedEvent;
+import com.careerbridge.notification.event.SessionBookedEvent;
+import com.careerbridge.notification.event.SessionCompletedEvent;
 import com.careerbridge.notification.event.StudentRegisteredEvent;
 import com.careerbridge.notification.event.SubscriptionActivatedEvent;
 import com.careerbridge.notification.service.EmailService;
@@ -15,8 +18,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Two listeners on two separate queues -- see RabbitMQConfig for why one shared queue would
- * silently misroute half of every event type.
+ * Nine listeners on nine separate queues -- see RabbitMQConfig for why one shared queue would
+ * silently misroute a proportion of every event type.
  *
  * Neither method is @Transactional. The service methods manage their own persistence, and keeping
  * these outside any transaction means the fail-soft catch is not swallowing an exception on a
@@ -179,6 +182,73 @@ public class NotificationEventConsumer {
             log.error("Failed to handle {} for email={}: {}",
                     NotificationConstants.ROUTING_KEY_ORG_ADMIN_INVITED,
                     event == null ? null : event.getEmail(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Seventh queue. Routed through NotificationService rather than straight to EmailService,
+     * unlike the password and invite handlers: a session request IS something that belongs in the
+     * in-app feed, and the mentor already has an account to read it with.
+     *
+     * mentorUserId is guarded because it is the recipient here -- the only session event addressed
+     * to the mentor rather than the student.
+     */
+    @RabbitListener(queues = NotificationConstants.SESSION_BOOKED_QUEUE_NAME)
+    public void onSessionBooked(SessionBookedEvent event) {
+        try {
+            if (event == null || event.getMentorUserId() == null || event.getSessionId() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_SESSION_BOOKED, event);
+                return;
+            }
+
+            notificationService.processSessionBooked(event);
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for sessionId={}: {}",
+                    NotificationConstants.ROUTING_KEY_SESSION_BOOKED,
+                    event == null ? null : event.getSessionId(),
+                    ex.getMessage());
+        }
+    }
+
+    /** Eighth queue. Recipient is the student; carries the meeting link. */
+    @RabbitListener(queues = NotificationConstants.SESSION_ACCEPTED_QUEUE_NAME)
+    public void onSessionAccepted(SessionAcceptedEvent event) {
+        try {
+            if (event == null || event.getStudentId() == null || event.getSessionId() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_SESSION_ACCEPTED, event);
+                return;
+            }
+
+            notificationService.processSessionAccepted(event);
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for sessionId={}: {}",
+                    NotificationConstants.ROUTING_KEY_SESSION_ACCEPTED,
+                    event == null ? null : event.getSessionId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Ninth queue. prs-service binds its own careerbridge.prs.mentor.queue to this same routing key
+     * for the mentoring score -- two independent queues, so both receive every copy.
+     */
+    @RabbitListener(queues = NotificationConstants.SESSION_COMPLETED_QUEUE_NAME)
+    public void onSessionCompleted(SessionCompletedEvent event) {
+        try {
+            if (event == null || event.getStudentId() == null || event.getSessionId() == null) {
+                log.warn("Ignoring incomplete {} payload: {}",
+                        NotificationConstants.ROUTING_KEY_SESSION_COMPLETED, event);
+                return;
+            }
+
+            notificationService.processSessionCompleted(event);
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for sessionId={}: {}",
+                    NotificationConstants.ROUTING_KEY_SESSION_COMPLETED,
+                    event == null ? null : event.getSessionId(),
                     ex.getMessage());
         }
     }

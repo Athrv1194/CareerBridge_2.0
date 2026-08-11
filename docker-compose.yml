@@ -375,6 +375,22 @@ services:
       # populated by an admin POST, never at startup.
       start_period: 30s
 
+  mentor-service:
+    <<: *backend-defaults
+    build: ./mentor-service
+    container_name: careerbridge-mentor
+    environment:
+      <<: *backend-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careerbridge_mentor
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8094/actuator/health/liveness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      # 60s, matching payment-service: no seeder, but Boot 4 cold start plus ddl-auto against an
+      # empty schema is the 60s bucket rather than the 30s one.
+      start_period: 60s
+
   api-gateway:
     build: ./api-gateway
     container_name: careerbridge-gateway
@@ -403,6 +419,7 @@ services:
       RESUME_SERVICE_URI: http://resume-service:8091
       AI_COACH_SERVICE_URI: http://ai-coach-service:8092
       PAYMENT_SERVICE_URI: http://payment-service:8093
+      MENTOR_SERVICE_URI: http://mentor-service:8094
     # postgres and rabbitmq are covered transitively -- the gateway has neither a JDBC driver nor
     # spring-boot-starter-amqp on its classpath, so waiting on them directly would only add edges.
     depends_on:
@@ -430,12 +447,36 @@ services:
         condition: service_healthy
       payment-service:
         condition: service_healthy
+      mentor-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 40s
+
+  frontend:
+    build:
+      context: ./careerbridge-frontend
+      args:
+        # Browser-side value -- the container that serves these static files is never itself the
+        # caller, so this stays localhost:8080 (the gateway's published host port) even though
+        # frontend and api-gateway are sibling containers on the same compose network.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
+    container_name: careerbridge-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
 volumes:
   postgres-data:

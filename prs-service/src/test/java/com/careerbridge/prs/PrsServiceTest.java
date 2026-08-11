@@ -251,6 +251,92 @@ class PrsServiceTest {
     }
 
     // -------------------------------------------------------------------------------------------
+    // Mentoring (tracked, unweighted)
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("mentoring score is 5 points per completed session")
+    void updateMentoringScore_CountedSessions_FivePointsEach() {
+        when(prsRepository.findByStudentId(1L)).thenReturn(Optional.of(prs(1L, 0.0, 0.0, 0.0, 0.0, "F")));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(0.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateMentoringScore(1L, 3);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        assertEquals(15.0, captor.getValue().getMentoringScore());
+    }
+
+    @Test
+    @DisplayName("mentoring score is capped at 100 however many sessions were completed")
+    void updateMentoringScore_ManySessions_CappedAt100() {
+        when(prsRepository.findByStudentId(1L)).thenReturn(Optional.of(prs(1L, 0.0, 0.0, 0.0, 0.0, "F")));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(0.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateMentoringScore(1L, 500);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        assertEquals(100.0, captor.getValue().getMentoringScore());
+    }
+
+    /**
+     * The reason SessionCompletedEvent carries an absolute count instead of a "+1" delta. RabbitMQ
+     * is at-least-once; an accumulating update would award a redelivered session twice, silently.
+     * Same rule as auth-service's subscription consumer setting rather than extending an expiry.
+     */
+    @Test
+    @DisplayName("a redelivered session.completed sets the same score rather than doubling it")
+    void updateMentoringScore_Redelivery_IsIdempotent() {
+        PlacementReadinessScore record = prs(1L, 0.0, 0.0, 0.0, 0.0, "F");
+        record.setMentoringScore(10.0);
+        when(prsRepository.findByStudentId(1L)).thenReturn(Optional.of(record));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(0.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateMentoringScore(1L, 2);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        assertEquals(10.0, captor.getValue().getMentoringScore());
+    }
+
+    /**
+     * Pins the tracked-but-unweighted decision. If someone later gives mentoring a weight without
+     * re-cutting the other four, this fails -- which is the intent.
+     */
+    @Test
+    @DisplayName("mentoring score does not contribute to totalScore")
+    void updateMentoringScore_DoesNotChangeTotalScore() {
+        when(prsRepository.findByStudentId(1L)).thenReturn(Optional.of(prs(1L, 50.0, 0.0, 0.0, 20.0, "D")));
+        when(studentServiceClient.fetchProfileScore(1L)).thenReturn(0.0);
+        when(prsRepository.save(any(PlacementReadinessScore.class))).thenAnswer(i -> i.getArgument(0));
+
+        prsService.updateMentoringScore(1L, 20);
+
+        ArgumentCaptor<PlacementReadinessScore> captor =
+                ArgumentCaptor.forClass(PlacementReadinessScore.class);
+        verify(prsRepository).save(captor.capture());
+        PlacementReadinessScore saved = captor.getValue();
+        assertEquals(100.0, saved.getMentoringScore());
+        // 50*0.40 + 0*0.30 + 0*0.20 + 0*0.10 = 20.0, unchanged by a maxed mentoring score.
+        assertEquals(20.0, saved.getTotalScore());
+    }
+
+    @Test
+    @DisplayName("a null session count is ignored rather than written")
+    void updateMentoringScore_NullCount_Ignored() {
+        prsService.updateMentoringScore(1L, null);
+
+        verify(prsRepository, never()).save(any(PlacementReadinessScore.class));
+    }
+
+    // -------------------------------------------------------------------------------------------
     // Grade boundaries
     // -------------------------------------------------------------------------------------------
 

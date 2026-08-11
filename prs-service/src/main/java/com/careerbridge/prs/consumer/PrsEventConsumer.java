@@ -4,6 +4,7 @@ import com.careerbridge.prs.config.RabbitMQConfig;
 import com.careerbridge.prs.event.RecommendationGeneratedEvent;
 import com.careerbridge.prs.event.ResumeGeneratedEvent;
 import com.careerbridge.prs.event.RoadmapUpdatedEvent;
+import com.careerbridge.prs.event.SessionCompletedEvent;
 import com.careerbridge.prs.event.StudentRegisteredEvent;
 import com.careerbridge.prs.service.PrsService;
 import org.slf4j.Logger;
@@ -12,11 +13,11 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 /**
- * The four inbound legs of the Placement Readiness Score, one listener per queue.
+ * The five inbound legs of the Placement Readiness Score, one listener per queue.
  *
- * Three methods in one class is fine; three methods on one QUEUE would not be. Spring AMQP creates
+ * Five methods in one class is fine; five methods on one QUEUE would not be. Spring AMQP creates
  * a container per @RabbitListener, and RabbitMQ round-robins deliveries between containers sharing
- * a queue -- so roughly a third of each event type would be handed to the wrong method. Jackson 3
+ * a queue -- so roughly a fifth of each event type would be handed to the wrong method. Jackson 3
  * has FAIL_ON_UNKNOWN_PROPERTIES off, so that does not throw; it produces an all-null object the
  * null guards discard with a WARN, and most score updates vanish with no error anywhere. Each
  * method below names a distinct queue, which is what makes this safe.
@@ -118,6 +119,30 @@ public class PrsEventConsumer {
         } catch (Exception ex) {
             log.error("Failed to handle {} for studentId={}: {}",
                     RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY,
+                    event == null ? null : event.getStudentId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Mentoring engagement. Unlike the four above this input carries NO weight in totalScore -- see
+     * PlacementReadinessScore.mentoringScore for why -- so a session completing updates a visible
+     * number without moving the composite.
+     *
+     * The event's studentSessionsCompleted is an absolute count, and updateMentoringScore SETS from
+     * it. A redelivery therefore recomputes the same value rather than adding another five points.
+     */
+    @RabbitListener(queues = RabbitMQConfig.PRS_MENTOR_QUEUE)
+    public void onSessionCompleted(SessionCompletedEvent event) {
+        try {
+            if (event == null) {
+                log.warn("Ignoring null {} payload", RabbitMQConfig.SESSION_COMPLETED_ROUTING_KEY);
+                return;
+            }
+            prsService.updateMentoringScore(event.getStudentId(), event.getStudentSessionsCompleted());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for studentId={}: {}",
+                    RabbitMQConfig.SESSION_COMPLETED_ROUTING_KEY,
                     event == null ? null : event.getStudentId(),
                     ex.getMessage());
         }
