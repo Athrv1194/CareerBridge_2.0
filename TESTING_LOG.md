@@ -121,6 +121,19 @@ order/verify/reconcile flow.
 - Live: idempotent re-verify (no duplicate subscription row), a forged signature rejected with 400, and `reconcile` correctly 409'd against a real unpaid order.
 - **One real bug found and fixed during this verification** — see `ai_incident_log.md` (2026-08-03).
 
+## CI/CD
+
+- Jenkins auto-deploy on push to `main` (`Jenkinsfile` at repo root) requires a GitHub webhook
+  pointed at `http://<elastic-ip>:9090/github-webhook/` — this is **not** created by the
+  "GitHub hook trigger for GITScm polling" checkbox in the Jenkins job itself, that only makes
+  Jenkins listen. The webhook has to be added by hand under the repo's Settings → Webhooks.
+  Missing this meant every push after the pipeline was first set up silently never built anything,
+  with no error anywhere — Jenkins showed a healthy last build from whenever it was last run
+  manually, and nothing in git or GitHub surfaced the gap.
+- Confirmed 2026-08-12: webhook added under repo Settings → Webhooks, GitHub's ping delivery to
+  Jenkins showed a live green success. End-to-end confirmation (a real push actually starting a
+  new Jenkins build) still pending as of this commit.
+
 ## Known gaps
 
 - `recommendation.generated` and `roadmap.updated` (roadmap-service side) event delivery is proven
