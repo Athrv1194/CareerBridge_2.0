@@ -17,7 +17,7 @@ const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'users', label: 'Users' },
   { key: 'organisations', label: 'Organisations' },
-  { key: 'requests', label: 'Join requests' },
+  { key: 'requests', label: 'Institution join requests' },
   { key: 'assessment', label: 'Assessment' },
   { key: 'subscriptions', label: 'Subscriptions' },
   { key: 'placement', label: 'Placement' },
@@ -94,11 +94,12 @@ function Table({ children }) {
 function OverviewTab() {
   const [stats, setStats] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
+  const [orgCount, setOrgCount] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([getPlatformStats(), getLeaderboard().catch(() => [])])
-      .then(([s, lb]) => { setStats(s); setLeaderboard(lb); })
+    Promise.all([getPlatformStats(), getLeaderboard().catch(() => []), listOrganizations().catch(() => [])])
+      .then(([s, lb, orgs]) => { setStats(s); setLeaderboard(lb); setOrgCount(orgs.length); })
       .catch((e) => setError(e.message));
   }, []);
 
@@ -121,7 +122,9 @@ function OverviewTab() {
       <div className="cb-sa-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
         {[
           [stats.totalUsers, 'Total users'], [stats.activeUsers, 'Active users'],
-          [stats.totalStudents, 'Total students'], [stats.totalOrgAdmins + '', 'Organisations touched'],
+          [stats.totalStudents, 'Total students'], [orgCount ?? '—', 'Organisations'],
+          [stats.totalOrgAdmins, 'Org admins'], [stats.totalRecruiters, 'Recruiters'],
+          [stats.totalPlacementOfficers, 'Placement officers'], [stats.totalMentors, 'Mentors'],
         ].map(([v, l]) => (
           <div key={l} style={{ background: 'var(--bone-50)', padding: '32px 24px', display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center', minHeight: 110 }}>
             <span className="cb-num" style={{ fontFamily: 'var(--font-display)', fontSize: 36, color: 'var(--ink-900)' }}>{v}</span>
@@ -866,14 +869,17 @@ function PlacementTab() {
           </div>
         ))}
       </div>
-      {stats.topCompanies?.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <SectionHeader label="Top companies" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <SectionHeader label="Top hiring companies" />
+        <span style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: -6 }}>Companies with at least one accepted offer — not every company on the platform.</span>
+        {stats.topCompanies?.length > 0 ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {stats.topCompanies.map((c) => <Badge key={c}>{c}</Badge>)}
           </div>
-        </div>
-      )}
+        ) : (
+          <EmptyState icon="award" title="No accepted offers recorded yet." />
+        )}
+      </div>
     </div>
   );
 }
