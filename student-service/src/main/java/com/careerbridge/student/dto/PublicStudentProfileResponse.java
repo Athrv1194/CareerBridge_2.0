@@ -31,4 +31,6 @@ public class PublicStudentProfileResponse {
     private List<String> skills;
 
     private Integer profileCompletionPercentage;
+
+    private Boolean hasAvatar;
 }

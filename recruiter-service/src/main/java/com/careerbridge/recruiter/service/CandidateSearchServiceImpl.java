@@ -51,8 +51,6 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
      */
     private static final double SCORE_UNAVAILABLE = -1.0;
 
-    private static final String PROFILE_URL_PREFIX = "/api/student/profile/";
-
     private final StudentServiceClient studentServiceClient;
     private final PrsServiceClient prsServiceClient;
 
@@ -139,7 +137,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                 .skills(profile.getSkills() == null ? List.of() : profile.getSkills())
                 .prsScore(prsScore)
                 .profileCompletionPercentage(profile.getProfileCompletionPercentage())
-                .profileUrl(PROFILE_URL_PREFIX + profile.getStudentId())
+                .hasAvatar(Boolean.TRUE.equals(profile.getHasAvatar()))
                 .build();
     }
 }

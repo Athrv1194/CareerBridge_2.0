@@ -11,6 +11,7 @@ import {
   getCandidates, getMyPlacementStats,
 } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
 import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
 import './recruiter-console.css';
 
@@ -46,6 +47,24 @@ function parseSkills(v) {
 }
 function scoreBand(score) { return score < 40 ? 'danger' : score < 70 ? 'warning' : 'success'; }
 const scoreColor = { danger: 'var(--status-danger)', warning: 'var(--status-warning)', success: 'var(--status-success)' };
+
+// Square tile matches this page's existing candidate-card style -- initials until (if) the real
+// photo loads, never a loading spinner, since most candidates have no avatar at all.
+function CandidateAvatar({ studentId, hasAvatar, firstName, lastName, size = 40 }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => {
+    setSrc(null);
+    if (!hasAvatar) return undefined;
+    let cancelled = false;
+    getCandidateAvatarBlobUrl(studentId).then((url) => { if (!cancelled && url) setSrc(url); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [studentId, hasAvatar]);
+  return (
+    <div style={{ width: size, height: size, background: 'var(--ink-900)', color: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.35, fontWeight: 600, flexShrink: 0, overflow: 'hidden' }}>
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : `${(firstName?.[0] || '')}${(lastName?.[0] || '')}`.toUpperCase()}
+    </div>
+  );
+}
 
 function Tabs({ items, value, onChange }) {
   return (
@@ -664,9 +683,7 @@ export default function RecruiterConsolePage() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 40, height: 40, background: 'var(--ink-900)', color: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>
-                          {`${(c.firstName?.[0] || '')}${(c.lastName?.[0] || '')}`.toUpperCase()}
-                        </div>
+                        <CandidateAvatar studentId={c.studentId} hasAvatar={c.hasAvatar} firstName={c.firstName} lastName={c.lastName} />
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{c.firstName} {c.lastName}</div>
                           <div style={{ fontSize: 12, color: 'var(--ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>
@@ -685,7 +702,7 @@ export default function RecruiterConsolePage() {
                         {shown.map((s) => <Tag key={s}>{s}</Tag>)}
                         {more > 0 && <span style={{ fontSize: 12, color: 'var(--ink-400)', alignSelf: 'center' }}>+{more} more</span>}
                       </div>
-                      {c.profileUrl && <a href={c.profileUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--taupe-700)', border: 0 }}>View profile →</a>}
+                      <button type="button" onClick={() => navigate(`/candidate/${c.studentId}`, { state: { prsScore: c.prsScore } })} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--taupe-700)', alignSelf: 'flex-start' }}>View profile →</button>
                     </div>
                   );
                 })}

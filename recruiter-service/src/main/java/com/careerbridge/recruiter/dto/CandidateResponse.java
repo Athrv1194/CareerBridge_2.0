@@ -38,6 +38,5 @@ public class CandidateResponse {
 
     private Integer profileCompletionPercentage;
 
-    /** Convenience link for the recruiter UI; this service does not serve it. */
-    private String profileUrl;
+    private Boolean hasAvatar;
 }

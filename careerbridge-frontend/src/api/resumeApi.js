@@ -11,6 +11,15 @@ export async function getMyResumes() {
   return res.json();
 }
 
+// Recruiter/placement-officer/admin viewing a candidate's résumés, not the student themselves.
+export async function getStudentResumes(studentId) {
+  const res = await fetch(`${API_BASE}/resume/student/${studentId}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 // options: summary, include* toggles, jobDescription -- all optional, defaults to "include everything".
 export async function generateResume(options) {
   const res = await fetch(`${API_BASE}/resume/generate`, {

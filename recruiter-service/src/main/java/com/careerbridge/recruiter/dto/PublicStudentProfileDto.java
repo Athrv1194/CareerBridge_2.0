@@ -26,4 +26,5 @@ public class PublicStudentProfileDto {
     private String email;
     private List<String> skills;
     private Integer profileCompletionPercentage;
+    private Boolean hasAvatar;
 }

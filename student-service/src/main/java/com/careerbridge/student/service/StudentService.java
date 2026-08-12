@@ -68,6 +68,12 @@ public interface StudentService {
 
     void deleteAvatar(Long userId);
 
+    /** Same RBAC as getPublicProfiles -- a recruiter/admin viewing a candidate's photo, not the student themselves. */
+    ImageBlob getAvatarForRecruiter(Long studentId, String callerRole);
+
+    /** Same RBAC as getPublicProfiles, plus the same isPublic filter -- the full profile, not the slim search-result shape. */
+    StudentProfileResponse getProfileForRecruiter(Long studentId, String callerRole);
+
     List<String> getSkillSuggestions();
 
     /**

@@ -270,6 +270,33 @@ public class StudentController {
         return ResponseEntity.ok(studentService.getPublicProfiles(callerRole));
     }
 
+    /**
+     * Called through the gateway by a recruiter/admin's own browser. Same RBAC as
+     * getPublicProfiles, one candidate at a time -- deliberately not folded into that list
+     * endpoint, which stays slim on purpose (see PublicStudentProfileResponse's own comment).
+     */
+    @GetMapping("/profile/{studentId}")
+    public ResponseEntity<StudentProfileResponse> getProfileForRecruiter(
+            @PathVariable Long studentId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole) {
+        return ResponseEntity.ok(studentService.getProfileForRecruiter(studentId, callerRole));
+    }
+
+    /**
+     * Called through the gateway by a recruiter/admin's own browser -- the caller's real
+     * X-User-Role, not forwarded from another service. Same RBAC as getPublicProfiles.
+     */
+    @GetMapping("/profile/{studentId}/avatar")
+    public ResponseEntity<byte[]> getAvatarForRecruiter(
+            @PathVariable Long studentId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole) {
+        ImageBlob blob = studentService.getAvatarForRecruiter(studentId, callerRole);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(blob.getContentType()))
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=300")
+                .body(blob.getBytes());
+    }
+
     /** Shared by the avatar and project-cover upload endpoints. */
     private byte[] readImageBytes(MultipartFile file) {
         if (file == null || file.isEmpty()) {
