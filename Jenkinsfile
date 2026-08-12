@@ -6,6 +6,16 @@
 pipeline {
     agent any
 
+    // Two pushes close together share this same workspace directory, and without this, Jenkins
+    // runs both builds concurrently instead of queuing them. Confirmed live on 2026-08-12: the
+    // older build's docker build context tar failed mid-stream ("read/write on closed pipe")
+    // because the newer build's checkout was overwriting the same files underneath it at the same
+    // time. abortPrevious cancels an older in-flight build the instant a newer one starts for this
+    // job, so only the latest commit's build ever touches the workspace.
+    options {
+        disableConcurrentBuilds(abortPrevious: true)
+    }
+
     stages {
         stage('Checkout') {
             steps {
