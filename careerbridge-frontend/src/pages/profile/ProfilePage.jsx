@@ -17,6 +17,7 @@ import { getMyResumes, generateResume, deleteResume, downloadResume } from '../.
 import { getUnreadCount } from '../../api/notificationApi';
 import { clearTokens } from '../../utils/tokenUtils';
 import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
+import { useMaxWidth } from '../../hooks/useBreakpoint';
 import './profile.css';
 
 const NAV_ITEMS = [
@@ -159,7 +160,7 @@ function EditProfileDialog({ open, draft, onChange, error, saving, onClose, onSa
           <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>Profile</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, color: 'var(--ink-900)', margin: '6px 0 0' }}>Edit your details</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
+        <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
           <Field label="First name"><Input value={draft.firstName} onChange={set('firstName')} /></Field>
           <Field label="Last name"><Input value={draft.lastName} onChange={set('lastName')} /></Field>
           <Field label="Phone"><Input value={draft.phone} onChange={set('phone')} /></Field>
@@ -168,7 +169,7 @@ function EditProfileDialog({ open, draft, onChange, error, saving, onClose, onSa
           <Field label="Country"><Input value={draft.country} onChange={set('country')} /></Field>
         </div>
         <Field label="Bio"><Textarea rows={3} value={draft.bio} onChange={set('bio')} /></Field>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
+        <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
           <Field label="LinkedIn URL"><Input value={draft.linkedinUrl} onChange={set('linkedinUrl')} placeholder="https://linkedin.com/in/…" /></Field>
           <Field label="GitHub URL"><Input value={draft.githubUrl} onChange={set('githubUrl')} placeholder="https://github.com/…" /></Field>
         </div>
@@ -753,6 +754,11 @@ export default function ProfilePage() {
   };
 
   const sidebarWidth = navCollapsed ? '60px' : '248px';
+  const isPhone = useMaxWidth('phone');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Below 560px the rail is an overlay drawer with room for full labels, so the
+  // persisted collapse preference -- a tablet icon-rail affordance -- must not apply.
+  const railCollapsed = isPhone ? false : navCollapsed;
   const p = profile || {};
   const completion = profile ? (profile.profileCompletionPercentage ?? 0) : 0;
   const gapsRaw = profile ? computeGaps(p, skills, educations, projects) : [];
@@ -765,8 +771,16 @@ export default function ProfilePage() {
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
 
       <header className="cb-pf-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
-        <Logo size={32} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <IconButton
+            className="cb-app-drawer-toggle"
+            icon={drawerOpen ? 'x' : 'sliders-horizontal'}
+            label={drawerOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setDrawerOpen((v) => !v)}
+          />
+          <Logo size={32} />
+        </div>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
@@ -775,7 +789,7 @@ export default function ProfilePage() {
               </span>
             )}
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
@@ -785,14 +799,16 @@ export default function ProfilePage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
-          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <span className="cb-app-header-logout">
+            <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </span>
         </div>
       </header>
 
-      <div className="cb-pf-shell" style={{ '--sidebar-w': sidebarWidth }}>
-        <aside style={{ borderRight: '1px solid var(--line-hairline)', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-          <div className="cb-pf-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
+      <div className="cb-pf-shell cb-app-shell" style={{ '--sidebar-w': sidebarWidth }}>
+        <aside className={`cb-app-rail${drawerOpen ? ' is-open' : ''}`} style={{ borderRight: '1px solid var(--line-hairline)', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${railCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+          <div className="cb-pf-toggle-row" style={{ display: 'flex', justifyContent: railCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -806,21 +822,25 @@ export default function ProfilePage() {
                 key={item.to}
                 to={item.to}
                 title={item.label}
+                onClick={() => setDrawerOpen(false)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 11,
-                  justifyContent: navCollapsed ? 'center' : 'flex-start',
-                  padding: navCollapsed ? '10px 0' : '10px 14px', fontSize: 13,
+                  justifyContent: railCollapsed ? 'center' : 'flex-start',
+                  padding: railCollapsed ? '10px 0' : '10px 14px', fontSize: 13,
                   letterSpacing: '.06em', textTransform: 'uppercase',
                   background: item.active ? 'var(--ink-900)' : 'transparent',
                   color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)', border: 'none',
                 }}
               >
                 <Icon name={item.icon} size={16} style={{ color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)' }} />
-                {!navCollapsed && <span className="cb-pf-sidebar-label">{item.label}</span>}
+                {!railCollapsed && <span className="cb-pf-sidebar-label">{item.label}</span>}
               </Link>
             ))}
           </nav>
-          {!navCollapsed && (
+          <div className="cb-app-drawer-logout" style={{ paddingTop: 12 }}>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </div>
+          {!railCollapsed && (
             <div className="cb-pf-sidebar-footer" style={{ marginTop: 'auto', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: 24 }}>
               <div style={{ background: 'var(--taupe-100)', padding: '28px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
@@ -834,6 +854,10 @@ export default function ProfilePage() {
           )}
         </aside>
 
+        {drawerOpen && (
+          <button type="button" className="cb-app-scrim" aria-label="Close menu" onClick={() => setDrawerOpen(false)} />
+        )}
+
         <main style={{ minWidth: 0, background: 'var(--surface-page)' }}>
           <div className="cb-pf-main-pad" style={{ maxWidth: 1160, margin: '0 auto', padding: '32px 32px 64px', boxSizing: 'border-box' }}>
 
@@ -844,7 +868,7 @@ export default function ProfilePage() {
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Profile · {completion}% complete</span>
-                  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Switch label="Visible to recruiters" checked={p.isPublic !== false} onChange={togglePublic} />
                     {defaultResume ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: '1px solid var(--line-hairline)', background: 'var(--bone-50)' }}>

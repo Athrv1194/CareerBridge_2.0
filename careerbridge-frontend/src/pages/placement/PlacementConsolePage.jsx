@@ -8,7 +8,7 @@ import { getOrgApplications, getCandidates, getJobs, getJobDetail } from '../../
 import { getUnreadCount } from '../../api/notificationApi';
 import { submitJoinRequest } from '../../api/orgJoinApi';
 import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './placement-console.css';
 
 const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', ORG_ADMIN: '/college-dashboard', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
@@ -246,7 +246,7 @@ export default function PlacementConsolePage() {
         <Logo size={32} />
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)', paddingLeft: 24, borderLeft: '1px solid var(--line-hairline)' }}>Placement</span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
@@ -265,6 +265,7 @@ export default function PlacementConsolePage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Placement officer</span>
             </div>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 

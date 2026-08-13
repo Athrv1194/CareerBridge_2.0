@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, Textarea, useRevealOnMount,
 } from '../../components/ui';
-import { getTokenPayload } from '../../utils/tokenUtils';
+import { getTokenPayload, clearTokens } from '../../utils/tokenUtils';
 import {
   getPlatformStats, listUsers, getUserById, deactivateUser, activateUser, linkUserOrganization,
   listOrganizations, createOrganization, updateOrganization, deactivateOrganization,
@@ -84,7 +84,7 @@ function Td({ children, align = 'left', style }) {
 
 function Table({ children }) {
   return (
-    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+    <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table>
     </div>
   );
@@ -967,9 +967,10 @@ export default function SuperAdminPage() {
           Admin
         </span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
-          <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Super admin</span>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="cb-sa-avatar-name" style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
+          <span className="cb-sa-avatar-name" style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Super admin</span>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 
@@ -985,7 +986,7 @@ export default function SuperAdminPage() {
       </div>
 
       <div style={{ position: 'sticky', top: 64, zIndex: 30, background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div className="cb-sa-tabs-row" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
+        <div className="cb-sa-tabs-row cb-scroll-x" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
           {TABS.map((t) => (
             <button
               key={t.key}

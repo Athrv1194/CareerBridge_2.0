@@ -12,7 +12,7 @@ import {
 } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './recruiter-console.css';
 
 const WORKMODE_LABEL = { REMOTE: 'Remote', HYBRID: 'Hybrid', ON_SITE: 'On-site' };
@@ -68,7 +68,7 @@ function CandidateAvatar({ studentId, hasAvatar, firstName, lastName, size = 40 
 
 function Tabs({ items, value, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+    <div className="cb-scroll-x" style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
       {items.map((it) => (
         <button
           key={it.value}
@@ -345,7 +345,7 @@ export default function RecruiterConsolePage() {
         <Logo size={32} />
         <span className="cb-rc-eyebrow-sep" style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)', paddingLeft: 24, borderLeft: '1px solid var(--line-hairline)' }}>Recruiter</span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
@@ -364,6 +364,7 @@ export default function RecruiterConsolePage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Recruiter</span>
             </div>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 
@@ -492,11 +493,11 @@ export default function RecruiterConsolePage() {
                       <Field label="Description" required><Textarea rows={6} value={jobDraft.description} onChange={(e) => setJobDraft((d) => ({ ...d, description: e.target.value }))} placeholder="What the role owns, and who it reports to." /></Field>
                       <Field label="Required skills" hint="Comma-separated — stored and matched as plain text."><Input value={jobDraft.requiredSkills} onChange={(e) => setJobDraft((d) => ({ ...d, requiredSkills: e.target.value }))} placeholder="Python, SQL, Machine Learning" /></Field>
                       <Field label="Location"><Input value={jobDraft.location} onChange={(e) => setJobDraft((d) => ({ ...d, location: e.target.value }))} placeholder="Bengaluru" /></Field>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                         <Field label="Work mode" required><Select options={['REMOTE', 'HYBRID', 'ON_SITE']} value={jobDraft.workMode} onChange={(e) => setJobDraft((d) => ({ ...d, workMode: e.target.value }))} /></Field>
                         <Field label="Job type" required><Select options={['FULL_TIME', 'PART_TIME', 'INTERNSHIP', 'CONTRACT']} value={jobDraft.jobType} onChange={(e) => setJobDraft((d) => ({ ...d, jobType: e.target.value }))} /></Field>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                         <Field label="Salary min (₹ LPA)"><Input type="number" value={jobDraft.salaryMin} onChange={(e) => setJobDraft((d) => ({ ...d, salaryMin: e.target.value }))} placeholder="8" /></Field>
                         <Field label="Salary max (₹ LPA)"><Input type="number" value={jobDraft.salaryMax} onChange={(e) => setJobDraft((d) => ({ ...d, salaryMax: e.target.value }))} placeholder="14" /></Field>
                       </div>
@@ -524,7 +525,7 @@ export default function RecruiterConsolePage() {
                         <Badge tone="neutral">{JOBTYPE_LABEL[selectedJob.jobType] || selectedJob.jobType}</Badge>
                         {selectedJob.location && <Badge tone="neutral" icon="map-pin">{selectedJob.location}</Badge>}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
+                      <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
                         <StatTile value={fmtSalary(selectedJob.salaryMin, selectedJob.salaryMax)} label="Salary band" />
                         <StatTile value={fmtDateFull(selectedJob.applicationDeadline)} label="Deadline" />
                         <StatTile value={selectedJob.isActive === false ? 'Inactive' : 'Active'} label="Status" />
@@ -558,8 +559,12 @@ export default function RecruiterConsolePage() {
             {jobs.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <div style={{ maxWidth: 340 }}>
-                  <Field label="Viewing">
-                    <Select options={jobs.map((j) => String(j.id))} value={String(appsJobId || jobs[0].id)} onChange={onAppsJobChange} />
+                  <Field label="Viewing applications for">
+                    <Select
+                      options={jobs.map((j) => ({ value: String(j.id), label: j.title || `Job #${j.id}` }))}
+                      value={String(appsJobId || jobs[0].id)}
+                      onChange={onAppsJobChange}
+                    />
                   </Field>
                 </div>
 
@@ -568,7 +573,7 @@ export default function RecruiterConsolePage() {
                 )}
                 {appsLoading && <Skeleton height={300} />}
                 {!appsLoading && (
-                  <div className="cb-rc-kanban" style={{ display: 'grid', gap: 14, overflowX: 'auto' }}>
+                  <div className="cb-rc-kanban cb-scroll-x" style={{ display: 'grid', gap: 14, overflowX: 'auto' }}>
                     {kanbanColumns.map((col) => (
                       <div key={col.status} style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -790,7 +795,7 @@ export default function RecruiterConsolePage() {
             {!stats && <Skeleton height={200} />}
             {stats && (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
+                <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)' }}>
                   <StatTile value={stats.totalApplications} label="Applications" />
                   <StatTile value={stats.offersExtended} label="Offers extended" />
                   <StatTile value={stats.offersAccepted} label="Offers accepted" />

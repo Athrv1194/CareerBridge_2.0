@@ -1,4 +1,4 @@
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .cb-college-overview-grid,
   .cb-college-dept-grid,
   .cb-college-placement-grid,
@@ -11,8 +11,13 @@
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 560px) {
   .cb-college-stat4-grid {
     grid-template-columns: 1fr !important;
+  }
+  /* Header is Logo + "College" label + bell + divider + avatar + name/role + Log out --
+     too much for a phone width. Name/role text goes first, same as every other console. */
+  .cb-cd-avatar-name {
+    display: none !important;
   }
 }
