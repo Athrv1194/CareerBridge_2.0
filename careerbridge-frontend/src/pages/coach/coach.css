@@ -92,7 +92,13 @@
     top: var(--header-height);
     bottom: 0;
     width: min(300px, 86vw) !important;
-    z-index: 60;
+    /* !important is required here, not just tidy: .cb-co-resources carries an inline
+       zIndex: 2 (so the floating robot mascot sits above it on desktop), and inline
+       styles beat a plain class rule regardless of specificity. Without !important this
+       silently loses to the inline value, the drawer stays below the z-index: 59 scrim,
+       and the scrim's dark tint renders OVER the open drawer instead of behind it --
+       exactly the "Resources looks dark, Sessions doesn't" bug this fixes. */
+    z-index: 60 !important;
     box-shadow: var(--shadow-menu);
     transition: transform var(--duration-normal) var(--ease-standard);
     visibility: hidden;
