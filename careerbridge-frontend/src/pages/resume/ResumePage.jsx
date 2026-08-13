@@ -574,7 +574,7 @@ export default function ResumePage() {
                               ))}
                             </MiniSection>
                           )}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, flex: 1, minHeight: 0 }}>
+                          <div className="cb-stack-md" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, flex: 1, minHeight: 0 }}>
                             {includeSkills && <MiniBars label="Skills" count={Math.min(skills.length, 5)} />}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
                               {includeProjects && <MiniBars label="Projects" count={Math.min(projects.length, 3)} />}
@@ -647,11 +647,11 @@ export default function ResumePage() {
                           )}
                           {showExpForm && (
                             <div style={{ marginTop: 12, padding: 16, background: 'var(--bone-100)', border: '1px solid var(--line-hairline)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                              <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <Field label="Title"><Input value={expDraft.title} onChange={(e) => setExpDraft((d) => ({ ...d, title: e.target.value }))} placeholder="Software Engineer Intern" /></Field>
                                 <Field label="Company"><Input value={expDraft.company} onChange={(e) => setExpDraft((d) => ({ ...d, company: e.target.value }))} placeholder="Finzo Technologies" /></Field>
                               </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                              <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <Field label="Start date"><Input type="date" value={expDraft.startDate} onChange={(e) => setExpDraft((d) => ({ ...d, startDate: e.target.value }))} /></Field>
                                 <Field label="End date"><Input type="date" value={expDraft.endDate} onChange={(e) => setExpDraft((d) => ({ ...d, endDate: e.target.value }))} /></Field>
                               </div>
@@ -687,7 +687,7 @@ export default function ResumePage() {
                           {showCertForm && (
                             <div style={{ marginTop: 12, padding: 16, background: 'var(--bone-100)', border: '1px solid var(--line-hairline)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                               <Field label="Certificate name"><Input value={certDraft.name} onChange={(e) => setCertDraft((d) => ({ ...d, name: e.target.value }))} placeholder="AWS Certified Cloud Practitioner" /></Field>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                              <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                                 <Field label="Issuing organization"><Input value={certDraft.issuingOrganization} onChange={(e) => setCertDraft((d) => ({ ...d, issuingOrganization: e.target.value }))} placeholder="Amazon Web Services" /></Field>
                                 <Field label="Issue date"><Input type="date" value={certDraft.issueDate} onChange={(e) => setCertDraft((d) => ({ ...d, issueDate: e.target.value }))} /></Field>
                               </div>

@@ -499,7 +499,7 @@ export default function MentorsPage() {
               {activeTab === 'sessions' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                  <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+                  <div className="cb-scroll-x" style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
                     {SUB_TABS.map((it) => (
                       <button
                         key={it.value}

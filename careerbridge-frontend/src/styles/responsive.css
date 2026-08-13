@@ -33,6 +33,22 @@ h1, h2, h3, h4, p, td, th, a, li, dd, dt {
   overflow-wrap: anywhere;
 }
 
+/* Generic column collapse. Most multi-column grids in this app are a paired field row
+   or a small stat strip that just needs to become one column on a narrow screen --
+   that does not deserve a bespoke class and media query per site.
+   !important because the columns are declared in an inline style. */
+@media (max-width: 900px) {
+  .cb-stack-md {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .cb-stack-sm {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
 /* Horizontally scrollable surfaces: wide data tables, tab rows, kanban columns.
    These are legitimately wider than a phone; the fix is a good scroll, not a reflow. */
 .cb-scroll-x {

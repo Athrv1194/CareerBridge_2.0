@@ -358,7 +358,7 @@ export default function CollegeDashboardPage() {
                 )}
                 {leaderboardTop.length > 0 && (
                   <>
-                    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+                    <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                         <thead><tr>
                           <th style={thStyle('left')}>Rank</th>
@@ -434,7 +434,7 @@ export default function CollegeDashboardPage() {
             {studentsNoMatch && <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>No students match your search.</span>}
 
             {studentsLoaded && !studentsEmptyAll && !studentsNoMatch && (
-              <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+              <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead><tr>
                     <th style={thStyle('left')}>Name</th>

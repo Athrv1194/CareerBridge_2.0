@@ -84,7 +84,7 @@ function Td({ children, align = 'left', style }) {
 
 function Table({ children }) {
   return (
-    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+    <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table>
     </div>
   );
@@ -985,7 +985,7 @@ export default function SuperAdminPage() {
       </div>
 
       <div style={{ position: 'sticky', top: 64, zIndex: 30, background: 'var(--bone-50)', borderBottom: '1px solid var(--line-hairline)' }}>
-        <div className="cb-sa-tabs-row" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
+        <div className="cb-sa-tabs-row cb-scroll-x" style={{ maxWidth: 1320, margin: '0 auto', padding: '0 32px', boxSizing: 'border-box', display: 'flex', gap: 4, overflowX: 'auto' }}>
           {TABS.map((t) => (
             <button
               key={t.key}

@@ -160,7 +160,7 @@ function EditProfileDialog({ open, draft, onChange, error, saving, onClose, onSa
           <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>Profile</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, color: 'var(--ink-900)', margin: '6px 0 0' }}>Edit your details</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
+        <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
           <Field label="First name"><Input value={draft.firstName} onChange={set('firstName')} /></Field>
           <Field label="Last name"><Input value={draft.lastName} onChange={set('lastName')} /></Field>
           <Field label="Phone"><Input value={draft.phone} onChange={set('phone')} /></Field>
@@ -169,7 +169,7 @@ function EditProfileDialog({ open, draft, onChange, error, saving, onClose, onSa
           <Field label="Country"><Input value={draft.country} onChange={set('country')} /></Field>
         </div>
         <Field label="Bio"><Textarea rows={3} value={draft.bio} onChange={set('bio')} /></Field>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
+        <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 16 }}>
           <Field label="LinkedIn URL"><Input value={draft.linkedinUrl} onChange={set('linkedinUrl')} placeholder="https://linkedin.com/in/…" /></Field>
           <Field label="GitHub URL"><Input value={draft.githubUrl} onChange={set('githubUrl')} placeholder="https://github.com/…" /></Field>
         </div>
