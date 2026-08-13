@@ -99,13 +99,21 @@ h1, h2, h3, h4, p, td, th, a, li, dd, dt {
     background: var(--surface-card);
     box-shadow: var(--shadow-menu);
     transform: translateX(-100%);
-    transition: transform var(--duration-normal) var(--ease-standard);
+    /* visibility is listed with its own 0s duration + a delay equal to the slide
+       duration, so closing keeps the drawer rendered until AFTER it has finished
+       sliding off-screen. Without this, visibility: hidden applies the instant the
+       .is-open class is removed -- same moment the transform transition starts -- so
+       the drawer vanishes immediately and only the transform is ever animating an
+       invisible element. Opening overrides this back to 0s/0s below, so it becomes
+       visible (and interactable) the instant it starts sliding in. */
+    transition: transform 260ms var(--ease-standard), visibility 0s linear 260ms;
     /* The rail is hidden, so it must not be focusable while closed. */
     visibility: hidden;
   }
 
   .cb-app-shell > .cb-app-rail.is-open {
     transform: translateX(0);
+    transition: transform 260ms var(--ease-standard), visibility 0s linear 0s;
     visibility: visible;
   }
 
