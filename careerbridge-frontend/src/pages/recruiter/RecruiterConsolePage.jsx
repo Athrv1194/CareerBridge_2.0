@@ -558,8 +558,12 @@ export default function RecruiterConsolePage() {
             {jobs.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <div style={{ maxWidth: 340 }}>
-                  <Field label="Viewing">
-                    <Select options={jobs.map((j) => String(j.id))} value={String(appsJobId || jobs[0].id)} onChange={onAppsJobChange} />
+                  <Field label="Viewing applications for">
+                    <Select
+                      options={jobs.map((j) => ({ value: String(j.id), label: j.title || `Job #${j.id}` }))}
+                      value={String(appsJobId || jobs[0].id)}
+                      onChange={onAppsJobChange}
+                    />
                   </Field>
                 </div>
 

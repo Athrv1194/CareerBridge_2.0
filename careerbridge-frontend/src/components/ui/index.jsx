@@ -382,11 +382,19 @@ export function Select({ options, value, onChange, style }) {
         outline: 'none', cursor: 'pointer', ...style,
       }}
     >
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt.charAt(0) + opt.slice(1).toLowerCase()}
-        </option>
-      ))}
+      {options.map((opt) => {
+        // Either a plain enum string ("REMOTE" -> "Remote") or a {value, label} pair
+        // when the option's display text isn't derivable from its value -- e.g. a job
+        // id, where there is no title-casing that turns "6" into a job's actual title.
+        const isPair = typeof opt === 'object' && opt !== null;
+        const value = isPair ? opt.value : opt;
+        const label = isPair ? opt.label : value.charAt(0) + value.slice(1).toLowerCase();
+        return (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        );
+      })}
     </select>
   );
 }
