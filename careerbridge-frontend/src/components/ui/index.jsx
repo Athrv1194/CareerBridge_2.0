@@ -113,13 +113,14 @@ export function Button({
   return <button type="button" onClick={onClick} disabled={disabled} style={combined} {...handlers}>{content}</button>;
 }
 
-export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle, disabled = false }) {
+export function IconButton({ icon, label, onClick, variant = 'ghost', iconStyle, disabled = false, className }) {
   const IconComp = iconMap[icon] || LuSlidersHorizontal;
   const v = buttonVariants[variant] || buttonVariants.ghost;
   return (
     <button
       type="button"
       aria-label={label}
+      className={className}
       onClick={onClick}
       disabled={disabled}
       style={{

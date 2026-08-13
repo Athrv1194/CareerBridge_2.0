@@ -167,7 +167,7 @@ export default function HomePage() {
   return (
     <div style={{ background: 'var(--bone-100)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)', minHeight: '100vh' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 30, background: 'var(--bone-100)', borderBottom: 'var(--border-hairline)', height: 'var(--header-height)' }}>
-        <div style={{ width: '100%', boxSizing: 'border-box', padding: '0 32px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+        <div className="cb-home-header" style={{ width: '100%', boxSizing: 'border-box', padding: '0 32px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
           <Logo size={36} />
 
           {!isMobile && (
@@ -203,7 +203,7 @@ export default function HomePage() {
         </div>
 
         {drawerOpen && (
-          <div style={{ background: 'var(--bone-50)', borderBottom: 'var(--border-hairline)', padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="cb-home-drawer" style={{ background: 'var(--bone-50)', borderBottom: 'var(--border-hairline)', padding: '20px 32px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             {NAV_LINKS.map((link) => (
               <a key={link.href} href={link.href} onClick={closeDrawer} className="cb-home-nav-link" style={{ fontSize: 13, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-700)', width: 'fit-content' }}>
                 {link.label}
@@ -225,8 +225,9 @@ export default function HomePage() {
         )}
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', alignItems: 'stretch', background: 'var(--bone-100)' }}>
+      <section className="cb-home-hero" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', alignItems: 'stretch', background: 'var(--bone-100)' }}>
         <div
+          className="cb-home-hero-copy"
           style={{
             opacity: heroIn ? 1 : 0,
             transform: `translateY(${heroIn ? 0 : 12}px)`,
@@ -236,7 +237,7 @@ export default function HomePage() {
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>AI-powered career platform</span>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 64, lineHeight: 1.02, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '18px 0 0', fontWeight: 400 }}>
+          <h1 className="cb-home-h1" style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-lg)', lineHeight: 1.02, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '18px 0 0', fontWeight: 400 }}>
             Build a career that <i>fits</i> you.
           </h1>
           <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--ink-600)', maxWidth: 520, margin: '22px 0 0', fontWeight: 400 }}>
@@ -247,15 +248,15 @@ export default function HomePage() {
             <Button size="lg" variant="secondary" to="/careers">Explore careers</Button>
           </div>
         </div>
-        <div style={{ position: 'relative', overflow: 'hidden', minHeight: 720, background: 'var(--bone-200)' }}>
+        <div className="cb-home-hero-media" style={{ position: 'relative', overflow: 'hidden', minHeight: 720, background: 'var(--bone-200)' }}>
           <img src="/images/hero-01.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', filter: 'saturate(.92)' }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, var(--bone-100) 0%, rgba(245,243,239,0) 22%)' }} />
+          <div className="cb-home-hero-scrim" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, var(--bone-100) 0%, rgba(245,243,239,0) 22%)' }} />
         </div>
       </section>
 
       <section ref={statsRef} style={{ background: 'var(--ink-900)' }}>
-        <div style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '0 32px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)' }}>
+        <div className="cb-home-pad" style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '0 32px' }}>
+          <div className="cb-home-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)' }}>
             <StatTile tone="inverse" value={`${statCounts.students.toLocaleString()}+`} label="Students guided" />
             <StatTile tone="inverse" value={`${statCounts.careers.toLocaleString()}+`} label="Career paths" />
             <StatTile tone="inverse" value={`${statCounts.colleges.toLocaleString()}+`} label="Colleges partnered" />
@@ -265,13 +266,13 @@ export default function HomePage() {
       </section>
 
       <div id="features" />
-      <section id="how-it-works" ref={r1} style={{ ...s1, maxWidth: 'var(--max-content)', margin: '0 auto', padding: '96px 32px 0' }}>
+      <section id="how-it-works" ref={r1} className="cb-home-section" style={{ ...s1, maxWidth: 'var(--max-content)', margin: '0 auto', padding: '96px 32px 0' }}>
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>How it works</span>
         <hr style={{ height: 1, background: 'var(--line-ink)', border: 0, margin: '8px 0 0' }} />
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 44, lineHeight: 1.08, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400, maxWidth: 660 }}>
+        <h2 className="cb-home-h2" style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-md)', lineHeight: 1.08, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400, maxWidth: 660 }}>
           Assessment in, roadmap out.
         </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', marginTop: 40 }}>
+        <div className="cb-home-steps" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', marginTop: 40 }}>
           {HOW_IT_WORKS.map((step) => (
             <div key={step.num} style={{ background: 'var(--bone-50)', padding: '32px 28px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <span className="cb-num" style={{ fontSize: 12, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>{step.num}</span>
@@ -282,18 +283,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section ref={r2} style={{ ...s2, maxWidth: 'var(--max-content)', margin: '0 auto', padding: '96px 32px 0' }}>
+      <section ref={r2} className="cb-home-section" style={{ ...s2, maxWidth: 'var(--max-content)', margin: '0 auto', padding: '96px 32px 0' }}>
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Your readiness score</span>
         <hr style={{ height: 1, background: 'var(--line-ink)', border: 0, margin: '8px 0 0' }} />
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400, maxWidth: 660 }}>
+        <h2 className="cb-home-h2" style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-sm)', lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400, maxWidth: 660 }}>
           One number. Four inputs. Updated by actions, not forms.
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1.2fr)', gap: 1, background: 'var(--line-hairline)', marginTop: 40 }}>
-          <div style={{ background: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 32px' }}>
+        <div className="cb-home-score" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,.8fr) minmax(0,1.2fr)', gap: 1, background: 'var(--line-hairline)', marginTop: 40 }}>
+          <div className="cb-home-score-ring" style={{ background: 'var(--bone-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 32px' }}>
             <ScoreRing value={82} grade="B" size="lg" label="Placement readiness" caption="Résumé and profile are strong. Assessment coverage is the gap." />
           </div>
-          <div style={{ background: 'var(--bone-50)', padding: '44px 40px', display: 'flex', flexDirection: 'column', gap: 26 }}>
+          <div className="cb-home-score-rows" style={{ background: 'var(--bone-50)', padding: '44px 40px', display: 'flex', flexDirection: 'column', gap: 26 }}>
             {SCORE_BREAKDOWN.map((row) => (
               <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -316,11 +317,11 @@ export default function HomePage() {
       </section>
 
       <section ref={r3} style={{ ...s3, background: 'var(--bone-100)', marginTop: 96 }}>
-        <div style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '0 32px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', background: 'var(--line-hairline)', gap: 1 }}>
-            <div style={{ background: 'var(--bone-50)', padding: '44px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="cb-home-pad" style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '0 32px' }}>
+          <div className="cb-home-split" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', background: 'var(--line-hairline)', gap: 1 }}>
+            <div className="cb-home-split-card" style={{ background: 'var(--bone-50)', padding: '44px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>For colleges /</span>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 28, lineHeight: 1.15, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
+              <h3 className="cb-home-h3" style={{ fontFamily: 'var(--font-display)', fontSize: 28, lineHeight: 1.15, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
                 Track your cohort&apos;s readiness, not just their placements.
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', borderTop: 'var(--border-hairline)', width: '100%' }}>
@@ -330,9 +331,9 @@ export default function HomePage() {
               </div>
               <Button variant="secondary" iconAfter="arrow-right" to="/register-institution" style={{ marginTop: 8, alignSelf: 'flex-start' }}>Register your institution</Button>
             </div>
-            <div style={{ background: 'var(--bone-50)', padding: '44px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="cb-home-split-card" style={{ background: 'var(--bone-50)', padding: '44px 28px', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>For recruiters /</span>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 28, lineHeight: 1.15, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
+              <h3 className="cb-home-h3" style={{ fontFamily: 'var(--font-display)', fontSize: 28, lineHeight: 1.15, color: 'var(--ink-900)', margin: 0, fontWeight: 400 }}>
                 Filter 1,240 candidates by readiness score, not résumé.
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', borderTop: 'var(--border-hairline)', width: '100%' }}>
@@ -346,14 +347,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section ref={r4} style={{ ...s4, maxWidth: 'var(--max-content)', margin: '96px auto 0', padding: '0 32px' }}>
+      <section ref={r4} className="cb-home-section" style={{ ...s4, maxWidth: 'var(--max-content)', margin: '96px auto 0', padding: '0 32px' }}>
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Plans</span>
         <hr style={{ height: 1, background: 'var(--line-ink)', border: 0, margin: '8px 0 0' }} />
-        <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 32, lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400 }}>
+        <h2 className="cb-home-h2" style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-display-sm)', lineHeight: 1.12, letterSpacing: '-.015em', color: 'var(--ink-900)', margin: '24px 0 0', fontWeight: 400 }}>
           Start free. Scale when it works.
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 20, marginTop: 40 }}>
+        <div className="cb-home-plans" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 20, marginTop: 40 }}>
           {decoratedPlans.map((plan) => (
             <div
               key={plan.planName}
@@ -380,33 +381,33 @@ export default function HomePage() {
       </section>
 
       <footer style={{ marginTop: 96, background: 'var(--bone-200)', color: 'var(--ink-800)', borderTop: 'var(--border-hairline)' }}>
-        <div style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '64px 32px 40px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)' }}>
-            <div style={{ background: 'var(--bone-200)', padding: '0 24px 0 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="cb-home-footer-pad" style={{ maxWidth: 'var(--max-content)', margin: '0 auto', padding: '64px 32px 40px' }}>
+          <div className="cb-home-footer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)' }}>
+            <div className="cb-home-footer-col" style={{ background: 'var(--bone-200)', padding: '0 24px 0 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <Logo size={22} />
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)' }}>Bridge today. Build tomorrow.</span>
             </div>
-            <div style={{ background: 'var(--bone-200)', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="cb-home-footer-col" style={{ background: 'var(--bone-200)', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Product</span>
               <a href="#features" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Features</a>
               <a href="#how-it-works" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Roadmap</a>
               <a href="/opportunities" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Opportunities</a>
               <a href="/resume" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Résumé builder</a>
             </div>
-            <div style={{ background: 'var(--bone-200)', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="cb-home-footer-col" style={{ background: 'var(--bone-200)', padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Company</span>
               <a href="/about" style={{ fontSize: 13, color: 'var(--ink-700)' }}>About</a>
               <a href="/register-institution" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For colleges</a>
               <a href="/recruiter-console" style={{ fontSize: 13, color: 'var(--ink-700)' }}>For recruiters</a>
               <a href="/plans" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Pricing</a>
             </div>
-            <div style={{ background: 'var(--bone-200)', padding: '0 0 0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="cb-home-footer-col" style={{ background: 'var(--bone-200)', padding: '0 0 0 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <span style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Legal</span>
               <a href="/terms" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Terms of service</a>
               <a href="/privacy" style={{ fontSize: 13, color: 'var(--ink-700)' }}>Privacy policy</a>
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, paddingTop: 24, borderTop: 'var(--border-hairline)', fontSize: 12, color: 'var(--ink-400)' }}>
+          <div className="cb-home-footer-legal" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginTop: 40, paddingTop: 24, borderTop: 'var(--border-hairline)', fontSize: 12, color: 'var(--ink-400)' }}>
             <span>© 2026 CareerBridge</span>
             <span>Built on Spring Boot microservices</span>
           </div>

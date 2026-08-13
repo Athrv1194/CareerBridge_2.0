@@ -1,0 +1,154 @@
+/* Global responsive safety net.
+ *
+ * The app is styled almost entirely with inline style={{}} objects, which beat CSS on
+ * specificity -- a media query can only reach an element that also carries a className.
+ * Everything here is therefore either (a) an element-type rule no inline style competes
+ * with, or (b) a shared utility class pages opt into.
+ *
+ * Breakpoint spine, matching the per-page stylesheets:
+ *   <= 900px  tablet   (iPad Mini 768, iPad Air 820, Zenbook Fold 853)
+ *   <= 560px  phone    (iPhone 12-16 390-440, Pixel 7-10 411-412, Surface Duo 540)
+ *   <= 380px  micro    (Galaxy Z Fold 5 folded 344, Galaxy S8+ 360, iPhone SE 375)
+ *
+ * Deliberately NO `html { overflow-x: hidden }` -- that hides overflow bugs rather than
+ * fixing them, and scripts/check-responsive.mjs depends on real overflow being detectable.
+ */
+
+/* Media never forces its intrinsic width onto a narrow layout. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+img,
+video {
+  height: auto;
+}
+
+/* Long unbroken strings -- emails, URLs, skill tags, company names -- are the single most
+   common source of horizontal overflow on a 344px screen. */
+h1, h2, h3, h4, p, td, th, a, li, dd, dt {
+  overflow-wrap: anywhere;
+}
+
+/* Horizontally scrollable surfaces: wide data tables, tab rows, kanban columns.
+   These are legitimately wider than a phone; the fix is a good scroll, not a reflow. */
+.cb-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* A right-edge fade hints that there is more content off-screen. Only on touch-ish
+   widths, where there is no visible scrollbar to give the game away. */
+@media (max-width: 900px) {
+  .cb-scroll-x {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent 100%);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Shared app shell (the 7 student pages)
+ *
+ * Each page renders <div class="cb-XX-shell cb-app-shell" style="--sidebar-w: ...">
+ * with a sticky <aside class="cb-app-rail"> inside. Above 560px this file does nothing
+ * and the page's own stylesheet drives the layout exactly as it does today.
+ *
+ * At <= 560px the rail leaves the grid entirely and becomes an overlay drawer, so the
+ * content gets the full viewport width instead of losing 64px to an icon strip.
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 560px) {
+  /* Doubled class is deliberate. Each page's own stylesheet carries
+     `.cb-XX-shell { grid-template-columns: 64px minmax(0,1fr) !important }` at <=900px,
+     and those files are imported by the page component -- i.e. AFTER this one. With
+     equal specificity the later rule wins, leaving a 64px phantom column that the
+     out-of-flow drawer no longer occupies, so <main> lands in it and renders 64px wide.
+     Two classes outrank one regardless of import order. */
+  .cb-app-shell.cb-app-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cb-app-shell > .cb-app-rail {
+    position: fixed !important;
+    top: var(--header-height) !important;
+    left: 0;
+    bottom: 0;
+    height: auto !important;
+    width: min(272px, 82vw) !important;
+    z-index: 60;
+    background: var(--surface-card);
+    box-shadow: var(--shadow-menu);
+    transform: translateX(-100%);
+    transition: transform var(--duration-normal) var(--ease-standard);
+    /* The rail is hidden, so it must not be focusable while closed. */
+    visibility: hidden;
+  }
+
+  .cb-app-shell > .cb-app-rail.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  /* Nav labels are hidden by each page's own <=900px rule (a tablet icon-rail
+     affordance). Inside the drawer there is room for them, so put them back --
+     otherwise the drawer opens to a 272px panel of unlabelled icons. */
+  .cb-app-rail.is-open [class$="-sidebar-label"] {
+    display: inline !important;
+  }
+
+  .cb-app-scrim {
+    position: fixed;
+    inset: var(--header-height) 0 0 0;
+    background: var(--surface-overlay);
+    z-index: 59;
+    border: 0;
+    padding: 0;
+    width: 100%;
+    cursor: pointer;
+  }
+}
+
+/* The drawer toggle is phone-only; above 560px the rail is a real column.
+   !important on both sides because IconButton sets display inline. */
+.cb-app-drawer-toggle {
+  display: none !important;
+}
+
+@media (max-width: 560px) {
+  .cb-app-drawer-toggle {
+    display: inline-flex !important;
+  }
+
+  /* The account header is Logo + bell + avatar + name + two dividers + a Log out
+     button -- about 340px of content before the hamburger is added. Slim it down:
+     the dividers are decoration, and Log out moves into the drawer below.
+     (Pages without a drawer keep their Log out; they only lose the dividers.) */
+  .cb-app-header-divider,
+  .cb-app-header-logout {
+    display: none !important;
+  }
+
+  .cb-app-header-actions {
+    gap: 10px !important;
+  }
+
+  .cb-app-drawer-logout {
+    display: block !important;
+  }
+}
+
+/* Log out lives in the header at every width except phone, where the header has no
+   room for it and the drawer does. */
+.cb-app-drawer-logout {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-app-shell > .cb-app-rail {
+    transition: none;
+  }
+}
