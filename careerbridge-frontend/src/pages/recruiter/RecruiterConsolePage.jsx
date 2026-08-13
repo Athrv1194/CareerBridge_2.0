@@ -12,7 +12,7 @@ import {
 } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './recruiter-console.css';
 
 const WORKMODE_LABEL = { REMOTE: 'Remote', HYBRID: 'Hybrid', ON_SITE: 'On-site' };
@@ -364,6 +364,7 @@ export default function RecruiterConsolePage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Recruiter</span>
             </div>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 

@@ -9,7 +9,7 @@ import {
   getPlatformStats, getLeaderboard, listUsers, deactivateUser, activateUser, getPlacementStats,
 } from '../../api/adminApi';
 import { listOrgJoinRequests, approveOrgJoinRequest, rejectOrgJoinRequest } from '../../api/orgJoinApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './college.css';
 
 const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', PLACEMENT_OFFICER: '/placement-console', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
@@ -278,11 +278,12 @@ export default function CollegeDashboardPage() {
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="user" size={15} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+            <div className="cb-cd-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Org admin</span>
             </div>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 

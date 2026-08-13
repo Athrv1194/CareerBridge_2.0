@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, Textarea, useRevealOnMount,
 } from '../../components/ui';
-import { getTokenPayload } from '../../utils/tokenUtils';
+import { getTokenPayload, clearTokens } from '../../utils/tokenUtils';
 import {
   getPlatformStats, listUsers, getUserById, deactivateUser, activateUser, linkUserOrganization,
   listOrganizations, createOrganization, updateOrganization, deactivateOrganization,
@@ -967,9 +967,10 @@ export default function SuperAdminPage() {
           Admin
         </span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
-          <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Super admin</span>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="cb-sa-avatar-name" style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
+          <span className="cb-sa-avatar-name" style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Super admin</span>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 
