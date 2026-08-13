@@ -4,19 +4,41 @@
   min-height: 100vh;
 }
 
-@media (max-width: 860px) {
+/* Tablet: iPad Mini 768, iPad Air 820 */
+@media (max-width: 900px) {
   .cb-reg-grid {
     grid-template-columns: 1fr;
-  }
-  .cb-reg-hero {
-    min-height: 320px;
   }
   .cb-reg-form-wrap {
     padding: 40px 24px !important;
   }
 }
 
-@media (max-width: 480px) {
+/* Phone: iPhone SE/12-16 375-440. The hero was a decorative full desktop-height
+   panel (min-height 280+) pushing the actual form -- the reason anyone is on this
+   page -- below the fold on a small screen. Below 560px it becomes a slim banner:
+   logo + heading only, no paragraph, so the "I am joining as" picker is one glance
+   away instead of a scroll away. */
+@media (max-width: 560px) {
+  .cb-reg-hero {
+    min-height: 0 !important;
+    padding: 20px 24px !important;
+    gap: 10px;
+  }
+  .cb-reg-hero-logo :is(svg, img) {
+    width: 30px !important;
+    height: 30px !important;
+  }
+  .cb-reg-hero-heading {
+    font-size: 22px !important;
+    line-height: 1.15 !important;
+  }
+  .cb-reg-hero-body {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
   .cb-reg-roles {
     grid-template-columns: 1fr !important;
   }
