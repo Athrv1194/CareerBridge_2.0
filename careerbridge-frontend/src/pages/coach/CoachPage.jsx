@@ -553,7 +553,16 @@ export default function CoachPage() {
             <>
               <div style={{ padding: '16px 16px 14px', borderBottom: '1px solid var(--line-hairline)', flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Button variant="primary" size="sm" iconAfter="plus" fullWidth onClick={startSession} disabled={newSessionBusy}>{newSessionBusy ? 'Starting…' : 'New session'}</Button>
-                <IconButton icon="chevron-right" label="Collapse sessions" onClick={() => setSessionsCollapsed(true)} iconStyle={{ transform: 'rotate(180deg)' }} />
+                <IconButton
+                  icon="chevron-right"
+                  label={isPhone ? 'Close sessions' : 'Collapse sessions'}
+                  // On phone the rail is a fixed-width drawer, always expanded -- "collapse to
+                  // an icon strip" has nothing to collapse into, so the button did nothing
+                  // visible. Close the drawer instead, which is what a phone user expects
+                  // this control to do.
+                  onClick={() => (isPhone ? setSessionsOpen(false) : setSessionsCollapsed(true))}
+                  iconStyle={{ transform: 'rotate(180deg)' }}
+                />
               </div>
 
               {sessionsLoading && (
@@ -738,7 +747,11 @@ export default function CoachPage() {
               <div style={{ padding: '20px 22px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Milestone resources</span>
-                  <IconButton icon="chevron-right" label="Collapse resources" onClick={() => setResourcesCollapsed(true)} />
+                  <IconButton
+                    icon="chevron-right"
+                    label={isPhone ? 'Close resources' : 'Collapse resources'}
+                    onClick={() => (isPhone ? setResourcesOpen(false) : setResourcesCollapsed(true))}
+                  />
                 </div>
                 <hr style={{ marginTop: 12, height: 1, background: 'var(--line-ink)', border: 0 }} />
                 <p style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--ink-400)', fontStyle: 'italic', margin: '10px 0 0' }}>They change as you move through the roadmap. Completing this step swaps the list.</p>
