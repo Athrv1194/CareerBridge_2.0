@@ -51,6 +51,14 @@ export function linkUserOrganization(userId, organizationId) {
   });
 }
 
+// department may be null or '' to unassign the user from their department.
+export function assignUserDepartment(userId, department) {
+  return authedFetch(`/auth/admin/users/${userId}/department`, {
+    method: 'PATCH',
+    body: JSON.stringify({ department }),
+  });
+}
+
 // ---- organization-service: organisations + departments ----
 export function listOrganizations() {
   return authedFetch('/organization');

@@ -51,6 +51,20 @@ public interface AdminUserService {
 
     UserSummaryResponse activateUser(String callerRole, Long callerOrgId, Long targetUserId);
 
+    /**
+     * Assigns a user to a department within their own organization. ORG_ADMIN (own organization
+     * only) or SUPER_ADMIN -- unlike changeUserRole and linkOrganization, an ORG_ADMIN is allowed
+     * here because a department is a subdivision of the organization they already administer, so
+     * nothing they can reach with it lies outside their existing tenant.
+     *
+     * department may be null or blank, which UNASSIGNS the user; both normalise to a stored null so
+     * a blank string never becomes a distinct department that groups separately from unassigned.
+     *
+     * Refuses a user who belongs to no organization -- a department is meaningless without one.
+     */
+    UserSummaryResponse assignDepartment(String callerRole, Long callerOrgId, Long targetUserId,
+                                         String department);
+
     /** Counts are platform-wide for a SUPER_ADMIN and organization-scoped for an ORG_ADMIN. */
     AdminStatsResponse getPlatformStats(String callerRole, Long callerOrgId);
 }

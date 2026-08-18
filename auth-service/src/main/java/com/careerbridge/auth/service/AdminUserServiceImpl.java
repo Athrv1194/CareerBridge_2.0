@@ -236,6 +236,43 @@ public class AdminUserServiceImpl implements AdminUserService {
         return toResponse(saved);
     }
 
+    /**
+     * ORG_ADMIN or SUPER_ADMIN, scoped by requireSameOrgIfOrgAdmin exactly like deactivateUser --
+     * an ORG_ADMIN may organise their own college's people and no one else's.
+     *
+     * Blank normalises to null rather than being stored: "" and "   " would otherwise each become a
+     * distinct department key, grouping separately from genuinely unassigned users on any dashboard
+     * that groups by this field.
+     */
+    @Override
+    @Transactional
+    public UserSummaryResponse assignDepartment(String callerRole, Long callerOrgId,
+                                                Long targetUserId, String department) {
+        requireAdmin(callerRole);
+
+        User user = userRepository.findByIdAndIsDeletedFalse(targetUserId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        requireSameOrgIfOrgAdmin(callerRole, callerOrgId, user);
+
+        // A department is a subdivision of an organization, so it cannot be set on someone who has
+        // none -- storing one would produce a user filed under a department no organization owns.
+        if (user.getOrganizationId() == null) {
+            throw new CustomException("User does not belong to an organization",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String normalised = (department == null || department.isBlank()) ? null : department.trim();
+
+        String previous = user.getDepartment();
+        user.setDepartment(normalised);
+        User saved = userRepository.save(user);
+
+        log.info("Department changed for userId={} from {} to {}", targetUserId, previous, normalised);
+
+        return toResponse(saved);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Authorization
     // ---------------------------------------------------------------------------------------------
@@ -350,6 +387,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 // a wire contract.
                 .role(user.getRole() == null ? null : user.getRole().name())
                 .organizationId(user.getOrganizationId())
+                .department(user.getDepartment())
                 .subscriptionPlan(user.getSubscriptionPlan())
                 .isDeleted(user.getIsDeleted())
                 .createdAt(user.getCreatedAt())
