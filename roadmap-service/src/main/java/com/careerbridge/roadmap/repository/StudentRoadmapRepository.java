@@ -12,36 +12,14 @@ import java.util.Optional;
 @Repository
 public interface StudentRoadmapRepository extends JpaRepository<StudentRoadmap, Long> {
 
-    /**
-     * The idempotency fast path for POST /api/roadmap: build-or-return. Optional is safe here only
-     * because of the unique constraint on (student_id, career_name) -- without it two racing
-     * double-clicks of "Build my roadmap" could both insert and this would start throwing.
-     * IgnoreCase matches RoadmapTemplateRepository's own lookup convention.
-     */
+    // Safe Optional only because uk_student_roadmap_career enforces uniqueness.
     Optional<StudentRoadmap> findByStudentIdAndCareerNameIgnoreCase(Long studentId, String careerName);
 
-    /**
-     * Backs GET /api/roadmap/my, which takes the first -- the newest, by the DESC ordering.
-     *
-     * A List, NOT an Optional. A student can hold a roadmap for more than one career at once (one
-     * per career they've clicked "Build my roadmap" for), so this legitimately matches more than one
-     * row and a single-result finder would throw IncorrectResultSizeDataAccessException. Same
-     * reasoning as recommendation-service's findByUserIdAndIsActiveTrue.
-     *
-     * Deliberately not filtered by status. A ...AndStatusOrderByStartedAtDesc variant existed here
-     * and getMyRoadmap used it to select IN_PROGRESS only, which meant completing the last milestone
-     * flipped the roadmap to COMPLETED and 404'd the endpoint that displays it. Do not reintroduce
-     * the filter without giving the student some other way to see a finished roadmap.
-     */
+    // List not Optional: a student can have roadmaps for multiple careers. No status filter --
+    // filtering to IN_PROGRESS caused 404 on the very endpoint that shows a finished roadmap.
     List<StudentRoadmap> findByStudentIdOrderByStartedAtDesc(Long studentId);
 
-    /**
-     * Backs getMyRoadmap now that a student can explicitly pick which roadmap is "current": a row
-     * that was ever activated (built, re-built, or explicitly switched to) sorts by that moment;
-     * NULLS LAST means a row from before this column existed -- or one that simply never got
-     * reactivated after a newer roadmap took over -- falls back to the old startedAt-DESC order
-     * rather than jumping to the front as a false "most recent".
-     */
+    // NULLS LAST: rows predating activatedAt column fall back to startedAt-DESC order.
     @Query("SELECT r FROM StudentRoadmap r WHERE r.studentId = :studentId "
             + "ORDER BY r.activatedAt DESC NULLS LAST, r.startedAt DESC")
     List<StudentRoadmap> findByStudentIdOrderByActivatedThenStarted(@Param("studentId") Long studentId);

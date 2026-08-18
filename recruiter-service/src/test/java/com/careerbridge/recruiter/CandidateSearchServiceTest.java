@@ -212,7 +212,7 @@ class CandidateSearchServiceTest {
     }
 
     @Test
-    @DisplayName("searchCandidates: builds a profileUrl and carries skills through")
+    @DisplayName("searchCandidates: carries skills and hasAvatar through")
     void searchCandidates_MapsAllFields() {
         when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
                 .thenReturn(List.of(profile(42L, "Ada", List.of("Java", "SQL"))));
@@ -226,6 +226,21 @@ class CandidateSearchServiceTest {
         assertEquals(List.of("Java", "SQL"), candidate.getSkills());
         assertEquals(70.0, candidate.getPrsScore());
         assertEquals(60, candidate.getProfileCompletionPercentage());
-        assertEquals("/api/student/profile/42", candidate.getProfileUrl());
+        assertEquals(false, candidate.getHasAvatar());
+    }
+
+    @Test
+    @DisplayName("searchCandidates: hasAvatar true when student-service says so")
+    void searchCandidates_HasAvatarTrue() {
+        PublicStudentProfileDto withAvatar = PublicStudentProfileDto.builder()
+                .studentId(42L).firstName("Ada").lastName("Test").email("ada@careerbridge.com")
+                .skills(List.of()).profileCompletionPercentage(60).hasAvatar(true).build();
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER")).thenReturn(List.of(withAvatar));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(42L, 70.0)));
+
+        CandidateResponse candidate =
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null).get(0);
+
+        assertEquals(true, candidate.getHasAvatar());
     }
 }

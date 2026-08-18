@@ -516,7 +516,7 @@ export default function OnboardingPage() {
 
           {step === 3 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', border: 'var(--border-hairline)' }}>
+              <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 1, background: 'var(--line-hairline)', border: 'var(--border-hairline)' }}>
                 <StatTile value="20" label="Questions" />
                 <StatTile value="18 min" label="Time" />
                 <StatTile value="Unlimited" label="Attempts" />

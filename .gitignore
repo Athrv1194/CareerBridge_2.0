@@ -26,3 +26,10 @@ Thumbs.db
 
 # AI incident log
 ai_incident_log.md
+
+# Session/testing notes and local agent config (not for the repo)
+SESSION_SUMMARY.md
+TESTING_LOG.md
+CLAUDE.md
+.agents/
+.claude/

@@ -70,12 +70,16 @@
   --weight-medium: 500;
   --weight-semibold: 600;
 
-  --text-display-xl: 88px;
-  --text-display-lg: 64px;
-  --text-display-md: 44px;
-  --text-display-sm: 32px;
+  /* Display sizes are fluid: they hit the original desktop value at wide widths and
+     shrink down the 344px-1280px device range without a media query per usage site.
+     The lower bound of each clamp is the smallest size that stays legible on a
+     344px Galaxy Z Fold 5 (folded), the narrowest device we support. */
+  --text-display-xl: clamp(38px, 9vw, 88px);
+  --text-display-lg: clamp(32px, 7.5vw, 64px);
+  --text-display-md: clamp(26px, 5.5vw, 44px);
+  --text-display-sm: clamp(22px, 4vw, 32px);
 
-  --text-title-lg: 24px;
+  --text-title-lg: clamp(19px, 2.6vw, 24px);
   --text-title-md: 20px;
   --text-title-sm: 17px;
   --text-body-lg: 16px;
@@ -101,6 +105,9 @@
   --space-13: 96px;
   --max-content: 1160px;
   --header-height: 64px;
+  /* Horizontal page gutter. 32px on desktop, shrinking to 12px on a 344px screen
+     so the gutters don't eat a fifth of the viewport. */
+  --page-gutter: clamp(12px, 4vw, 32px);
 
   /* ---- Borders ---- */
   --border-hairline: 1px solid var(--line-hairline);

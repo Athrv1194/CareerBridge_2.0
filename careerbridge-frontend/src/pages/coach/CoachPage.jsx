@@ -6,6 +6,7 @@ import { getUnreadCount } from '../../api/notificationApi';
 import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
 import { clearTokens } from '../../utils/tokenUtils';
 import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
+import { useMaxWidth } from '../../hooks/useBreakpoint';
 import './coach.css';
 
 const NAV_ITEMS = [
@@ -97,7 +98,17 @@ export default function CoachPage() {
   const [avatarSrc, setAvatarSrc] = useState('');
   const [navCollapsed, setNavCollapsed] = useState(getNavCollapsed);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  // Below 560px the three rails stop being grid columns and become overlay drawers, so the
+  // chat gets the whole viewport instead of a ~360px slice of a sideways-scrolling shell.
+  const isPhone = useMaxWidth('phone');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
+  const closeAllDrawers = () => { setDrawerOpen(false); setSessionsOpen(false); setResourcesOpen(false); };
   const [resourcesCollapsed, setResourcesCollapsed] = useState(false);
+  const railCollapsed = isPhone ? false : navCollapsed;
+  const sessionsRailCollapsed = isPhone ? false : sessionsCollapsed;
+  const resourcesRailCollapsed = isPhone ? false : resourcesCollapsed;
 
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
@@ -464,8 +475,16 @@ export default function CoachPage() {
     <div className="cb-co-root" style={{ height: '100vh', overflow: 'hidden', background: 'var(--surface-page)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)', display: 'flex', flexDirection: 'column' }}>
 
       <header className="cb-co-header" style={{ flexShrink: 0, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
-        <Logo size={32} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <IconButton
+            className="cb-app-drawer-toggle"
+            icon={drawerOpen ? 'x' : 'sliders-horizontal'}
+            label={drawerOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => { const next = !drawerOpen; closeAllDrawers(); setDrawerOpen(next); }}
+          />
+          <Logo size={32} />
+        </div>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
@@ -474,7 +493,7 @@ export default function CoachPage() {
               </span>
             )}
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
               {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
@@ -483,28 +502,33 @@ export default function CoachPage() {
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{studentName || 'Your account'}</span>
             </div>
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
-          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <span className="cb-app-header-logout">
+            <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </span>
         </div>
       </header>
 
       <div
-        className="cb-co-shell"
+        className="cb-co-shell cb-app-shell"
         style={{ '--nav-w': navCollapsed ? '60px' : '248px', '--sessions-w': sessionsCollapsed ? '60px' : '280px', '--resources-w': resourcesCollapsed ? '60px' : '300px' }}
       >
-        <aside style={{ borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-          <div className="cb-co-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
+        <aside className={`cb-app-rail${drawerOpen ? ' is-open' : ''}`} style={{ borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${railCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+          <div className="cb-co-toggle-row" style={{ display: 'flex', justifyContent: railCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
             <IconButton icon="chevron-right" label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setNavCollapsed((v) => { persistNavCollapsed(!v); return !v; })} iconStyle={{ transform: navCollapsed ? 'none' : 'rotate(180deg)', transition: 'transform 200ms ease' }} />
           </div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {NAV_ITEMS.map((item) => (
-              <Link key={item.to} to={item.to} title={item.label} style={{ display: 'flex', alignItems: 'center', gap: 11, justifyContent: navCollapsed ? 'center' : 'flex-start', padding: navCollapsed ? '10px 0' : '10px 14px', fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', background: item.active ? 'var(--ink-900)' : 'transparent', color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)', border: 'none' }}>
+              <Link key={item.to} to={item.to} title={item.label} onClick={() => setDrawerOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: 11, justifyContent: railCollapsed ? 'center' : 'flex-start', padding: railCollapsed ? '10px 0' : '10px 14px', fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', background: item.active ? 'var(--ink-900)' : 'transparent', color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)', border: 'none' }}>
                 <Icon name={item.icon} size={16} style={{ color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)' }} />
-                {!navCollapsed && <span className="cb-co-sidebar-label">{item.label}</span>}
+                {!railCollapsed && <span className="cb-co-sidebar-label">{item.label}</span>}
               </Link>
             ))}
           </nav>
-          {!navCollapsed && (
+          <div className="cb-app-drawer-logout" style={{ paddingTop: 12 }}>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </div>
+          {!railCollapsed && (
             <div className="cb-co-sidebar-footer" style={{ marginTop: 'auto', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: 24 }}>
               <div style={{ background: 'var(--taupe-100)', padding: '28px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
@@ -518,8 +542,8 @@ export default function CoachPage() {
           )}
         </aside>
 
-        <aside className="cb-co-sessions" style={{ background: 'var(--bone-50)', borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {sessionsCollapsed ? (
+        <aside className={`cb-co-sessions${sessionsOpen ? ' is-open' : ''}`} style={{ background: 'var(--bone-50)', borderRight: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {sessionsRailCollapsed ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '16px 0' }}>
               <IconButton icon="chevron-right" label="Expand sessions" onClick={() => setSessionsCollapsed(false)} />
               <IconButton icon="plus" label="New session" variant="secondary" onClick={startSession} disabled={newSessionBusy} />
@@ -529,7 +553,16 @@ export default function CoachPage() {
             <>
               <div style={{ padding: '16px 16px 14px', borderBottom: '1px solid var(--line-hairline)', flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Button variant="primary" size="sm" iconAfter="plus" fullWidth onClick={startSession} disabled={newSessionBusy}>{newSessionBusy ? 'Starting…' : 'New session'}</Button>
-                <IconButton icon="chevron-right" label="Collapse sessions" onClick={() => setSessionsCollapsed(true)} iconStyle={{ transform: 'rotate(180deg)' }} />
+                <IconButton
+                  icon="chevron-right"
+                  label={isPhone ? 'Close sessions' : 'Collapse sessions'}
+                  // On phone the rail is a fixed-width drawer, always expanded -- "collapse to
+                  // an icon strip" has nothing to collapse into, so the button did nothing
+                  // visible. Close the drawer instead, which is what a phone user expects
+                  // this control to do.
+                  onClick={() => (isPhone ? setSessionsOpen(false) : setSessionsCollapsed(true))}
+                  iconStyle={{ transform: 'rotate(180deg)' }}
+                />
               </div>
 
               {sessionsLoading && (
@@ -570,6 +603,12 @@ export default function CoachPage() {
         </aside>
 
         <main className="cb-co-main" style={{ minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bone-100)' }}>
+          {/* Phone-only. The sessions and resources rails are off-screen drawers at this width,
+              so they need a way back in -- without this they'd be unreachable, not just hidden. */}
+          <div className="cb-co-mobile-bar" style={{ flexShrink: 0, alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--line-hairline)', background: 'var(--surface-page)' }}>
+            <Button variant="secondary" size="sm" onClick={() => { closeAllDrawers(); setSessionsOpen(true); }}>Sessions</Button>
+            <Button variant="secondary" size="sm" onClick={() => { closeAllDrawers(); setResourcesOpen(true); }}>Resources</Button>
+          </div>
           <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div ref={transcriptRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '28px 32px' }}>
               <div style={{ maxWidth: 760, margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 18, minHeight: '100%' }}>
@@ -697,8 +736,8 @@ export default function CoachPage() {
           </div>
         )}
 
-        <aside className="cb-co-resources" style={{ position: 'relative', zIndex: 2, background: 'var(--bone-50)', borderLeft: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden' }}>
-          {resourcesCollapsed ? (
+        <aside className={`cb-co-resources${resourcesOpen ? ' is-open' : ''}`} style={{ position: 'relative', zIndex: 2, background: 'var(--bone-50)', borderLeft: '1px solid var(--line-hairline)', overflowY: 'auto', overflowX: 'hidden' }}>
+          {resourcesRailCollapsed ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '16px 0' }}>
               <IconButton icon="chevron-right" label="Expand resources" onClick={() => setResourcesCollapsed(false)} iconStyle={{ transform: 'rotate(180deg)' }} />
               <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)', writingMode: 'vertical-rl' }}>Resources</span>
@@ -708,7 +747,11 @@ export default function CoachPage() {
               <div style={{ padding: '20px 22px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Milestone resources</span>
-                  <IconButton icon="chevron-right" label="Collapse resources" onClick={() => setResourcesCollapsed(true)} />
+                  <IconButton
+                    icon="chevron-right"
+                    label={isPhone ? 'Close resources' : 'Collapse resources'}
+                    onClick={() => (isPhone ? setResourcesOpen(false) : setResourcesCollapsed(true))}
+                  />
                 </div>
                 <hr style={{ marginTop: 12, height: 1, background: 'var(--line-ink)', border: 0 }} />
                 <p style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--ink-400)', fontStyle: 'italic', margin: '10px 0 0' }}>They change as you move through the roadmap. Completing this step swaps the list.</p>
@@ -759,6 +802,10 @@ export default function CoachPage() {
             </>
           )}
         </aside>
+
+        {isPhone && (drawerOpen || sessionsOpen || resourcesOpen) && (
+          <button type="button" className="cb-app-scrim" aria-label="Close menu" onClick={closeAllDrawers} />
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { buildRoadmap } from '../../api/roadmapApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { clearTokens } from '../../utils/tokenUtils';
 import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
+import { useMaxWidth } from '../../hooks/useBreakpoint';
 import './recommendation.css';
 
 const NAV_ITEMS = [
@@ -138,13 +139,26 @@ export default function RecommendationPage() {
   }, []);
 
   const sidebarWidth = navCollapsed ? '60px' : '248px';
+  const isPhone = useMaxWidth('phone');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Below 560px the rail is an overlay drawer with room for full labels, so the
+  // persisted collapse preference -- a tablet icon-rail affordance -- must not apply.
+  const railCollapsed = isPhone ? false : navCollapsed;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--surface-page)', color: 'var(--ink-800)', fontFamily: 'var(--font-sans)' }}>
 
       <header className="cb-rec-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
-        <Logo size={32} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <IconButton
+            className="cb-app-drawer-toggle"
+            icon={drawerOpen ? 'x' : 'sliders-horizontal'}
+            label={drawerOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setDrawerOpen((v) => !v)}
+          />
+          <Logo size={32} />
+        </div>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
             {unreadCount > 0 && (
@@ -153,7 +167,7 @@ export default function RecommendationPage() {
               </span>
             )}
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
               {avatarSrc ? <img src={avatarSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Icon name="user" size={15} />}
@@ -163,14 +177,16 @@ export default function RecommendationPage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Student</span>
             </div>
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
-          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <span className="cb-app-header-logout">
+            <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </span>
         </div>
       </header>
 
-      <div className="cb-rec-shell" style={{ '--sidebar-w': sidebarWidth }}>
-        <aside style={{ borderRight: '1px solid var(--line-hairline)', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${navCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-          <div className="cb-rec-toggle-row" style={{ display: 'flex', justifyContent: navCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
+      <div className="cb-rec-shell cb-app-shell" style={{ '--sidebar-w': sidebarWidth }}>
+        <aside className={`cb-app-rail${drawerOpen ? ' is-open' : ''}`} style={{ borderRight: '1px solid var(--line-hairline)', position: 'sticky', top: 64, height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden', padding: `14px ${railCollapsed ? '8px' : '14px'} 18px`, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+          <div className="cb-rec-toggle-row" style={{ display: 'flex', justifyContent: railCollapsed ? 'center' : 'flex-end', paddingBottom: 10 }}>
             <IconButton
               icon="chevron-right"
               label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -184,21 +200,25 @@ export default function RecommendationPage() {
                 key={item.to}
                 to={item.to}
                 title={item.label}
+                onClick={() => setDrawerOpen(false)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 11,
-                  justifyContent: navCollapsed ? 'center' : 'flex-start',
-                  padding: navCollapsed ? '10px 0' : '10px 14px', fontSize: 13,
+                  justifyContent: railCollapsed ? 'center' : 'flex-start',
+                  padding: railCollapsed ? '10px 0' : '10px 14px', fontSize: 13,
                   letterSpacing: '.06em', textTransform: 'uppercase',
                   background: item.active ? 'var(--ink-900)' : 'transparent',
                   color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)', border: 'none',
                 }}
               >
                 <Icon name={item.icon} size={16} style={{ color: item.active ? 'var(--text-inverse)' : 'var(--ink-700)' }} />
-                {!navCollapsed && <span className="cb-rec-sidebar-label">{item.label}</span>}
+                {!railCollapsed && <span className="cb-rec-sidebar-label">{item.label}</span>}
               </Link>
             ))}
           </nav>
-          {!navCollapsed && (
+          <div className="cb-app-drawer-logout" style={{ paddingTop: 12 }}>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
+          </div>
+          {!railCollapsed && (
             <div className="cb-rec-sidebar-footer" style={{ marginTop: 'auto', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: 24 }}>
               <div style={{ background: 'var(--taupe-100)', padding: '28px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--taupe-700)' }}>CareerBridge Plus</span>
@@ -211,6 +231,10 @@ export default function RecommendationPage() {
             </div>
           )}
         </aside>
+
+        {drawerOpen && (
+          <button type="button" className="cb-app-scrim" aria-label="Close menu" onClick={() => setDrawerOpen(false)} />
+        )}
 
         <main style={{ minWidth: 0, background: 'var(--surface-page)' }}>
         <div className="cb-topbar" style={{ height: 64, borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px', position: 'sticky', top: 0, background: 'var(--surface-page)', zIndex: 10 }}>

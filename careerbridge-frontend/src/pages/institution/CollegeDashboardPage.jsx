@@ -9,7 +9,7 @@ import {
   getPlatformStats, getLeaderboard, listUsers, deactivateUser, activateUser, getPlacementStats,
 } from '../../api/adminApi';
 import { listOrgJoinRequests, approveOrgJoinRequest, rejectOrgJoinRequest } from '../../api/orgJoinApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './college.css';
 
 const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', PLACEMENT_OFFICER: '/placement-console', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
@@ -271,18 +271,19 @@ export default function CollegeDashboardPage() {
         <Logo size={32} />
         <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--ink-500)', paddingLeft: 24, borderLeft: '1px solid var(--line-hairline)' }}>College</span>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <IconButton icon="bell" label="Notifications" onClick={() => navigate('/notifications')} />
           <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="user" size={15} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
+            <div className="cb-cd-avatar-name" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
               <span style={{ fontSize: 13, color: 'var(--ink-900)' }}>{adminName}</span>
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Org admin</span>
             </div>
           </div>
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/login'); }}>Log out</Button>
         </div>
       </header>
 
@@ -358,7 +359,7 @@ export default function CollegeDashboardPage() {
                 )}
                 {leaderboardTop.length > 0 && (
                   <>
-                    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+                    <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                         <thead><tr>
                           <th style={thStyle('left')}>Rank</th>
@@ -434,7 +435,7 @@ export default function CollegeDashboardPage() {
             {studentsNoMatch && <span style={{ fontSize: 13, color: 'var(--ink-400)' }}>No students match your search.</span>}
 
             {studentsLoaded && !studentsEmptyAll && !studentsNoMatch && (
-              <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+              <div className="cb-scroll-x" style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead><tr>
                     <th style={thStyle('left')}>Name</th>

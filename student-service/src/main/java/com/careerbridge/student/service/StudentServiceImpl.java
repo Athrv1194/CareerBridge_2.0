@@ -74,9 +74,30 @@ public class StudentServiceImpl implements StudentService {
     @Override
     @Transactional(readOnly = true)
     public StudentProfileResponse getProfile(Long userId) {
-        StudentProfile profile = requireProfile(userId);
-        Long id = profile.getId();
+        return toProfileResponse(requireProfile(userId));
+    }
 
+    @Override
+    @Transactional(readOnly = true)
+    public StudentProfileResponse getProfileForRecruiter(Long studentId, String callerRole) {
+        if (!ALLOWED_PUBLIC_PROFILE_ROLES.contains(callerRole)) {
+            throw new CustomException(
+                    "Only RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN or SUPER_ADMIN may view a candidate's profile",
+                    HttpStatus.FORBIDDEN);
+        }
+        StudentProfile profile = requireProfile(studentId);
+        // Same visibility rule as the candidate search list (findByIsPublicTrueAndRole) -- a
+        // recruiter should not be able to open a private profile just by guessing its studentId.
+        // 404, not 403: this mirrors resume-service's cross-student lookup shape elsewhere in the
+        // project -- the caller has no legitimate reason to know the difference.
+        if (!Boolean.TRUE.equals(profile.getIsPublic()) || !ROLE_STUDENT.equals(profile.getRole())) {
+            throw new CustomException("Student profile not found", HttpStatus.NOT_FOUND);
+        }
+        return toProfileResponse(profile);
+    }
+
+    private StudentProfileResponse toProfileResponse(StudentProfile profile) {
+        Long id = profile.getId();
         return StudentProfileResponse.builder()
                 .id(profile.getId())
                 .userId(profile.getUserId())
@@ -536,8 +557,24 @@ public class StudentServiceImpl implements StudentService {
                         .email(p.getEmail())
                         .skills(skillsByProfileId.getOrDefault(p.getId(), List.of()))
                         .profileCompletionPercentage(p.getProfileCompletionPercentage())
+                        .hasAvatar(p.getAvatarImage() != null)
                         .build())
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ImageBlob getAvatarForRecruiter(Long studentId, String callerRole) {
+        if (!ALLOWED_PUBLIC_PROFILE_ROLES.contains(callerRole)) {
+            throw new CustomException(
+                    "Only RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN or SUPER_ADMIN may view a candidate's avatar",
+                    HttpStatus.FORBIDDEN);
+        }
+        StudentProfile profile = requireProfile(studentId);
+        if (profile.getAvatarImage() == null) {
+            throw new CustomException("No avatar uploaded", HttpStatus.NOT_FOUND);
+        }
+        return ImageBlob.builder().bytes(profile.getAvatarImage()).contentType(profile.getAvatarContentType()).build();
     }
 
     @Override

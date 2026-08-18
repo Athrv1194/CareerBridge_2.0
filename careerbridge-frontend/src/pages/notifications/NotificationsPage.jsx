@@ -131,7 +131,7 @@ export default function NotificationsPage() {
 
       <header className="cb-no-header" style={{ position: 'sticky', top: 0, zIndex: 40, height: 64, background: 'var(--surface-page)', borderBottom: '1px solid var(--line-hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, padding: '0 28px', boxSizing: 'border-box' }}>
         <Logo size={32} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div className="cb-app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex' }}>
             <IconButton icon="bell" label="Notifications" variant="secondary" onClick={() => navigate(-1)} />
             {unreadCount > 0 && (
@@ -140,7 +140,7 @@ export default function NotificationsPage() {
               </span>
             )}
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--bone-300)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="user" size={15} />
@@ -150,7 +150,7 @@ export default function NotificationsPage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>{roleLabel}</span>
             </div>
           </div>
-          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <div className="cb-app-header-divider" style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
           <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>

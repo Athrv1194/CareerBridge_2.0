@@ -22,6 +22,11 @@ export function getMyProfile() {
   return authedFetch('/student/profile');
 }
 
+// Recruiter/placement-officer/admin viewing a candidate's full profile, not the student themselves.
+export function getCandidateProfile(studentId) {
+  return authedFetch(`/student/profile/${studentId}`);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
@@ -140,6 +145,11 @@ export function uploadAvatar(file) {
 
 export function getAvatarBlobUrl() {
   return fetchImageAsBlobUrl('/student/profile/avatar');
+}
+
+// Recruiter/placement-officer/admin viewing a candidate's photo, not the student themselves.
+export function getCandidateAvatarBlobUrl(studentId) {
+  return fetchImageAsBlobUrl(`/student/profile/${studentId}/avatar`);
 }
 
 export function deleteAvatar() {

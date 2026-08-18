@@ -75,7 +75,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d postgres"]
       interval: 5s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 10s
 
   rabbitmq:
@@ -100,7 +100,7 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 10s
-      retries: 12
+      retries: 30
       start_period: 30s
 
   # ---------------------------------------------------------------------------------------------
@@ -129,7 +129,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Boot 4 cold start plus ddl-auto against an empty schema. Too short a start_period here just
       # burns retries while Hibernate is still creating tables.
       start_period: 60s
@@ -145,7 +145,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8082/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 60s
 
   assessment-service:
@@ -159,7 +159,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8083/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Longest of the five: data.sql seeds 7 careers / 5 categories / 22 questions / 88 options on
       # every startup, after defer-datasource-initialization waits for ddl-auto.
       start_period: 90s
@@ -175,7 +175,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8084/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 60s
 
   notification-service:
@@ -208,7 +208,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8085/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 60s
 
   organization-service:
@@ -222,7 +222,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8087/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 60s
 
   roadmap-service:
@@ -236,7 +236,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8088/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Longer than the other backends: RoadmapDataSeeder runs as a CommandLineRunner after ddl-auto
       # and writes 7 templates plus 47 milestones before the app reports ready on first boot.
       start_period: 90s
@@ -257,7 +257,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8089/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Shorter than roadmap-service's 90s: no seeder here, every row is created by an event.
       start_period: 30s
 
@@ -280,7 +280,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8090/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Same as prs-service: no seeder, every row comes from a controller call.
       start_period: 30s
 
@@ -301,7 +301,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8091/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Same as prs-service and recruiter-service: no seeder, every row comes from a controller call.
       start_period: 30s
 
@@ -329,7 +329,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8093/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # 60s, not 90s. PlanDataSeeder writes four rows, which is nothing like roadmap-service's 7
       # templates plus 47 milestones; what dominates here is Boot 4 cold start plus ddl-auto against
       # an empty schema, which is the 60s bucket.
@@ -370,7 +370,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8092/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # Same as prs-service and resume-service: no seeder, no ddl-auto. The 47-milestone catalog is
       # populated by an admin POST, never at startup.
       start_period: 30s
@@ -386,7 +386,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8094/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       # 60s, matching payment-service: no seeder, but Boot 4 cold start plus ddl-auto against an
       # empty schema is the 60s bucket rather than the 30s one.
       start_period: 60s
@@ -453,7 +453,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health/liveness || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 40s
 
   frontend:
@@ -467,7 +467,11 @@ services:
     container_name: careerbridge-frontend
     restart: unless-stopped
     ports:
-      - "5173:80"
+      # Published on the plain HTTP port so visitors hit the site with no port number in the URL
+      # (http://<host>/ instead of http://<host>:5173/). Locally this would collide with anything
+      # already bound to host port 80, which is why local dev still used 5173 -- an EC2 instance
+      # has nothing else claiming 80.
+      - "80:80"
     depends_on:
       api-gateway:
         condition: service_healthy
@@ -475,7 +479,7 @@ services:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 30
       start_period: 10s
 
 volumes:

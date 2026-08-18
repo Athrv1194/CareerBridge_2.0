@@ -67,8 +67,60 @@
   .cb-co-header { padding: 0 16px !important; gap: 12px !important; }
 }
 
+/* Phone-only bar inside the chat pane; the two rail drawers have no other trigger. */
+.cb-co-mobile-bar { display: none; }
+
 @media (max-width: 560px) {
   .cb-co-avatar-name { display: none !important; }
+
+  /* The shell is a 4-column grid (nav + sessions + chat + resources) with overflow-x: auto,
+     so on a phone it sideways-scrolled instead of overflowing -- which is exactly why the
+     overflow probe passed this page while the chat was squeezed into a ~360px slice.
+     All three rails leave the grid and become overlay drawers; the chat gets the viewport.
+     Doubled class so this beats .cb-co-shell's own single-class rule above regardless of
+     source order, same reasoning as .cb-app-shell.cb-app-shell in responsive.css. */
+  .cb-co-shell.cb-co-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+    overflow-x: hidden !important;
+  }
+
+  .cb-co-mobile-bar { display: flex !important; }
+
+  .cb-co-sessions,
+  .cb-co-resources {
+    position: fixed !important;
+    top: var(--header-height);
+    bottom: 0;
+    width: min(300px, 86vw) !important;
+    /* !important is required here, not just tidy: .cb-co-resources carries an inline
+       zIndex: 2 (so the floating robot mascot sits above it on desktop), and inline
+       styles beat a plain class rule regardless of specificity. Without !important this
+       silently loses to the inline value, the drawer stays below the z-index: 59 scrim,
+       and the scrim's dark tint renders OVER the open drawer instead of behind it --
+       exactly the "Resources looks dark, Sessions doesn't" bug this fixes. */
+    z-index: 60 !important;
+    box-shadow: var(--shadow-menu);
+    /* Same pattern as .cb-app-rail in responsive.css: delay the visibility flip on
+       close until the slide-out transform has actually finished, or the drawer
+       vanishes the instant .is-open is removed and the slide is never seen. */
+    transition: transform 260ms var(--ease-standard), visibility 0s linear 260ms;
+    visibility: hidden;
+  }
+
+  .cb-co-sessions { left: 0; transform: translateX(-100%); }
+  .cb-co-resources { right: 0; transform: translateX(100%); }
+
+  .cb-co-sessions.is-open,
+  .cb-co-resources.is-open {
+    transform: translateX(0);
+    transition: transform 260ms var(--ease-standard), visibility 0s linear 0s;
+    visibility: visible;
+  }
+}
+
+@media (max-width: 560px) and (prefers-reduced-motion: reduce) {
+  .cb-co-sessions,
+  .cb-co-resources { transition: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

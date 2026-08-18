@@ -85,13 +85,13 @@ function ProfileForm({ draft, setDraft, onSubmit, saving, error, submitLabel, sh
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {showNameFields && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="First name" required><Input value={draft.firstName} onChange={field('firstName')} placeholder="Ananya" /></Field>
           <Field label="Last name" required><Input value={draft.lastName} onChange={field('lastName')} placeholder="Rao" /></Field>
         </div>
       )}
       <Field label="Bio" hint="Optional"><Textarea rows={4} value={draft.bio} onChange={field('bio')} placeholder="A sentence or two on what you help students with." /></Field>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label="Current company" required><Input value={draft.currentCompany} onChange={field('currentCompany')} placeholder="Zylo Systems" /></Field>
         <Field label="Current role" required><Input value={draft.currentRole} onChange={field('currentRole')} placeholder="Staff Engineer" /></Field>
       </div>
@@ -442,7 +442,7 @@ export default function MentorConsolePage() {
                   </a>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', width: '100%', marginTop: 8 }}>
+                <div className="cb-stack-sm" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--line-hairline)', border: '1px solid var(--line-hairline)', width: '100%', marginTop: 8 }}>
                   <div style={{ background: 'var(--bone-200)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
                     <span className="cb-eyebrow">Sessions completed</span>
                     <span style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--ink-900)' }}>{profile.sessionsCompleted || 0}</span>
@@ -480,7 +480,7 @@ export default function MentorConsolePage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+            <div className="cb-scroll-x" style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
               {[{ value: 'REQUESTED', label: 'Requests', count: requestsCount }, { value: 'ACCEPTED', label: 'Upcoming', count: upcomingCount }, { value: 'HISTORY', label: 'History', count: historyCount }].map((it) => (
                 <button
                   key={it.value}

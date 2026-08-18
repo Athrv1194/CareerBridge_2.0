@@ -7,7 +7,7 @@
   .cb-sa-field-grid { grid-template-columns: 1fr !important; }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
   .cb-sa-split { grid-template-columns: 1fr !important; }
   .cb-sa-split-list { max-height: 320px !important; }
 }
@@ -16,4 +16,8 @@
   .cb-sa-page-title { font-size: 26px !important; }
   .cb-sa-stat-grid { grid-template-columns: 1fr !important; }
   .cb-sa-detail-stat-grid { grid-template-columns: 1fr !important; }
+  /* Header is Logo + "Admin" label + name + role + Log out, with no bell or divider to
+     trim first like the other consoles -- name/role text is what has to give. */
+  .cb-sa-avatar-name { display: none !important; }
+  .cb-app-header-actions { gap: 8px !important; }
 }
