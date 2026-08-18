@@ -85,6 +85,16 @@ public class AdminUserServiceImpl implements AdminUserService {
         return toResponse(user);
     }
 
+    /** Self-service: no requireAdmin -- a caller is always entitled to read their own record. */
+    @Override
+    @Transactional(readOnly = true)
+    public UserSummaryResponse getOwnProfile(Long callerId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(callerId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        return toResponse(user);
+    }
+
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getPlatformStats(String callerRole, Long callerOrgId) {
@@ -255,8 +265,35 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         requireSameOrgIfOrgAdmin(callerRole, callerOrgId, user);
 
-        // A department is a subdivision of an organization, so it cannot be set on someone who has
-        // none -- storing one would produce a user filed under a department no organization owns.
+        return applyDepartment(user, department, "admin " + callerRole);
+    }
+
+    /**
+     * Self-service counterpart to assignDepartment. No requireAdmin/requireSameOrgIfOrgAdmin -- a
+     * caller acting on their OWN record needs no authorization beyond being that record's owner,
+     * same reasoning as OrganizationJoinRequestService.submit needing no org check for the caller.
+     */
+    @Override
+    @Transactional
+    public UserSummaryResponse assignOwnDepartment(Long callerId, String department) {
+        User user = userRepository.findByIdAndIsDeletedFalse(callerId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        return applyDepartment(user, department, "self");
+    }
+
+    /**
+     * Shared by assignDepartment and assignOwnDepartment: the organizationId guard, blank-to-null
+     * normalisation and save are identical either way -- only who is allowed to call it differs.
+     *
+     * A department is a subdivision of an organization, so it cannot be set on someone who has none
+     * -- storing one would produce a user filed under a department no organization owns.
+     *
+     * Blank normalises to null rather than being stored: "" and "   " would otherwise each become a
+     * distinct department key, grouping separately from genuinely unassigned users on any dashboard
+     * that groups by this field.
+     */
+    private UserSummaryResponse applyDepartment(User user, String department, String actor) {
         if (user.getOrganizationId() == null) {
             throw new CustomException("User does not belong to an organization",
                     HttpStatus.BAD_REQUEST);
@@ -268,7 +305,8 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.setDepartment(normalised);
         User saved = userRepository.save(user);
 
-        log.info("Department changed for userId={} from {} to {}", targetUserId, previous, normalised);
+        log.info("Department changed for userId={} from {} to {} (by {})",
+                user.getId(), previous, normalised, actor);
 
         return toResponse(saved);
     }

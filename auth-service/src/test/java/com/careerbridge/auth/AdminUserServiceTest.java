@@ -462,6 +462,83 @@ class AdminUserServiceTest {
     }
 
     // -------------------------------------------------------------------------------------------
+    // getOwnProfile / assignOwnDepartment
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getOwnProfile returns the caller's own record, no role check")
+    void getOwnProfile_ReturnsSelf() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+
+        UserSummaryResponse result = adminUserService.getOwnProfile(5L);
+
+        assertEquals(5L, result.getId());
+    }
+
+    @Test
+    @DisplayName("getOwnProfile throws 404 for an unknown or deleted caller")
+    void getOwnProfile_Unknown_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.getOwnProfile(999L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("a STUDENT can assign their own department with no admin role at all")
+    void assignOwnDepartment_Student_Assigns() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result = adminUserService.assignOwnDepartment(5L, "Computer Science");
+
+        assertEquals("Computer Science", result.getDepartment());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment refuses a caller with no organization, same guard as the admin path")
+    void assignOwnDepartment_NoOrganization_Throws400() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, null, false)));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignOwnDepartment(5L, "Computer Science"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment normalises blank to null, same as the admin path")
+    void assignOwnDepartment_Blank_StoredAsNull() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignOwnDepartment(5L, "   ");
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertNull(saved.getValue().getDepartment());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment throws 404 for an unknown caller")
+    void assignOwnDepartment_UnknownUser_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignOwnDepartment(999L, "Computer Science"));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------------------------
     // deactivateUser / activateUser
     // -------------------------------------------------------------------------------------------
 

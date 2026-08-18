@@ -161,7 +161,7 @@ public class OrganizationServiceImpl implements OrganizationService {
     @Transactional(readOnly = true)
     public List<DepartmentResponse> getDepartmentsByOrg(Long organizationId, String callerRole,
                                                         Long callerOrgId) {
-        requireCanAccessOrganization(organizationId, callerRole, callerOrgId);
+        requireMemberOrSuperAdmin(organizationId, callerRole, callerOrgId);
 
         // Confirms the organization exists and is active before returning an empty list, so a
         // caller can tell "no departments" apart from "no such organization".
@@ -196,6 +196,24 @@ public class OrganizationServiceImpl implements OrganizationService {
             return;
         }
         if (ROLE_ORG_ADMIN.equals(callerRole) && Objects.equals(callerOrgId, organizationId)) {
+            return;
+        }
+        throw new CustomException("You do not have access to this organization", HttpStatus.FORBIDDEN);
+    }
+
+    /**
+     * Deliberately looser than requireCanAccessOrganization, and only for this one read. Listing
+     * department NAMES is what lets a student self-select theirs on the Profile page (auth-service's
+     * assignOwnDepartment) -- restricting it to ORG_ADMIN/SUPER_ADMIN, as every other organization
+     * endpoint does, would make that impossible for the exact audience it exists for. Any role whose
+     * own organizationId matches the one being read may see its department list; SUPER_ADMIN, as
+     * everywhere else, reaches every organization.
+     */
+    private void requireMemberOrSuperAdmin(Long organizationId, String callerRole, Long callerOrgId) {
+        if (ROLE_SUPER_ADMIN.equals(callerRole)) {
+            return;
+        }
+        if (Objects.equals(callerOrgId, organizationId)) {
             return;
         }
         throw new CustomException("You do not have access to this organization", HttpStatus.FORBIDDEN);

@@ -67,4 +67,17 @@ public interface AdminUserService {
 
     /** Counts are platform-wide for a SUPER_ADMIN and organization-scoped for an ORG_ADMIN. */
     AdminStatsResponse getPlatformStats(String callerRole, Long callerOrgId);
+
+    /**
+     * Self-service: a caller reading their OWN record. No role or org check -- unlike every other
+     * method here, a user is always entitled to read their own data, whoever they are.
+     */
+    UserSummaryResponse getOwnProfile(Long callerId);
+
+    /**
+     * Self-service: a caller assigns or clears their OWN department. Same normalisation and
+     * organizationId guard as assignDepartment, but no requireAdmin/requireSameOrgIfOrgAdmin --
+     * acting on your own record needs no authorization beyond being that record's owner.
+     */
+    UserSummaryResponse assignOwnDepartment(Long callerId, String department);
 }

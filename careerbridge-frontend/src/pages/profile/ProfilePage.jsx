@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Button, Checkbox, Field, Icon, IconButton, Input, Logo,
-  revealStyle, Skeleton, Switch, Tag, Textarea,
+  revealStyle, Select, Skeleton, Switch, Tag, Textarea,
 } from '../../components/ui';
 import {
   getMyProfile, updateMyProfile,
@@ -15,6 +15,7 @@ import {
 } from '../../api/studentApi';
 import { getMyResumes, generateResume, deleteResume, downloadResume } from '../../api/resumeApi';
 import { getUnreadCount } from '../../api/notificationApi';
+import { getMyAccount, assignMyDepartment, listDepartments } from '../../api/adminApi';
 import { clearTokens } from '../../utils/tokenUtils';
 import { getNavCollapsed, setNavCollapsed as persistNavCollapsed } from '../../utils/navPrefs';
 import './profile.css';
@@ -350,6 +351,9 @@ export default function ProfilePage() {
   const [cropSaving, setCropSaving] = useState(false);
 
   const [profile, setProfile] = useState(null);
+  const [account, setAccount] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [deptSaving, setDeptSaving] = useState(false);
   const [skills, setSkills] = useState([]);
   const [educations, setEducations] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -423,6 +427,29 @@ export default function ProfilePage() {
   }, [showToast]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // account (department, organizationId) lives on auth-service's User, not student-service's
+  // StudentProfile -- getMyProfile() above never carries it, so it needs its own fetch.
+  useEffect(() => { getMyAccount().then(setAccount).catch(() => {}); }, []);
+
+  // Fetched only once we know the caller's organizationId -- an unlinked student has no
+  // organization's department list to source options from at all.
+  useEffect(() => {
+    if (!account?.organizationId) return;
+    listDepartments(account.organizationId).then(setDepartments).catch(() => setDepartments([]));
+  }, [account?.organizationId]);
+
+  const changeDepartment = (department) => {
+    setDeptSaving(true);
+    const next = department || null;
+    assignMyDepartment(next)
+      .then(() => {
+        setAccount((prev) => ({ ...prev, department: next }));
+        showToast(next ? 'Department set' : 'Department cleared', next || '');
+      })
+      .catch((e) => showToast('Could not update department', e.message, 'danger'))
+      .finally(() => setDeptSaving(false));
+  };
   useEffect(() => { getUnreadCount().then((r) => setUnreadCount(r.unreadCount)).catch(() => {}); }, []);
   useEffect(() => () => { clearTimeout(toastTimerRef.current); clearTimeout(blurTimerRef.current); }, []);
 
@@ -885,6 +912,34 @@ export default function ProfilePage() {
                       {p.githubUrl && <a href={urlHref(p.githubUrl)} target="_blank" rel="noopener noreferrer">GitHub</a>}
                       {p.portfolioUrl && <a href={urlHref(p.portfolioUrl)} target="_blank" rel="noopener noreferrer">Portfolio</a>}
                     </div>
+                    {account && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 2 }}>
+                        {account.organizationId == null ? (
+                          <span style={{ color: 'var(--ink-400)' }}>
+                            Join an organization to pick a department — ask your placement officer or
+                            org admin for the Organization ID, or submit a join request.
+                          </span>
+                        ) : (
+                          <>
+                            <Icon name="building-2" size={14} style={{ color: 'var(--ink-500)' }} />
+                            <Select
+                              value={account.department || ''}
+                              onChange={(e) => changeDepartment(e.target.value)}
+                              style={{ minWidth: 170, opacity: deptSaving ? 0.5 : 1 }}
+                              options={[
+                                { value: '', label: 'No department' },
+                                ...departments.map((d) => ({ value: d.name, label: d.name })),
+                                // Free text can outlive the department that named it -- same
+                                // fallback as College Dashboard's Students tab and Super Admin.
+                                ...(account.department && !departments.some((d) => d.name === account.department)
+                                  ? [{ value: account.department, label: `${account.department} (not in list)` }]
+                                  : []),
+                              ]}
+                            />
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <Button variant="secondary" size="sm" onClick={openEditDialog}>Edit profile</Button>
                 </section>

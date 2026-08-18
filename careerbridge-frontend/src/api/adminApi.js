@@ -59,6 +59,19 @@ export function assignUserDepartment(userId, department) {
   });
 }
 
+// ---- auth-service: self-service (the caller's own record) ----
+export function getMyAccount() {
+  return authedFetch('/auth/me');
+}
+
+// department may be null or '' to unassign. Requires the caller already have an organizationId.
+export function assignMyDepartment(department) {
+  return authedFetch('/auth/me/department', {
+    method: 'PATCH',
+    body: JSON.stringify({ department }),
+  });
+}
+
 // ---- organization-service: organisations + departments ----
 export function listOrganizations() {
   return authedFetch('/organization');
