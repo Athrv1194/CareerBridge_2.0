@@ -10,7 +10,7 @@ import {
   assignUserDepartment,
 } from '../../api/adminApi';
 import { listOrgJoinRequests, approveOrgJoinRequest, rejectOrgJoinRequest } from '../../api/orgJoinApi';
-import { getTokenPayload, getDisplayName } from '../../utils/tokenUtils';
+import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
 import './college.css';
 
 const ROLE_REDIRECT = { STUDENT: '/dashboard', RECRUITER: '/recruiter-console', PLACEMENT_OFFICER: '/placement-console', SUPER_ADMIN: '/super-admin', MENTOR: '/mentor-console' };
@@ -317,6 +317,8 @@ export default function CollegeDashboardPage() {
               <span style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--ink-400)' }}>Org admin</span>
             </div>
           </div>
+          <div style={{ width: 1, height: 26, background: 'var(--line-hairline)' }} />
+          <Button variant="ghost" size="sm" onClick={() => { clearTokens(); navigate('/'); }}>Log out</Button>
         </div>
       </header>
 
