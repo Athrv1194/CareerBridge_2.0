@@ -58,4 +58,18 @@ public class PlacementStatsResponse {
 
     /** Distinct company names with at least one accepted offer, capped at 5. */
     private List<String> topCompanies;
+
+    /**
+     * The same figures again, split per department, ordered by offersAccepted descending.
+     *
+     * Populated ONLY on the org-scoped endpoint. Empty on the recruiter-scoped one, and deliberately
+     * so: that path's stated guarantee is zero cross-service calls, which is what keeps it working
+     * while prs-service is down (pinned by myStats_NeverCallsPrsService). Department names live in
+     * student-service, so producing this there would need a call and would forfeit that guarantee
+     * for a breakdown a recruiter has little use for -- their applicants span every college.
+     *
+     * Also empty when student-service is unreachable: the breakdown degrades on its own while the
+     * top-level totals, which need no department data, stay correct.
+     */
+    private List<DepartmentPlacementStatsDto> departmentBreakdown;
 }

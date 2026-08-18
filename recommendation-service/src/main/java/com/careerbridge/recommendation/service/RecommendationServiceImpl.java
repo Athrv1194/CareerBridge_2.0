@@ -161,8 +161,8 @@ public class RecommendationServiceImpl implements RecommendationService {
      * per user", so if two events ever raced and both inserted, this repairs the duplicate on the
      * next assessment instead of leaving it forever.
      *
-     * ponytail: last-writer-wins on concurrent events for one user; SELECT ... FOR UPDATE on the
-     * active row if simultaneous submissions ever become real.
+     * Last-writer-wins on concurrent events for one user; SELECT ... FOR UPDATE on the active row
+     * if simultaneous submissions ever become real.
      */
     private void deactivatePrevious(Long userId) {
         List<Recommendation> active =
@@ -178,10 +178,10 @@ public class RecommendationServiceImpl implements RecommendationService {
      * Fail-soft: a broker outage must not cost the student their recommendation, which is already
      * saved and readable over HTTP either way.
      *
-     * ponytail: publishes before the surrounding transaction commits, so a rollback after this
-     * point would leave a phantom event. Kept last in generateRecommendation to shrink that window;
-     * move to @TransactionalEventListener(AFTER_COMMIT) if exactly-once delivery starts mattering.
-     * Same trade-off assessment-service documents on its own publisher.
+     * Publishes before the surrounding transaction commits, so a rollback after this point would
+     * leave a phantom event. Kept last in generateRecommendation to shrink that window; move to
+     * @TransactionalEventListener(AFTER_COMMIT) if exactly-once delivery starts mattering. Same
+     * trade-off assessment-service documents on its own publisher.
      */
     private void publishGenerated(Recommendation saved) {
         try {
@@ -217,7 +217,7 @@ public class RecommendationServiceImpl implements RecommendationService {
     }
 
     /**
-     * ponytail: two extra queries per recommendation (N+1). Fine while a student has a handful of
+     * Two extra queries per recommendation (N+1). Fine while a student has a handful of
      * assessments; add a batched findByRecommendationIdIn if histories ever grow long.
      */
     @Override

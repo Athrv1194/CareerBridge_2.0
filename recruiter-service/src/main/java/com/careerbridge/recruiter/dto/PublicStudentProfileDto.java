@@ -25,6 +25,14 @@ public class PublicStudentProfileDto {
     private String lastName;
     private String email;
     private List<String> skills;
+
+    /**
+     * The student's department, as student-service holds it -- a local copy auth-service keeps
+     * current by publishing user.department.updated. Null means unassigned, or that student-service
+     * has not received an event for this student yet.
+     */
+    private String department;
+
     private Integer profileCompletionPercentage;
     private Boolean hasAvatar;
 }

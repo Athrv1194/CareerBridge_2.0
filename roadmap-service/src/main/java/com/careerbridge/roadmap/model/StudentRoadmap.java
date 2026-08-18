@@ -37,7 +37,7 @@ import java.util.List;
  * roadmap the student already started. Same idempotency shape as student_profiles.userId in
  * student-service.
  *
- * ponytail: no recommendationId anymore. Roadmaps used to be created only by consuming
+ * No recommendationId anymore. Roadmaps used to be created only by consuming
  * recommendation.generated, tied 1:1 to the recommendation that produced them; now they're built
  * on-demand for whichever career the student clicks, so that link no longer exists and nothing else
  * ever read the column. If provenance ("which recommendation led to this") becomes worth tracking

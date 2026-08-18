@@ -27,6 +27,10 @@ public class RabbitMQConfig {
     public static final String STUDENT_RESUME_QUEUE = "careerbridge.student.resume.queue";
     public static final String RESUME_GENERATED_ROUTING_KEY = "resume.generated";
 
+    /** A third queue, per the same one-queue-per-event-type rule as the two above. */
+    public static final String STUDENT_DEPARTMENT_QUEUE = "careerbridge.student.department.queue";
+    public static final String USER_DEPARTMENT_UPDATED_ROUTING_KEY = "user.department.updated";
+
     /**
      * Durable so queued registrations survive a broker restart -- the profile would otherwise
      * never be created and the student would land in the app with no profile row.
@@ -39,6 +43,11 @@ public class RabbitMQConfig {
     @Bean
     public Queue studentResumeQueue() {
         return new Queue(STUDENT_RESUME_QUEUE, true);
+    }
+
+    @Bean
+    public Queue studentDepartmentQueue() {
+        return new Queue(STUDENT_DEPARTMENT_QUEUE, true);
     }
 
     /**
@@ -61,6 +70,14 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(studentResumeQueue)
                 .to(careerBridgeExchange)
                 .with(RESUME_GENERATED_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding userDepartmentUpdatedBinding(Queue studentDepartmentQueue,
+                                                TopicExchange careerBridgeExchange) {
+        return BindingBuilder.bind(studentDepartmentQueue)
+                .to(careerBridgeExchange)
+                .with(USER_DEPARTMENT_UPDATED_ROUTING_KEY);
     }
 
     /**

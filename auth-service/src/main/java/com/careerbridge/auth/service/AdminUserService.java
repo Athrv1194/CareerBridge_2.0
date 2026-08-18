@@ -24,6 +24,25 @@ public interface AdminUserService {
 
     UserSummaryResponse activateUser(String callerRole, Long callerOrgId, Long targetUserId);
 
+    // Assigns a user to a department within their own organization. ORG_ADMIN (own org only) or
+    // SUPER_ADMIN. department null/blank unassigns; both normalise to stored null. Refuses a user
+    // with no organization.
+    UserSummaryResponse assignDepartment(String callerRole, Long callerOrgId, Long targetUserId,
+                                         String department);
+
     // Platform-wide for SUPER_ADMIN, org-scoped for ORG_ADMIN.
     AdminStatsResponse getPlatformStats(String callerRole, Long callerOrgId);
+
+    /**
+     * Self-service: a caller reading their OWN record. No role or org check -- unlike every other
+     * method here, a user is always entitled to read their own data, whoever they are.
+     */
+    UserSummaryResponse getOwnProfile(Long callerId);
+
+    /**
+     * Self-service: a caller assigns or clears their OWN department. Same normalisation and
+     * organizationId guard as assignDepartment, but no requireAdmin/requireSameOrgIfOrgAdmin --
+     * acting on your own record needs no authorization beyond being that record's owner.
+     */
+    UserSummaryResponse assignOwnDepartment(Long callerId, String department);
 }

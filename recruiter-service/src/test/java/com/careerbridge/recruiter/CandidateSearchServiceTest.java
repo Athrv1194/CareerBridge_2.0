@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -34,10 +35,15 @@ class CandidateSearchServiceTest {
     @InjectMocks private CandidateSearchServiceImpl candidateSearchService;
 
     private static PublicStudentProfileDto profile(Long id, String first, List<String> skills) {
+        return profile(id, first, skills, null);
+    }
+
+    private static PublicStudentProfileDto profile(Long id, String first, List<String> skills,
+                                                   String department) {
         return PublicStudentProfileDto.builder()
                 .studentId(id).firstName(first).lastName("Test")
                 .email(first.toLowerCase() + "@careerbridge.com")
-                .skills(skills).profileCompletionPercentage(60).build();
+                .skills(skills).department(department).profileCompletionPercentage(60).build();
     }
 
     private static PrsLeaderboardEntryDto score(Long studentId, Double total) {
@@ -48,7 +54,7 @@ class CandidateSearchServiceTest {
     @DisplayName("searchCandidates: a STUDENT is refused with 403 before any client is called")
     void searchCandidates_StudentRole_Throws403() {
         CustomException ex = assertThrows(CustomException.class,
-                () -> candidateSearchService.searchCandidates("STUDENT", null, null, null));
+                () -> candidateSearchService.searchCandidates("STUDENT", null, null, null, null));
 
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
         verify(studentServiceClient, never()).fetchPublicProfiles(anyString());
@@ -66,7 +72,7 @@ class CandidateSearchServiceTest {
         when(studentServiceClient.fetchPublicProfiles("RECRUITER")).thenReturn(List.of());
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", null, null, null);
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null);
 
         assertTrue(result.isEmpty());
         // No point asking prs-service for scores when there are no candidates to score.
@@ -81,7 +87,7 @@ class CandidateSearchServiceTest {
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of());
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", null, null, null);
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null);
 
         assertEquals(1, result.size());
         assertEquals(-1.0, result.get(0).getPrsScore());
@@ -99,10 +105,10 @@ class CandidateSearchServiceTest {
                 .thenReturn(List.of(profile(1L, "Ada", List.of("Java"))));
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of());
 
-        assertTrue(candidateSearchService.searchCandidates("RECRUITER", null, 50.0, null).isEmpty(),
+        assertTrue(candidateSearchService.searchCandidates("RECRUITER", null, 50.0, null, null).isEmpty(),
                 "an unknown score cannot be asserted to clear a floor");
 
-        assertEquals(1, candidateSearchService.searchCandidates("RECRUITER", null, null, 50.0).size(),
+        assertEquals(1, candidateSearchService.searchCandidates("RECRUITER", null, null, 50.0, null).size(),
                 "an unknown score has not been shown to exceed a ceiling");
     }
 
@@ -117,7 +123,7 @@ class CandidateSearchServiceTest {
                 .thenReturn(List.of(score(1L, 70.0), score(2L, 80.0), score(3L, 60.0)));
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", "JAVA", null, null);
+                candidateSearchService.searchCandidates("RECRUITER", "JAVA", null, null, null);
 
         assertEquals(2, result.size());
         assertEquals(List.of(1L, 3L), result.stream().map(CandidateResponse::getStudentId).sorted().toList());
@@ -134,7 +140,7 @@ class CandidateSearchServiceTest {
                 .thenReturn(List.of(score(1L, 70.0), score(2L, 80.0), score(3L, 60.0)));
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", "Java, Python", null, null);
+                candidateSearchService.searchCandidates("RECRUITER", "Java, Python", null, null, null);
 
         assertEquals(2, result.size());
     }
@@ -147,9 +153,9 @@ class CandidateSearchServiceTest {
                 profile(2L, "Grace", null)));
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
 
-        assertTrue(candidateSearchService.searchCandidates("RECRUITER", "Java", null, null).isEmpty());
+        assertTrue(candidateSearchService.searchCandidates("RECRUITER", "Java", null, null, null).isEmpty());
         // With no skill filter both are still candidates.
-        assertEquals(2, candidateSearchService.searchCandidates("RECRUITER", null, null, null).size());
+        assertEquals(2, candidateSearchService.searchCandidates("RECRUITER", null, null, null, null).size());
     }
 
     @Test
@@ -163,7 +169,7 @@ class CandidateSearchServiceTest {
                 .thenReturn(List.of(score(1L, 40.0), score(2L, 60.0), score(3L, 80.0)));
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", null, 40.0, 60.0);
+                candidateSearchService.searchCandidates("RECRUITER", null, 40.0, 60.0, null);
 
         assertEquals(List.of(2L, 1L), result.stream().map(CandidateResponse::getStudentId).toList());
     }
@@ -180,7 +186,7 @@ class CandidateSearchServiceTest {
                 .thenReturn(List.of(score(1L, 55.0), score(2L, 90.0)));
 
         List<CandidateResponse> result =
-                candidateSearchService.searchCandidates("RECRUITER", null, null, null);
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null);
 
         assertEquals(List.of(2L, 1L, 3L), result.stream().map(CandidateResponse::getStudentId).toList());
         assertEquals(-1.0, result.get(2).getPrsScore());
@@ -194,7 +200,7 @@ class CandidateSearchServiceTest {
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
 
         assertEquals(1,
-                candidateSearchService.searchCandidates("PLACEMENT_OFFICER", null, null, null).size());
+                candidateSearchService.searchCandidates("PLACEMENT_OFFICER", null, null, null, null).size());
     }
 
     /**
@@ -206,7 +212,7 @@ class CandidateSearchServiceTest {
     void searchCandidates_ForwardsCallerRole() {
         when(studentServiceClient.fetchPublicProfiles("PLACEMENT_OFFICER")).thenReturn(List.of());
 
-        candidateSearchService.searchCandidates("PLACEMENT_OFFICER", null, null, null);
+        candidateSearchService.searchCandidates("PLACEMENT_OFFICER", null, null, null, null);
 
         verify(studentServiceClient).fetchPublicProfiles("PLACEMENT_OFFICER");
     }
@@ -219,7 +225,7 @@ class CandidateSearchServiceTest {
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(42L, 70.0)));
 
         CandidateResponse candidate =
-                candidateSearchService.searchCandidates("RECRUITER", null, null, null).get(0);
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null).get(0);
 
         assertEquals(42L, candidate.getStudentId());
         assertEquals("ada@careerbridge.com", candidate.getEmail());
@@ -242,5 +248,130 @@ class CandidateSearchServiceTest {
                 candidateSearchService.searchCandidates("RECRUITER", null, null, null).get(0);
 
         assertEquals(true, candidate.getHasAvatar());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // department filter
+    //
+    // department arrives on the profile itself -- auth-service owns it, publishes
+    // user.department.updated, and student-service keeps the local copy that lands here. There is
+    // no third client to stub.
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("department is carried through from the student profile onto the candidate")
+    void searchCandidates_CarriesDepartment() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(42L, "Ada", List.of("Java"), "Computer Science")));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(42L, 70.0)));
+
+        CandidateResponse candidate =
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null).get(0);
+
+        assertEquals("Computer Science", candidate.getDepartment());
+    }
+
+    @Test
+    @DisplayName("department filter keeps only the matching department")
+    void searchCandidates_DepartmentFilter_KeepsOnlyMatches() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER")).thenReturn(List.of(
+                profile(1L, "Ada", List.of("Java"), "Computer Science"),
+                profile(2L, "Grace", List.of("Java"), "Mechanical")));
+        when(prsServiceClient.fetchGlobalLeaderboard())
+                .thenReturn(List.of(score(1L, 70.0), score(2L, 60.0)));
+
+        List<CandidateResponse> results = candidateSearchService
+                .searchCandidates("RECRUITER", null, null, null, "Computer Science");
+
+        assertEquals(1, results.size());
+        assertEquals(1L, results.get(0).getStudentId());
+    }
+
+    @Test
+    @DisplayName("department filter is case-insensitive")
+    void searchCandidates_DepartmentFilter_CaseInsensitive() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(1L, "Ada", List.of("Java"), "Computer Science")));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
+
+        assertEquals(1, candidateSearchService
+                .searchCandidates("RECRUITER", null, null, null, "computer science").size());
+    }
+
+    /**
+     * Exact match, not substring -- department names come from a fixed per-organization list, so
+     * "CS" must not silently pull in every "CSE" student. The opposite choice from mentor-service's
+     * deliberately-LIKE expertise filter.
+     */
+    @Test
+    @DisplayName("department filter does NOT substring-match: CS excludes CSE")
+    void searchCandidates_DepartmentFilter_IsNotSubstringMatch() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(1L, "Ada", List.of("Java"), "CSE")));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
+
+        assertTrue(candidateSearchService
+                .searchCandidates("RECRUITER", null, null, null, "CS").isEmpty());
+    }
+
+    /**
+     * Same asymmetry minScore has against SCORE_UNAVAILABLE: an unknown department cannot be
+     * asserted to match, so it is excluded rather than assumed.
+     */
+    @Test
+    @DisplayName("a candidate with no department is excluded by a department filter")
+    void searchCandidates_DepartmentFilter_ExcludesUnknownDepartment() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(1L, "Ada", List.of("Java"), null)));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
+
+        assertTrue(candidateSearchService
+                .searchCandidates("RECRUITER", null, null, null, "Computer Science").isEmpty());
+    }
+
+    @Test
+    @DisplayName("a blank department filter is treated as no filter at all")
+    void searchCandidates_BlankDepartmentFilter_IsIgnored() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(1L, "Ada", List.of("Java"), null)));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
+
+        assertEquals(1, candidateSearchService
+                .searchCandidates("RECRUITER", null, null, null, "   ").size());
+    }
+
+    @Test
+    @DisplayName("an unassigned department is null on the response, not an empty string")
+    void searchCandidates_UnassignedDepartment_IsNull() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER"))
+                .thenReturn(List.of(profile(1L, "Ada", List.of("Java"), null)));
+        when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(1L, 70.0)));
+
+        List<CandidateResponse> results =
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null);
+
+        assertEquals(1, results.size());
+        assertNull(results.get(0).getDepartment());
+    }
+
+    /**
+     * The department filter composes with the others rather than replacing them -- every supplied
+     * filter is ANDed, as the interface contract states.
+     */
+    @Test
+    @DisplayName("department filter combines with skills and score filters")
+    void searchCandidates_DepartmentFilter_CombinesWithOtherFilters() {
+        when(studentServiceClient.fetchPublicProfiles("RECRUITER")).thenReturn(List.of(
+                profile(1L, "Ada", List.of("Java"), "Computer Science"),
+                profile(2L, "Grace", List.of("Python"), "Computer Science"),
+                profile(3L, "Alan", List.of("Java"), "Mechanical")));
+        when(prsServiceClient.fetchGlobalLeaderboard())
+                .thenReturn(List.of(score(1L, 70.0), score(2L, 80.0), score(3L, 90.0)));
+
+        List<CandidateResponse> results = candidateSearchService
+                .searchCandidates("RECRUITER", "Java", 50.0, null, "Computer Science");
+
+        assertEquals(1, results.size());
+        assertEquals(1L, results.get(0).getStudentId());
     }
 }

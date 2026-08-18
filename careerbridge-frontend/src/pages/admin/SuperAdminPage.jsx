@@ -6,7 +6,7 @@ import {
 import { getTokenPayload, clearTokens } from '../../utils/tokenUtils';
 import {
   getPlatformStats, listUsers, getUserById, deactivateUser, activateUser, linkUserOrganization,
-  listOrganizations, createOrganization, updateOrganization, deactivateOrganization,
+  assignUserDepartment, listOrganizations, createOrganization, updateOrganization, deactivateOrganization,
   listOrgRequests, approveOrgRequest, rejectOrgRequest,
   listCategories, listAdminQuestions, addQuestion, editQuestion, activateQuestion, deactivateQuestion,
   getLeaderboard, listSubscriptions, getPlacementStats, refreshAiCoachResources,
@@ -187,6 +187,8 @@ function UsersTab() {
   const [orgs, setOrgs] = useState(null);
   const [orgEditId, setOrgEditId] = useState(null);
   const [orgDraft, setOrgDraft] = useState('');
+  const [deptEditId, setDeptEditId] = useState(null);
+  const [deptDraft, setDeptDraft] = useState('');
 
   const load = useCallback(() => {
     listUsers(roleFilter === 'ALL' ? undefined : roleFilter).then(setUsers).catch((e) => setError(e.message));
@@ -207,6 +209,24 @@ function UsersTab() {
     try {
       await linkUserOrganization(u.id, orgDraft === '' ? null : Number(orgDraft));
       setOrgEditId(null);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startEditDept(u) {
+    setDeptEditId(u.id);
+    setDeptDraft(u.department ?? '');
+  }
+
+  async function saveDept(u) {
+    setBusyId(u.id);
+    try {
+      await assignUserDepartment(u.id, deptDraft === '' ? null : deptDraft);
+      setDeptEditId(null);
       load();
     } catch (e) {
       setError(e.message);
@@ -261,7 +281,7 @@ function UsersTab() {
         <Table>
           <thead>
             <tr>
-              <Th>Name</Th><Th>Email</Th><Th>Role</Th><Th>Org</Th><Th align="right">Joined</Th><Th>Status</Th><Th align="right">Actions</Th>
+              <Th>Name</Th><Th>Email</Th><Th>Role</Th><Th>Org</Th><Th>Department</Th><Th align="right">Joined</Th><Th>Status</Th><Th align="right">Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -294,6 +314,46 @@ function UsersTab() {
                       <IconButton icon="pencil" label="Link organization" onClick={() => startEditOrg(u)} />
                     </div>
                   )}
+                </Td>
+                <Td style={{ color: 'var(--ink-500)' }}>
+                  {(() => {
+                    // Department options come from the user's OWN organization, embedded on the
+                    // org objects listOrganizations() already returns -- same data source the
+                    // Organisations tab uses for its department badges, no extra call needed.
+                    const userOrg = orgs?.find((o) => o.id === u.organizationId);
+                    const orgDepartments = userOrg?.departments ?? [];
+                    if (u.organizationId == null) {
+                      return <span style={{ fontSize: 12, color: 'var(--ink-300)' }}>—</span>;
+                    }
+                    return deptEditId === u.id ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <select
+                          value={deptDraft}
+                          onChange={(e) => setDeptDraft(e.target.value)}
+                          style={{
+                            boxSizing: 'border-box', padding: '6px 8px', fontSize: 12.5, fontFamily: 'var(--font-sans)',
+                            color: 'var(--ink-900)', background: 'var(--bone-50)', border: '1px solid var(--line-hairline)',
+                            borderRadius: 'var(--radius-sm)', outline: 'none', cursor: 'pointer', maxWidth: 150,
+                          }}
+                        >
+                          <option value="">Unassigned</option>
+                          {orgDepartments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          {/* Free text can outlive the department that named it -- see the same
+                              fallback on College Dashboard's Students tab. */}
+                          {u.department && !orgDepartments.some((d) => d.name === u.department) && (
+                            <option value={u.department}>{u.department} (not in list)</option>
+                          )}
+                        </select>
+                        <IconButton icon="check" label="Save" onClick={() => saveDept(u)} disabled={busyId === u.id} />
+                        <IconButton icon="x" label="Cancel" onClick={() => setDeptEditId(null)} disabled={busyId === u.id} />
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>{u.department || '—'}</span>
+                        <IconButton icon="pencil" label="Assign department" onClick={() => startEditDept(u)} />
+                      </div>
+                    );
+                  })()}
                 </Td>
                 <Td align="right" style={{ color: 'var(--ink-500)' }}><span className="cb-num">{fmtDate(u.createdAt)}</span></Td>
                 <Td><Badge tone={u.isDeleted ? 'danger' : 'success'}>{u.isDeleted ? 'Inactive' : 'Active'}</Badge></Td>

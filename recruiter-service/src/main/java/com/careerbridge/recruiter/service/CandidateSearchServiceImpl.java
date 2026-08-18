@@ -22,19 +22,28 @@ import java.util.stream.Collectors;
 /**
  * Candidate search is exactly two outbound HTTP calls, regardless of how many students exist:
  *
- *   1. student-service GET /api/student/profiles/public  -> identity + skills for every public profile
+ *   1. student-service GET /api/student/profiles/public  -> identity, skills and department
  *   2. prs-service     GET /api/prs/leaderboard          -> studentId -> totalScore for every student
  *
- * Then all filtering happens in memory. The alternative shape -- fetch a roster, then one profile
- * call per candidate -- is N+1 synchronous HTTP calls on a request thread at a 3s timeout each,
- * which is a hang waiting to happen on a real student body. Neither upstream endpoint takes filter
- * parameters, so pushing the predicates down is not currently possible; if the student body grows
- * past what one response can carry, the fix is a filtered/paged endpoint on student-service, not a
- * per-candidate loop here.
+ * Then all filtering happens in memory. The alternative shape -- fetch a roster, then one call per
+ * candidate -- is N+1 synchronous HTTP calls on a request thread at a 3s timeout each, which is a
+ * hang waiting to happen on a real student body. Neither upstream endpoint takes filter parameters,
+ * so pushing the predicates down is not currently possible; if the student body grows past what one
+ * response can carry, the fix is a filtered/paged endpoint on student-service, not a per-candidate
+ * loop here.
+ *
+ * department arrives on the profile rather than from a third call, and that is not merely an
+ * optimisation. It is OWNED by auth-service (it sits beside User.organizationId), but auth-service
+ * is the only backend service with Spring Security on its classpath and its chain ends in
+ * .anyRequest().authenticated() -- a service-to-service GET carrying only gateway-style headers is
+ * answered 401, and this service holds no JWT to present. Nothing in this system calls auth-service
+ * synchronously for that reason. Instead auth-service publishes user.department.updated,
+ * student-service keeps a local copy on StudentProfile, and it reaches here on the profile call
+ * that was already being made. Same event-plus-local-copy shape as resume.generated -> resumeUrl.
  *
  * Both clients are fail-soft. A student-service outage yields an empty result (there are no
- * candidates to show); a prs-service outage yields candidates with SCORE_UNAVAILABLE rather than
- * no candidates at all.
+ * candidates to show at all); a prs-service outage yields candidates with SCORE_UNAVAILABLE rather
+ * than no candidates at all.
  */
 @Service
 public class CandidateSearchServiceImpl implements CandidateSearchService {
@@ -62,7 +71,8 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
 
     @Override
     public List<CandidateResponse> searchCandidates(String callerRole, String skills,
-                                                    Double minScore, Double maxScore) {
+                                                    Double minScore, Double maxScore,
+                                                    String department) {
         if (!SEARCH_ROLES.contains(callerRole)) {
             throw new CustomException(
                     "Only RECRUITER, PLACEMENT_OFFICER or SUPER_ADMIN may search candidates",
@@ -87,12 +97,16 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                 .map(s -> s.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
 
+        String wantedDepartment = (department == null || department.isBlank())
+                ? null : department.trim();
+
         return profiles.stream()
                 .filter(profile -> profile.getStudentId() != null)
                 .filter(profile -> matchesSkills(profile, wantedSkills))
                 .map(profile -> toCandidate(profile,
                         scoresByStudentId.getOrDefault(profile.getStudentId(), SCORE_UNAVAILABLE)))
                 .filter(candidate -> withinScoreRange(candidate.getPrsScore(), minScore, maxScore))
+                .filter(candidate -> matchesDepartment(candidate.getDepartment(), wantedDepartment))
                 // Highest score first; SCORE_UNAVAILABLE is -1.0 so it naturally sorts last.
                 .sorted(Comparator.comparingDouble(CandidateResponse::getPrsScore).reversed())
                 .toList();
@@ -128,6 +142,27 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
         return maxScore == null || unavailable || score <= maxScore;
     }
 
+    /**
+     * Exact match, case-insensitive -- NOT a substring match. Department names are picked from a
+     * fixed per-organization list rather than typed, so an exact comparison is what the data
+     * supports, and a substring one would make "CS" silently match "CSE". That is the opposite
+     * choice from mentor-service's expertise filter, which is deliberately LIKE %term% because it
+     * searches free text a mentor typed.
+     *
+     * An unknown department (null) fails the filter, matching how withinScoreRange treats
+     * SCORE_UNAVAILABLE against minScore: "is in Computer Science" is a claim the data cannot
+     * support for a student whose department nobody recorded, or whose department could not be
+     * fetched. The visible consequence is that an auth-service outage empties a department-filtered
+     * search -- correct-but-unhelpful is the right side to fail on here, since the alternative is
+     * returning candidates the recruiter explicitly filtered out.
+     */
+    private boolean matchesDepartment(String candidateDepartment, String wantedDepartment) {
+        if (wantedDepartment == null) {
+            return true;
+        }
+        return candidateDepartment != null && candidateDepartment.equalsIgnoreCase(wantedDepartment);
+    }
+
     private CandidateResponse toCandidate(PublicStudentProfileDto profile, double prsScore) {
         return CandidateResponse.builder()
                 .studentId(profile.getStudentId())
@@ -138,6 +173,7 @@ public class CandidateSearchServiceImpl implements CandidateSearchService {
                 .prsScore(prsScore)
                 .profileCompletionPercentage(profile.getProfileCompletionPercentage())
                 .hasAvatar(Boolean.TRUE.equals(profile.getHasAvatar()))
+                .department(profile.getDepartment())
                 .build();
     }
 }

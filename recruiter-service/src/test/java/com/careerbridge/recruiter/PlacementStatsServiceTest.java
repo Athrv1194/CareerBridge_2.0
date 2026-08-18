@@ -1,7 +1,9 @@
 package com.careerbridge.recruiter;
 
 import com.careerbridge.recruiter.dto.PlacementStatsResponse;
+import com.careerbridge.recruiter.dto.DepartmentPlacementStatsDto;
 import com.careerbridge.recruiter.dto.PrsLeaderboardEntryDto;
+import com.careerbridge.recruiter.dto.StudentDepartmentDto;
 import com.careerbridge.recruiter.exception.CustomException;
 import com.careerbridge.recruiter.model.Company;
 import com.careerbridge.recruiter.model.Job;
@@ -13,6 +15,7 @@ import com.careerbridge.recruiter.repository.JobApplicationRepository;
 import com.careerbridge.recruiter.repository.JobRepository;
 import com.careerbridge.recruiter.service.PlacementStatsServiceImpl;
 import com.careerbridge.recruiter.service.PrsServiceClient;
+import com.careerbridge.recruiter.service.StudentServiceClient;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +48,7 @@ class PlacementStatsServiceTest {
     @Mock private JobRepository jobRepository;
     @Mock private CompanyRepository companyRepository;
     @Mock private PrsServiceClient prsServiceClient;
+    @Mock private StudentServiceClient studentServiceClient;
 
     @InjectMocks private PlacementStatsServiceImpl statsService;
 
@@ -52,6 +56,10 @@ class PlacementStatsServiceTest {
         PrsLeaderboardEntryDto entry = new PrsLeaderboardEntryDto();
         entry.setStudentId(studentId);
         return entry;
+    }
+
+    private static StudentDepartmentDto dept(Long studentId, String department) {
+        return StudentDepartmentDto.builder().studentId(studentId).department(department).build();
     }
 
     private static JobApplication application(Long id, Long studentId, Long jobId,
@@ -274,6 +282,9 @@ class PlacementStatsServiceTest {
         statsService.getMyPlacementStats("RECRUITER", RECRUITER_ID);
 
         verifyNoInteractions(prsServiceClient);
+        // Extends the same guarantee to the department source: populating a breakdown here would
+        // have quietly reintroduced a cross-service dependency on this deliberately-local path.
+        verifyNoInteractions(studentServiceClient);
     }
 
     @Test
@@ -293,5 +304,149 @@ class PlacementStatsServiceTest {
         assertEquals(HttpStatus.FORBIDDEN, assertThrows(CustomException.class,
                 () -> statsService.getMyPlacementStats("ORG_ADMIN", RECRUITER_ID)).getStatus());
         verifyNoInteractions(jobRepository, jobApplicationRepository);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Department breakdown
+    // ------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("breakdown splits the same figures per department, ordered by offersAccepted desc")
+    void orgStats_DepartmentBreakdown_SplitsPerDepartment() {
+        when(prsServiceClient.fetchOrgLeaderboard(ORG_ID))
+                .thenReturn(List.of(rosterEntry(1L), rosterEntry(2L), rosterEntry(3L)));
+        when(jobApplicationRepository.findByStudentIdIn(any())).thenReturn(List.of(
+                application(10L, 1L, 100L, ApplicationStatus.OFFERED, OfferOutcome.ACCEPTED, "12.00"),
+                application(11L, 2L, 100L, ApplicationStatus.OFFERED, OfferOutcome.ACCEPTED, "18.00"),
+                application(12L, 3L, 100L, ApplicationStatus.APPLIED, null, null)));
+        when(studentServiceClient.fetchStudentDepartments("ORG_ADMIN")).thenReturn(List.of(
+                dept(1L, "Computer Science"), dept(2L, "Computer Science"), dept(3L, "Mechanical")));
+        when(jobRepository.findAllById(any())).thenReturn(List.of(
+                Job.builder().id(100L).companyId(500L).build()));
+        when(companyRepository.findAllById(any())).thenReturn(List.of(
+                Company.builder().id(500L).name("Acme").build()));
+
+        List<DepartmentPlacementStatsDto> breakdown =
+                statsService.getOrgPlacementStats("ORG_ADMIN", ORG_ID).getDepartmentBreakdown();
+
+        assertEquals(2, breakdown.size());
+        // Ordered by offersAccepted descending, so CS (2) precedes Mechanical (0).
+        DepartmentPlacementStatsDto cs = breakdown.get(0);
+        assertEquals("Computer Science", cs.getDepartment());
+        assertEquals(2, cs.getStudentsInScope());
+        assertEquals(2, cs.getOffersAccepted());
+        assertEquals(100.0, cs.getPlacementRate());
+        assertEquals(new BigDecimal("15.00"), cs.getAverageCtc());
+        assertEquals(new BigDecimal("18.00"), cs.getHighestCtc());
+
+        DepartmentPlacementStatsDto mech = breakdown.get(1);
+        assertEquals("Mechanical", mech.getDepartment());
+        assertEquals(1, mech.getStudentsInScope());
+        assertEquals(0, mech.getOffersAccepted());
+        assertEquals(0.0, mech.getPlacementRate());
+        assertNull(mech.getAverageCtc());
+    }
+
+    /**
+     * The rows must account for every student in the roster. Dropping the unassigned cohort would
+     * make the breakdown stop summing to the total -- arithmetic a reader trusts without checking.
+     */
+    @Test
+    @DisplayName("students with no department become a single null-keyed row, not dropped")
+    void orgStats_DepartmentBreakdown_KeepsUnassignedAsNullRow() {
+        when(prsServiceClient.fetchOrgLeaderboard(ORG_ID))
+                .thenReturn(List.of(rosterEntry(1L), rosterEntry(2L)));
+        when(jobApplicationRepository.findByStudentIdIn(any())).thenReturn(List.of(
+                application(10L, 1L, 100L, ApplicationStatus.APPLIED, null, null)));
+        when(studentServiceClient.fetchStudentDepartments("ORG_ADMIN")).thenReturn(List.of(
+                dept(1L, "Computer Science"), dept(2L, null)));
+
+        PlacementStatsResponse stats = statsService.getOrgPlacementStats("ORG_ADMIN", ORG_ID);
+        List<DepartmentPlacementStatsDto> breakdown = stats.getDepartmentBreakdown();
+
+        assertEquals(2, breakdown.size());
+        long summed = breakdown.stream().mapToLong(DepartmentPlacementStatsDto::getStudentsInScope).sum();
+        assertEquals(stats.getTotalStudentsInScope(), summed);
+        assertTrue(breakdown.stream().anyMatch(d -> d.getDepartment() == null));
+    }
+
+    /**
+     * The numbers for one college must not absorb another one: the departments endpoint returns
+     * every student on the platform, so the roster is what scopes it.
+     */
+    @Test
+    @DisplayName("students outside the roster are excluded from the breakdown")
+    void orgStats_DepartmentBreakdown_IgnoresStudentsOutsideRoster() {
+        when(prsServiceClient.fetchOrgLeaderboard(ORG_ID)).thenReturn(List.of(rosterEntry(1L)));
+        when(jobApplicationRepository.findByStudentIdIn(any())).thenReturn(List.of(
+                application(10L, 1L, 100L, ApplicationStatus.APPLIED, null, null)));
+        when(studentServiceClient.fetchStudentDepartments("ORG_ADMIN")).thenReturn(List.of(
+                dept(1L, "Computer Science"),
+                dept(99L, "Some Other College Department")));
+
+        List<DepartmentPlacementStatsDto> breakdown =
+                statsService.getOrgPlacementStats("ORG_ADMIN", ORG_ID).getDepartmentBreakdown();
+
+        assertEquals(1, breakdown.size());
+        assertEquals("Computer Science", breakdown.get(0).getDepartment());
+        assertEquals(1, breakdown.get(0).getStudentsInScope());
+    }
+
+    /**
+     * The breakdown degrades on its own. The top-level totals need no department data, so a
+     * student-service outage must not cost them.
+     */
+    @Test
+    @DisplayName("student-service down: breakdown is empty but the totals are still correct")
+    void orgStats_StudentServiceDown_TotalsSurviveWithoutBreakdown() {
+        when(prsServiceClient.fetchOrgLeaderboard(ORG_ID))
+                .thenReturn(List.of(rosterEntry(1L), rosterEntry(2L)));
+        when(jobApplicationRepository.findByStudentIdIn(any())).thenReturn(List.of(
+                application(10L, 1L, 100L, ApplicationStatus.OFFERED, OfferOutcome.ACCEPTED, "12.00")));
+        when(studentServiceClient.fetchStudentDepartments("ORG_ADMIN")).thenReturn(List.of());
+        when(jobRepository.findAllById(any())).thenReturn(List.of(
+                Job.builder().id(100L).companyId(500L).build()));
+        when(companyRepository.findAllById(any())).thenReturn(List.of(
+                Company.builder().id(500L).name("Acme").build()));
+
+        PlacementStatsResponse stats = statsService.getOrgPlacementStats("ORG_ADMIN", ORG_ID);
+
+        assertTrue(stats.getDepartmentBreakdown().isEmpty());
+        assertEquals(2, stats.getTotalStudentsInScope());
+        assertEquals(1, stats.getOffersAccepted());
+        assertEquals(new BigDecimal("12.00"), stats.getAverageCtc());
+    }
+
+    /**
+     * Department rows must never disagree with the total they belong to -- both come from the same
+     * counting helpers, and this pins that they actually add up.
+     */
+    @Test
+    @DisplayName("department rows sum to the top-level accepted and application counts")
+    void orgStats_DepartmentBreakdown_SumsToTotals() {
+        when(prsServiceClient.fetchOrgLeaderboard(ORG_ID))
+                .thenReturn(List.of(rosterEntry(1L), rosterEntry(2L), rosterEntry(3L)));
+        when(jobApplicationRepository.findByStudentIdIn(any())).thenReturn(List.of(
+                application(10L, 1L, 100L, ApplicationStatus.OFFERED, OfferOutcome.ACCEPTED, "10.00"),
+                application(11L, 2L, 100L, ApplicationStatus.OFFERED, OfferOutcome.DECLINED, "20.00"),
+                application(12L, 3L, 100L, ApplicationStatus.APPLIED, null, null)));
+        when(studentServiceClient.fetchStudentDepartments("ORG_ADMIN")).thenReturn(List.of(
+                dept(1L, "CS"), dept(2L, "Mech"), dept(3L, "Civil")));
+        when(jobRepository.findAllById(any())).thenReturn(List.of(
+                Job.builder().id(100L).companyId(500L).build()));
+        when(companyRepository.findAllById(any())).thenReturn(List.of(
+                Company.builder().id(500L).name("Acme").build()));
+
+        PlacementStatsResponse stats = statsService.getOrgPlacementStats("ORG_ADMIN", ORG_ID);
+        List<DepartmentPlacementStatsDto> breakdown = stats.getDepartmentBreakdown();
+
+        assertEquals(stats.getOffersAccepted(),
+                breakdown.stream().mapToLong(DepartmentPlacementStatsDto::getOffersAccepted).sum());
+        assertEquals(stats.getOffersDeclined(),
+                breakdown.stream().mapToLong(DepartmentPlacementStatsDto::getOffersDeclined).sum());
+        assertEquals(stats.getTotalApplications(),
+                breakdown.stream().mapToLong(DepartmentPlacementStatsDto::getTotalApplications).sum());
+        assertEquals(stats.getTotalStudentsInScope(),
+                breakdown.stream().mapToLong(DepartmentPlacementStatsDto::getStudentsInScope).sum());
     }
 }

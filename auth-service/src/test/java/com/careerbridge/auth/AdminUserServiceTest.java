@@ -1,7 +1,9 @@
 package com.careerbridge.auth;
 
+import com.careerbridge.auth.config.RabbitMQConfig;
 import com.careerbridge.auth.dto.AdminStatsResponse;
 import com.careerbridge.auth.dto.UserSummaryResponse;
+import com.careerbridge.auth.event.UserDepartmentUpdatedEvent;
 import com.careerbridge.auth.exception.CustomException;
 import com.careerbridge.auth.model.Role;
 import com.careerbridge.auth.model.User;
@@ -14,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 
 import java.util.List;
@@ -21,10 +24,14 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +54,14 @@ class AdminUserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    /**
+     * Mocked rather than left for @InjectMocks to pass null. A null here does not fail loudly --
+     * publishDepartmentUpdated is fail-soft, so the NullPointerException would be swallowed by its
+     * own catch and every test would pass while no event was ever published.
+     */
+    @Mock
+    private RabbitTemplate rabbitTemplate;
 
     @InjectMocks
     private AdminUserServiceImpl adminUserService;
@@ -327,6 +342,271 @@ class AdminUserServiceTest {
 
         CustomException ex = assertThrows(CustomException.class,
                 () -> adminUserService.linkOrganization(SUPER_ADMIN, 999L, 7L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // assignDepartment
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("ORG_ADMIN assigns a department to a user in their own organization")
+    void assignDepartment_OrgAdmin_OwnOrg_Assigns() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result =
+                adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "CS and IT");
+
+        assertEquals("CS and IT", result.getDepartment());
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertEquals("CS and IT", saved.getValue().getDepartment());
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN assigns a department regardless of organization")
+    void assignDepartment_SuperAdmin_AnyOrg_Assigns() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result =
+                adminUserService.assignDepartment(SUPER_ADMIN, null, 5L, "Mechanical");
+
+        assertEquals("Mechanical", result.getDepartment());
+    }
+
+    @Test
+    @DisplayName("ORG_ADMIN cannot assign a department to another organization's user")
+    void assignDepartment_OrgAdmin_OtherOrg_Throws403() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 99L, false)));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "CS and IT"));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a STUDENT cannot assign a department, and the user is never loaded")
+    void assignDepartment_NonAdmin_Throws403() {
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignDepartment(STUDENT, 7L, 5L, "CS and IT"));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(userRepository, never()).findByIdAndIsDeletedFalse(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a null department unassigns the user")
+    void assignDepartment_Null_Unassigns() {
+        User existing = user(5L, Role.STUDENT, 7L, false);
+        existing.setDepartment("CS and IT");
+        when(userRepository.findByIdAndIsDeletedFalse(5L)).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result = adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, null);
+
+        assertNull(result.getDepartment());
+    }
+
+    /**
+     * The whole reason the service normalises rather than storing what it was given: a stored ""
+     * would group separately from a stored null on any dashboard that buckets by this field, so the
+     * same "unassigned" user could appear under two different headings.
+     */
+    @Test
+    @DisplayName("a blank department is stored as null, not as an empty string")
+    void assignDepartment_Blank_StoredAsNull() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "   ");
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertNull(saved.getValue().getDepartment());
+    }
+
+    @Test
+    @DisplayName("a padded department name is trimmed before it is stored")
+    void assignDepartment_Padded_IsTrimmed() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "  CS and IT  ");
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertEquals("CS and IT", saved.getValue().getDepartment());
+    }
+
+    @Test
+    @DisplayName("a user with no organization cannot be given a department")
+    void assignDepartment_UserWithoutOrganization_Throws400() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, null, false)));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignDepartment(SUPER_ADMIN, null, 5L, "CS and IT"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assigning a department to a non-existent user throws 404")
+    void assignDepartment_UnknownUser_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignDepartment(SUPER_ADMIN, null, 999L, "CS and IT"));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // getOwnProfile / assignOwnDepartment
+    // -------------------------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getOwnProfile returns the caller's own record, no role check")
+    void getOwnProfile_ReturnsSelf() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+
+        UserSummaryResponse result = adminUserService.getOwnProfile(5L);
+
+        assertEquals(5L, result.getId());
+    }
+
+    @Test
+    @DisplayName("getOwnProfile throws 404 for an unknown or deleted caller")
+    void getOwnProfile_Unknown_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.getOwnProfile(999L));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("a STUDENT can assign their own department with no admin role at all")
+    void assignOwnDepartment_Student_Assigns() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserSummaryResponse result = adminUserService.assignOwnDepartment(5L, "Computer Science");
+
+        assertEquals("Computer Science", result.getDepartment());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment refuses a caller with no organization, same guard as the admin path")
+    void assignOwnDepartment_NoOrganization_Throws400() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, null, false)));
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignOwnDepartment(5L, "Computer Science"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment normalises blank to null, same as the admin path")
+    void assignOwnDepartment_Blank_StoredAsNull() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignOwnDepartment(5L, "   ");
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertNull(saved.getValue().getDepartment());
+    }
+
+    /**
+     * The event is what carries department to student-service, which is the only reason it reaches
+     * the public candidate profile recruiter-service filters on. Without this assertion the whole
+     * chain could silently stop publishing and every other test here would still pass.
+     */
+    @Test
+    @DisplayName("assignDepartment publishes user.department.updated carrying the new value")
+    void assignDepartment_PublishesEvent() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "Computer Science");
+
+        ArgumentCaptor<UserDepartmentUpdatedEvent> published =
+                ArgumentCaptor.forClass(UserDepartmentUpdatedEvent.class);
+        verify(rabbitTemplate).convertAndSend(eq(RabbitMQConfig.EXCHANGE),
+                eq(RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY), published.capture());
+
+        assertEquals(5L, published.getValue().getUserId());
+        assertEquals("Computer Science", published.getValue().getDepartment());
+        assertEquals(7L, published.getValue().getOrganizationId());
+    }
+
+    /**
+     * Clearing must publish too, carrying null. If a cleared department were simply not published,
+     * student-service would keep serving a department the user no longer has.
+     */
+    @Test
+    @DisplayName("clearing a department publishes the event with a null department")
+    void assignDepartment_Clearing_PublishesNullDepartment() {
+        User existing = user(5L, Role.STUDENT, 7L, false);
+        existing.setDepartment("Computer Science");
+        when(userRepository.findByIdAndIsDeletedFalse(5L)).thenReturn(Optional.of(existing));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, null);
+
+        ArgumentCaptor<UserDepartmentUpdatedEvent> published =
+                ArgumentCaptor.forClass(UserDepartmentUpdatedEvent.class);
+        verify(rabbitTemplate).convertAndSend(anyString(), anyString(), published.capture());
+
+        assertNull(published.getValue().getDepartment());
+    }
+
+    @Test
+    @DisplayName("a broker outage does not fail the assignment -- the row is already saved")
+    void assignDepartment_BrokerDown_StillSucceeds() {
+        when(userRepository.findByIdAndIsDeletedFalse(5L))
+                .thenReturn(Optional.of(user(5L, Role.STUDENT, 7L, false)));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        doThrow(new RuntimeException("broker down")).when(rabbitTemplate)
+                .convertAndSend(anyString(), anyString(), any(Object.class));
+
+        UserSummaryResponse result =
+                adminUserService.assignDepartment(ORG_ADMIN, 7L, 5L, "Computer Science");
+
+        assertEquals("Computer Science", result.getDepartment());
+    }
+
+    @Test
+    @DisplayName("assignOwnDepartment throws 404 for an unknown caller")
+    void assignOwnDepartment_UnknownUser_Throws404() {
+        when(userRepository.findByIdAndIsDeletedFalse(999L)).thenReturn(Optional.empty());
+
+        CustomException ex = assertThrows(CustomException.class,
+                () -> adminUserService.assignOwnDepartment(999L, "Computer Science"));
 
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
         verify(userRepository, never()).save(any());
