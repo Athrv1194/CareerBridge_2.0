@@ -660,6 +660,40 @@ export default function CollegeDashboardPage() {
                     </div>
                   ))}
                 </div>
+
+                {placement?.departmentBreakdown?.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <SectionHeader label="By department" />
+                    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead><tr>
+                          <th style={thStyle('left')}>Department</th>
+                          <th style={thStyle('right')}>Students</th>
+                          <th style={thStyle('right')}>Applications</th>
+                          <th style={thStyle('right')}>Accepted</th>
+                          <th style={thStyle('right')}>Rate</th>
+                          <th style={thStyle('right')}>Avg CTC</th>
+                          <th style={thStyle('right')}>Highest CTC</th>
+                        </tr></thead>
+                        <tbody>
+                          {placement.departmentBreakdown.map((d) => (
+                            <tr key={d.department ?? 'unassigned'}>
+                              <td style={tdStyle('left')}>
+                                {d.department || <span style={{ color: 'var(--ink-400)', fontStyle: 'italic' }}>Unassigned</span>}
+                              </td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.studentsInScope}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.totalApplications}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.offersAccepted}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.placementRate}%</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{fmtCtc(d.averageCtc)}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{fmtCtc(d.highestCtc)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

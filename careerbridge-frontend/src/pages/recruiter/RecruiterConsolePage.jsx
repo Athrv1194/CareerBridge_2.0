@@ -134,6 +134,7 @@ export default function RecruiterConsolePage() {
   const [candQuery, setCandQuery] = useState('');
   const [candMin, setCandMin] = useState('');
   const [candMax, setCandMax] = useState('');
+  const [candDept, setCandDept] = useState('');
   const candTimer = useRef(null);
 
   const [interviews, setInterviews] = useState([]);
@@ -177,10 +178,10 @@ export default function RecruiterConsolePage() {
     getJobApplications(jobId).then((data) => setApps(data)).catch(() => setApps([])).finally(() => setAppsLoading(false));
   }, []);
 
-  const loadCandidates = useCallback((skillsStr, min, max) => {
+  const loadCandidates = useCallback((skillsStr, min, max, department) => {
     setCandLoading(true);
     setCandIn(false);
-    getCandidates({ skills: skillsStr, minScore: min, maxScore: max })
+    getCandidates({ skills: skillsStr, minScore: min, maxScore: max, department })
       .then((data) => setCandidates(data)).catch(() => setCandidates([]))
       .finally(() => { setCandLoading(false); setCandLoaded(true); setTimeout(() => setCandIn(true), 20); });
   }, []);
@@ -205,7 +206,7 @@ export default function RecruiterConsolePage() {
       if (!jobsLoaded) loadJobs();
       if (appsJobId) loadApps(appsJobId);
     }
-    if (tab === 'CANDIDATES' && !candLoaded) loadCandidates('', null, null);
+    if (tab === 'CANDIDATES' && !candLoaded) loadCandidates('', null, null, null);
     if (tab === 'INTERVIEWS' && !ivLoaded) loadInterviews();
   };
 
@@ -277,10 +278,10 @@ export default function RecruiterConsolePage() {
   const onCandQueryChange = (e) => {
     setCandQuery(e.target.value);
     clearTimeout(candTimer.current);
-    candTimer.current = setTimeout(() => loadCandidates(e.target.value, candMin || null, candMax || null), 400);
+    candTimer.current = setTimeout(() => loadCandidates(e.target.value, candMin || null, candMax || null, candDept || null), 400);
   };
-  const searchCandidates = () => { clearTimeout(candTimer.current); loadCandidates(candQuery, candMin || null, candMax || null); };
-  const clearCandidateFilters = () => { setCandQuery(''); setCandMin(''); setCandMax(''); loadCandidates('', null, null); };
+  const searchCandidates = () => { clearTimeout(candTimer.current); loadCandidates(candQuery, candMin || null, candMax || null, candDept || null); };
+  const clearCandidateFilters = () => { setCandQuery(''); setCandMin(''); setCandMax(''); setCandDept(''); loadCandidates('', null, null, null); };
 
   // --- Interviews ---
   const openScheduleInterview = (applicationId) => {
@@ -634,6 +635,7 @@ export default function RecruiterConsolePage() {
             <div style={{ display: 'flex', alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
               <Field label="Min PRS score" hint="Excludes unscored candidates."><Input type="number" value={candMin} onChange={(e) => setCandMin(e.target.value)} placeholder="0" /></Field>
               <Field label="Max PRS score" hint="Keeps unscored candidates."><Input type="number" value={candMax} onChange={(e) => setCandMax(e.target.value)} placeholder="100" /></Field>
+              <Field label="Department" hint="Exact match, excludes unassigned."><Input value={candDept} onChange={(e) => setCandDept(e.target.value)} placeholder="e.g. Computer Science" /></Field>
               <Button variant="primary" size="sm" onClick={searchCandidates}>Search</Button>
               <Button variant="ghost" size="sm" onClick={clearCandidateFilters}>Clear</Button>
             </div>
@@ -670,6 +672,7 @@ export default function RecruiterConsolePage() {
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{c.firstName} {c.lastName}</div>
                           <div style={{ fontSize: 12, color: 'var(--ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>
+                          {c.department && <div style={{ fontSize: 11, color: 'var(--taupe-700)', marginTop: 2 }}>{c.department}</div>}
                         </div>
                       </div>
                       {unavailable ? (

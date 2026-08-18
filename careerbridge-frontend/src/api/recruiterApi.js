@@ -43,11 +43,12 @@ export function getOrgApplications() {
   return authedFetch('/recruiter/applications/org');
 }
 
-export function getCandidates({ skills, minScore, maxScore } = {}) {
+export function getCandidates({ skills, minScore, maxScore, department } = {}) {
   const params = new URLSearchParams();
   if (skills) params.set('skills', skills);
   if (minScore !== null && minScore !== undefined && minScore !== '') params.set('minScore', minScore);
   if (maxScore !== null && maxScore !== undefined && maxScore !== '') params.set('maxScore', maxScore);
+  if (department) params.set('department', department);
   const qs = params.toString();
   return authedFetch(`/recruiter/candidates${qs ? `?${qs}` : ''}`);
 }
