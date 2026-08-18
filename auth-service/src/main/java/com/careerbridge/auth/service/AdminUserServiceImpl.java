@@ -1,17 +1,21 @@
 package com.careerbridge.auth.service;
 
+import com.careerbridge.auth.config.RabbitMQConfig;
 import com.careerbridge.auth.dto.AdminStatsResponse;
 import com.careerbridge.auth.dto.UserSummaryResponse;
+import com.careerbridge.auth.event.UserDepartmentUpdatedEvent;
 import com.careerbridge.auth.exception.CustomException;
 import com.careerbridge.auth.model.Role;
 import com.careerbridge.auth.model.User;
 import com.careerbridge.auth.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -30,9 +34,11 @@ public class AdminUserServiceImpl implements AdminUserService {
             "Cannot perform this action - at least one active SUPER_ADMIN must remain.";
 
     private final UserRepository userRepository;
+    private final RabbitTemplate rabbitTemplate;
 
-    public AdminUserServiceImpl(UserRepository userRepository) {
+    public AdminUserServiceImpl(UserRepository userRepository, RabbitTemplate rabbitTemplate) {
         this.userRepository = userRepository;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -308,7 +314,41 @@ public class AdminUserServiceImpl implements AdminUserService {
         log.info("Department changed for userId={} from {} to {} (by {})",
                 user.getId(), previous, normalised, actor);
 
+        publishDepartmentUpdated(saved);
+
         return toResponse(saved);
+    }
+
+    /**
+     * Tells student-service to update its local copy, which is what puts department on the public
+     * candidate profile recruiter-service searches. An event rather than student-service reading
+     * back from here -- see RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY for why a
+     * synchronous read into auth-service is not possible.
+     *
+     * Fail-soft, matching every other publisher in this service: the row is already saved, so
+     * rethrowing would report failure for work that actually happened. The cost of a lost event is
+     * a stale department on the candidate profile until the next assignment, not a lost assignment.
+     *
+     * Published inside the surrounding @Transactional, so a rollback after this point would leave a
+     * phantom event -- the same acknowledged trade-off as publishStudentRegistered, and acceptable
+     * for the same reason: the consumer SETs an absolute value, so a phantom is corrected by the
+     * next real event rather than compounding.
+     */
+    private void publishDepartmentUpdated(User user) {
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.EXCHANGE,
+                    RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY,
+                    UserDepartmentUpdatedEvent.builder()
+                            .userId(user.getId())
+                            .department(user.getDepartment())
+                            .organizationId(user.getOrganizationId())
+                            .updatedAt(LocalDateTime.now())
+                            .build());
+        } catch (Exception ex) {
+            log.error("Failed to publish {} for userId={}: {}",
+                    RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY, user.getId(), ex.getMessage());
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

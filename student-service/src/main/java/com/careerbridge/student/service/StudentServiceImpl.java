@@ -535,6 +535,7 @@ public class StudentServiceImpl implements StudentService {
                         .lastName(p.getLastName())
                         .email(p.getEmail())
                         .skills(skillsByProfileId.getOrDefault(p.getId(), List.of()))
+                        .department(p.getDepartment())
                         .profileCompletionPercentage(p.getProfileCompletionPercentage())
                         .build())
                 .toList();
@@ -550,6 +551,23 @@ public class StudentServiceImpl implements StudentService {
             // addProject all use -- this is the only place RESUME's 15% can ever be earned.
             recalculate(profile);
         }, () -> log.warn("No student profile for userId={}; ignoring resume.generated", userId));
+    }
+
+    /**
+     * Saves directly rather than through recalculate(): department carries no weight in
+     * ProfileCompletionCalculator, so recalculating would be four wasted queries for a value that
+     * cannot change the percentage. Same reasoning as addCertificate skipping it.
+     *
+     * Missing profile is a WARN, not an exception -- a department can legitimately be assigned to a
+     * RECRUITER or ORG_ADMIN, who have an auth-service User but no StudentProfile row here.
+     */
+    @Override
+    @Transactional
+    public void updateDepartment(Long userId, String department) {
+        studentProfileRepository.findByUserId(userId).ifPresentOrElse(profile -> {
+            profile.setDepartment(department);
+            studentProfileRepository.save(profile);
+        }, () -> log.warn("No student profile for userId={}; ignoring user.department.updated", userId));
     }
 
     private StudentProfile requireProfile(Long userId) {

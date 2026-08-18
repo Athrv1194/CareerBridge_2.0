@@ -17,7 +17,12 @@ public interface CandidateSearchService {
      *                 unavailable -- an unknown score cannot be asserted to clear a floor.
      * @param maxScore excludes candidates above it. Unavailable scores are kept: they have not
      *                 been shown to exceed the ceiling.
+     * @param department exact department name, matched case-insensitively -- NOT a substring match,
+     *                 so "CS" does not also match "CSE". Excludes anyone whose department is
+     *                 unknown, for the same reason minScore does: an unknown value cannot be
+     *                 asserted to match. An auth-service outage therefore empties a
+     *                 department-filtered search rather than returning wrong hits.
      */
     List<CandidateResponse> searchCandidates(String callerRole, String skills,
-                                             Double minScore, Double maxScore);
+                                             Double minScore, Double maxScore, String department);
 }

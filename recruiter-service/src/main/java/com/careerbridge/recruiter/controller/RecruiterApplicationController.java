@@ -150,9 +150,10 @@ public class RecruiterApplicationController {
             @RequestHeader(USER_ROLE_HEADER) String callerRole,
             @RequestParam(required = false) String skills,
             @RequestParam(required = false) Double minScore,
-            @RequestParam(required = false) Double maxScore) {
-        return ResponseEntity.ok(
-                candidateSearchService.searchCandidates(callerRole, skills, minScore, maxScore));
+            @RequestParam(required = false) Double maxScore,
+            @RequestParam(required = false) String department) {
+        return ResponseEntity.ok(candidateSearchService.searchCandidates(
+                callerRole, skills, minScore, maxScore, department));
     }
 
     // -------------------------------------------------------------------------------------------

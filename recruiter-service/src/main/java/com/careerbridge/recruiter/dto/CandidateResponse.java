@@ -38,6 +38,15 @@ public class CandidateResponse {
 
     private Integer profileCompletionPercentage;
 
+    /**
+     * The student's department within their college, from auth-service. Null means genuinely
+     * unassigned, no organization, OR auth-service was unreachable -- unlike prsScore there is no
+     * out-of-range sentinel available for a String, so the three cases are indistinguishable to a
+     * caller. A department FILTER treats null as "cannot be asserted to match" and excludes it; see
+     * CandidateSearchServiceImpl.matchesDepartment.
+     */
+    private String department;
+
     /** Convenience link for the recruiter UI; this service does not serve it. */
     private String profileUrl;
 }

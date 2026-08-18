@@ -30,5 +30,13 @@ public class PublicStudentProfileResponse {
 
     private List<String> skills;
 
+    /**
+     * Local copy of auth-service's department, kept current by the user.department.updated
+     * consumer. Present so recruiter-service can display and filter on it without a third
+     * synchronous call -- and it could not make that call anyway, since auth-service is the only
+     * backend service with Spring Security and answers a header-only request 401.
+     */
+    private String department;
+
     private Integer profileCompletionPercentage;
 }
