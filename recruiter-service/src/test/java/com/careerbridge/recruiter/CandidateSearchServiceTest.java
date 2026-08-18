@@ -245,7 +245,7 @@ class CandidateSearchServiceTest {
         when(prsServiceClient.fetchGlobalLeaderboard()).thenReturn(List.of(score(42L, 70.0)));
 
         CandidateResponse candidate =
-                candidateSearchService.searchCandidates("RECRUITER", null, null, null).get(0);
+                candidateSearchService.searchCandidates("RECRUITER", null, null, null, null).get(0);
 
         assertEquals(true, candidate.getHasAvatar());
     }
