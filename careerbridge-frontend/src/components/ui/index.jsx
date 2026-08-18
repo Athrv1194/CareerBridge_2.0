@@ -381,11 +381,20 @@ export function Select({ options, value, onChange, style }) {
         outline: 'none', cursor: 'pointer', ...style,
       }}
     >
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt.charAt(0) + opt.slice(1).toLowerCase()}
-        </option>
-      ))}
+      {options.map((opt) => {
+        // Either a plain enum string ("REMOTE" -> "Remote") or a {value, label} pair when the
+        // display text isn't derivable from the value by title-casing it -- e.g. free text like a
+        // department name ("CS and IT"), where lowercasing everything past the first letter would
+        // corrupt it.
+        const isPair = typeof opt === 'object' && opt !== null;
+        const val = isPair ? opt.value : opt;
+        const label = isPair ? opt.label : val.charAt(0) + val.slice(1).toLowerCase();
+        return (
+          <option key={val} value={val}>
+            {label}
+          </option>
+        );
+      })}
     </select>
   );
 }
