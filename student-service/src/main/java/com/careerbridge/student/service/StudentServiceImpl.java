@@ -335,7 +335,7 @@ public class StudentServiceImpl implements StudentService {
                 .credentialUrl(dto.getCredentialUrl())
                 .build());
 
-        // ponytail: no recalculate() here -- certificates carry zero weight in
+        // No recalculate() here -- certificates carry zero weight in
         // ProfileCompletionCalculator, so the call is a provable no-op costing 3
         // selects and an
         // update. StudentServiceTest pins this; give certificates a weight and that

@@ -279,9 +279,9 @@ public class AuthServiceImpl implements AuthService {
     /**
      * Fail-soft by design: a RabbitMQ outage must not cost the user their registration.
      *
-     * ponytail: publishes before the surrounding transaction commits, so a rollback after this
-     * point would leave a phantom event. Move to @TransactionalEventListener(AFTER_COMMIT) if
-     * exactly-once delivery starts mattering.
+     * Publishes before the surrounding transaction commits, so a rollback after this point would
+     * leave a phantom event. Move to @TransactionalEventListener(AFTER_COMMIT) if exactly-once
+     * delivery starts mattering.
      */
     private void publishStudentRegistered(User user) {
         try {
