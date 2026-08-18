@@ -7,6 +7,7 @@ import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
+import com.careerbridge.student.dto.StudentDepartmentResponse;
 import com.careerbridge.student.dto.StudentProfileRequest;
 import com.careerbridge.student.dto.StudentProfileResponse;
 
@@ -93,4 +94,10 @@ public interface StudentService {
      * Carries no profile-completion weight, so unlike updateResumeUrl this does not recalculate.
      */
     void updateDepartment(Long userId, String department);
+
+    /**
+     * studentId -> department for every student, ignoring isPublic. Backs recruiter-service's
+     * department-level placement stats. Same caller roles as getPublicProfiles.
+     */
+    List<StudentDepartmentResponse> getStudentDepartments(String callerRole);
 }

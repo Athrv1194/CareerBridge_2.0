@@ -26,4 +26,11 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
      * dump needs the same backfill or its candidate pool comes back empty.
      */
     List<StudentProfile> findByIsPublicTrueAndRole(String role);
+
+    /**
+     * Every student regardless of isPublic -- placement statistics count the whole cohort, not only
+     * the students visible to recruiters. Deliberately distinct from findByIsPublicTrueAndRole
+     * above, which backs the candidate pool and must keep honouring that flag.
+     */
+    List<StudentProfile> findByRole(String role);
 }

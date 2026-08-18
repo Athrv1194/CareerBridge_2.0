@@ -8,6 +8,7 @@ import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
+import com.careerbridge.student.dto.StudentDepartmentResponse;
 import com.careerbridge.student.dto.StudentProfileRequest;
 import com.careerbridge.student.dto.StudentProfileResponse;
 import com.careerbridge.student.exception.CustomException;
@@ -568,6 +569,30 @@ public class StudentServiceImpl implements StudentService {
             profile.setDepartment(department);
             studentProfileRepository.save(profile);
         }, () -> log.warn("No student profile for userId={}; ignoring user.department.updated", userId));
+    }
+
+    /**
+     * One query, no child collections: unlike getPublicProfiles this needs no skills, so it skips
+     * that service's second batch query entirely.
+     *
+     * findByRole, NOT findByIsPublicTrueAndRole -- see StudentDepartmentResponse for why placement
+     * statistics must not honour the privacy flag the candidate pool does.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentDepartmentResponse> getStudentDepartments(String callerRole) {
+        if (!ALLOWED_PUBLIC_PROFILE_ROLES.contains(callerRole)) {
+            throw new CustomException(
+                    "Only RECRUITER, PLACEMENT_OFFICER, ORG_ADMIN or SUPER_ADMIN may list student departments",
+                    HttpStatus.FORBIDDEN);
+        }
+
+        return studentProfileRepository.findByRole(ROLE_STUDENT).stream()
+                .map(p -> StudentDepartmentResponse.builder()
+                        .studentId(p.getUserId())
+                        .department(p.getDepartment())
+                        .build())
+                .toList();
     }
 
     private StudentProfile requireProfile(Long userId) {

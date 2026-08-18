@@ -7,6 +7,7 @@ import com.careerbridge.student.dto.ImageBlob;
 import com.careerbridge.student.dto.ProjectDto;
 import com.careerbridge.student.dto.PublicStudentProfileResponse;
 import com.careerbridge.student.dto.SkillDto;
+import com.careerbridge.student.dto.StudentDepartmentResponse;
 import com.careerbridge.student.dto.StudentProfileRequest;
 import com.careerbridge.student.dto.StudentProfileResponse;
 import com.careerbridge.student.exception.CustomException;
@@ -268,6 +269,17 @@ public class StudentController {
     public ResponseEntity<List<PublicStudentProfileResponse>> getPublicProfiles(
             @RequestHeader(USER_ROLE_HEADER) String callerRole) {
         return ResponseEntity.ok(studentService.getPublicProfiles(callerRole));
+    }
+
+    /**
+     * studentId -> department for every student, for recruiter-service's department-level placement
+     * stats. Called directly on the compose network, same as /profiles/public above. Carries no
+     * name or email -- headcounts need neither.
+     */
+    @GetMapping("/profiles/departments")
+    public ResponseEntity<List<StudentDepartmentResponse>> getStudentDepartments(
+            @RequestHeader(USER_ROLE_HEADER) String callerRole) {
+        return ResponseEntity.ok(studentService.getStudentDepartments(callerRole));
     }
 
     /** Shared by the avatar and project-cover upload endpoints. */
