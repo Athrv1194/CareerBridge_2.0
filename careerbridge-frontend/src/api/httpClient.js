@@ -34,7 +34,12 @@ function redirectToLogin() {
   if (window.location.pathname !== '/login') window.location.href = '/login';
 }
 
-export async function authedFetch(path, options = {}) {
+// fallbackMessage: shown when the error response carries no message of its own -- lets each
+// caller keep its own specific wording ('Could not build the roadmap.') instead of the generic
+// default. Every thrown error carries .status, so a caller that wants special handling for one
+// status (404-as-null being the common case) can catch and check e.status rather than this
+// client needing to know about it.
+export async function authedFetch(path, { fallbackMessage, ...options } = {}) {
   const doFetch = (token) => fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -58,7 +63,9 @@ export async function authedFetch(path, options = {}) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || body.error || 'Something went wrong. Please try again.');
+    const err = new Error(body.message || body.error || fallbackMessage || 'Something went wrong. Please try again.');
+    err.status = res.status;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
