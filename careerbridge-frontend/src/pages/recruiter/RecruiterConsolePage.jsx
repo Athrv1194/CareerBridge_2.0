@@ -245,7 +245,7 @@ export default function RecruiterConsolePage() {
   const startCreateJob = () => { setJobDraft(emptyJobDraft); setJobEditingId(null); setJobError(''); setJobForm(true); };
   const startEditJob = (job) => {
     setJobDraft({
-      title: job.title, description: job.description || '', requiredSkills: job.requiredSkills || '',
+      title: job.title, description: job.description || '', requiredSkills: (job.requiredSkills || []).join(', '),
       location: job.location || '', workMode: job.workMode, jobType: job.jobType,
       salaryMin: job.salaryMin ?? '', salaryMax: job.salaryMax ?? '', applicationDeadline: job.applicationDeadline || '',
     });
