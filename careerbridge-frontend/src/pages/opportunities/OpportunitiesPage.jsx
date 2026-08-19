@@ -266,10 +266,15 @@ export default function OpportunitiesPage() {
 
   const setCustomResume = useCallback((file) => {
     if (!file) return;
+    if (!/\.(pdf|docx?)$/i.test(file.name)) {
+      showToast('File not accepted', 'Upload a résumé as PDF or Word (.pdf, .doc, .docx).', 'danger');
+      setDragOver(false);
+      return;
+    }
     setCustomResumeName(file.name);
     setResumeRemoved(false);
     setDragOver(false);
-  }, []);
+  }, [showToast]);
 
   const sidebarWidth = navCollapsed ? '60px' : '248px';
   const isPhone = useMaxWidth('phone');
