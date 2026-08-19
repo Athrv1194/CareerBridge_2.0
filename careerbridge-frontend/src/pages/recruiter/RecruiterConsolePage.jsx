@@ -660,8 +660,16 @@ export default function RecruiterConsolePage() {
               <Field label="Min PRS score" hint="Excludes unscored candidates."><Input type="number" value={candMin} onChange={(e) => setCandMin(e.target.value)} placeholder="0" /></Field>
               <Field label="Max PRS score" hint="Keeps unscored candidates."><Input type="number" value={candMax} onChange={(e) => setCandMax(e.target.value)} placeholder="100" /></Field>
               <Field label="Department" hint="Exact match, excludes unassigned."><Input value={candDept} onChange={(e) => setCandDept(e.target.value)} placeholder="e.g. Computer Science" /></Field>
-              <Button variant="primary" size="sm" onClick={searchCandidates}>Search</Button>
-              <Button variant="ghost" size="sm" onClick={clearCandidateFilters}>Clear</Button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, visibility: 'hidden' }}>_</span>
+                <Button variant="primary" size="sm" onClick={searchCandidates}>Search</Button>
+                <span style={{ fontSize: 12, visibility: 'hidden' }}>_</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, visibility: 'hidden' }}>_</span>
+                <Button variant="ghost" size="sm" onClick={clearCandidateFilters}>Clear</Button>
+                <span style={{ fontSize: 12, visibility: 'hidden' }}>_</span>
+              </div>
             </div>
             <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Showing {candidates.length} candidate{candidates.length === 1 ? '' : 's'}</span>
 
