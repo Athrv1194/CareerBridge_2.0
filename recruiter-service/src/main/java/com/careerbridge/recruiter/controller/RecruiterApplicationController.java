@@ -5,14 +5,18 @@ import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.InterviewResponse;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
 import com.careerbridge.recruiter.dto.OfferResponseRequest;
+import com.careerbridge.recruiter.dto.ResumeFileBlob;
 import com.careerbridge.recruiter.dto.ScheduleInterviewRequest;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
 import com.careerbridge.recruiter.dto.UpdateInterviewRequest;
+import com.careerbridge.recruiter.exception.CustomException;
 import com.careerbridge.recruiter.service.ApplicationService;
 import com.careerbridge.recruiter.service.CandidateSearchService;
 import com.careerbridge.recruiter.service.InterviewService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,7 +27,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -106,6 +112,31 @@ public class RecruiterApplicationController {
                 callerRole, recruiterId, applicationId, request));
     }
 
+    /** STUDENT, and only for their own application. Replaces any résumé already attached. */
+    @PostMapping(value = "/applications/{applicationId}/resume", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Void> uploadApplicationResume(
+            @RequestHeader(USER_ID_HEADER) Long studentId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long applicationId,
+            @RequestParam("file") MultipartFile file) {
+        applicationService.uploadResume(callerRole, studentId, applicationId,
+                readResumeBytes(file), file.getContentType(), file.getOriginalFilename());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** The application's owning student, the job's owning recruiter, or an org-view role. */
+    @GetMapping("/applications/{applicationId}/resume")
+    public ResponseEntity<byte[]> getApplicationResume(
+            @RequestHeader(USER_ID_HEADER) Long userId,
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @PathVariable Long applicationId) {
+        ResumeFileBlob blob = applicationService.getResume(callerRole, userId, applicationId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(blob.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + blob.getFileName() + "\"")
+                .body(blob.getBytes());
+    }
+
     // -------------------------------------------------------------------------------------------
     // Offers
     //
@@ -185,5 +216,16 @@ public class RecruiterApplicationController {
             @Valid @RequestBody UpdateInterviewRequest request) {
         return ResponseEntity.ok(
                 interviewService.updateInterview(callerRole, recruiterId, interviewId, request));
+    }
+
+    private byte[] readResumeBytes(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new CustomException("No file was uploaded", HttpStatus.BAD_REQUEST);
+        }
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new CustomException("Could not read the uploaded file", HttpStatus.BAD_REQUEST);
+        }
     }
 }

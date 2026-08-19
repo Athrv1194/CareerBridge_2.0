@@ -1,18 +1,6 @@
-import { getAccessToken } from '../utils/tokenUtils';
+import { authedFetch } from './httpClient';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
-async function authedFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken()}`, ...options.headers },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Payment request failed.');
-  }
-  return res.json();
-}
 
 // Public endpoint, no auth needed.
 export async function getPlans() {

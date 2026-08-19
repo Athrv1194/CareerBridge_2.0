@@ -127,3 +127,11 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
 }
+
+/* Browser default placeholder color reads too close to real input text (var(--ink-900)) --
+   lighten it so a placeholder can't be mistaken for an already-filled value. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}

@@ -1,71 +1,49 @@
 import { getAccessToken } from '../utils/tokenUtils';
+import { authedFetch } from './httpClient';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Metadata only, no PDF bytes.
 export async function getMyResumes() {
-  const res = await fetch(`${API_BASE}/resume/my`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await authedFetch('/resume/my');
+  } catch {
+    return [];
+  }
 }
 
 // Recruiter/placement-officer/admin viewing a candidate's résumés, not the student themselves.
 export async function getStudentResumes(studentId) {
-  const res = await fetch(`${API_BASE}/resume/student/${studentId}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await authedFetch(`/resume/student/${studentId}`);
+  } catch {
+    return [];
+  }
 }
 
 // options: summary, include* toggles, jobDescription -- all optional, defaults to "include everything".
-export async function generateResume(options) {
-  const res = await fetch(`${API_BASE}/resume/generate`, {
+export function generateResume(options) {
+  return authedFetch('/resume/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAccessToken()}` },
     body: options ? JSON.stringify(options) : undefined,
+    fallbackMessage: 'Could not generate a résumé.',
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not generate a résumé.');
-  }
-  return res.json();
 }
 
-export async function setDefaultResume(id) {
-  const res = await fetch(`${API_BASE}/resume/${id}/default`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not set that résumé as default.');
-  }
-  return res.json();
+export function setDefaultResume(id) {
+  return authedFetch(`/resume/${id}/default`, { method: 'PATCH', fallbackMessage: 'Could not set that résumé as default.' });
 }
 
-export async function getResume(id) {
-  const res = await fetch(`${API_BASE}/resume/${id}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) throw new Error('Could not load that résumé.');
-  return res.json();
+export function getResume(id) {
+  return authedFetch(`/resume/${id}`, { fallbackMessage: 'Could not load that résumé.' });
 }
 
-export async function deleteResume(id) {
-  const res = await fetch(`${API_BASE}/resume/${id}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not delete that résumé.');
-  }
+export function deleteResume(id) {
+  return authedFetch(`/resume/${id}`, { method: 'DELETE', fallbackMessage: 'Could not delete that résumé.' });
 }
 
 // A plain <a href> can't send the Bearer header, so fetch the PDF ourselves as a blob URL.
+// Raw fetch, not authedFetch: a blob response doesn't fit the JSON-only shared client.
 export async function downloadResume(id, fileName) {
   const res = await fetch(`${API_BASE}/resume/download/${id}`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },

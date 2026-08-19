@@ -35,4 +35,7 @@ public class JobApplicationResponse {
 
     private LocalDateTime appliedAt;
     private LocalDateTime updatedAt;
+
+    /** True once the student has attached a résumé to this specific application. */
+    private boolean hasResume;
 }

@@ -12,7 +12,12 @@ import './onboarding.css';
 const STEP_LABELS = ['Education', 'Skills', 'Basic info', 'Assessment'];
 const LEVELS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'];
 const MAX_EDUCATION = 3;
+const MIN_GRAD_YEAR = 1950;
+const MAX_GRAD_YEAR = new Date().getFullYear() + 10;
 const MAX_SKILLS = 15;
+const PHONE_PATTERN = /^\+?[0-9][0-9\s-]{6,14}$/;
+const PLACE_PATTERN = /^[A-Za-z][A-Za-z\s.'-]{1,49}$/;
+const URL_PATTERN = /^https?:\/\/.+\..+/;
 const FALLBACK_SKILLS = [
   'Java', 'Python', 'JavaScript', 'TypeScript', 'C#', 'C++',
   'React', 'Angular', 'Vue', 'HTML/CSS', 'Tailwind CSS',
@@ -60,6 +65,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [education, setEducation] = useState([emptyEducation()]);
   const [educationErrors, setEducationErrors] = useState([{}]);
+  const [basicErrors, setBasicErrors] = useState({});
   const [skills, setSkills] = useState([]);
   const [skillInput, setSkillInput] = useState('');
   const [suggestions, setSuggestions] = useState(null);
@@ -147,12 +153,11 @@ export default function OnboardingPage() {
   const addSkillEntry = (name, isCustom) => {
     const trimmed = (name || '').trim();
     if (!trimmed) return;
-    if (skills.length >= MAX_SKILLS) return;
-    if (skills.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) {
-      setSkillInput('');
-      return;
-    }
-    setSkills([...skills, { name: trimmed, level: 'INTERMEDIATE', isCustom: !!isCustom }]);
+    setSkills((prev) => {
+      if (prev.length >= MAX_SKILLS) return prev;
+      if (prev.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, { name: trimmed, level: 'INTERMEDIATE', isCustom: !!isCustom }];
+    });
     setSkillInput('');
   };
 
@@ -161,9 +166,41 @@ export default function OnboardingPage() {
   const updateBasicField = (field, value) => setBasic({ ...basic, [field]: value });
 
   const validateEducation = () => {
-    const errors = education.map((e) => (e.institution.trim() ? {} : { institution: 'Required' }));
+    const errors = education.map((e) => {
+      const err = {};
+      if (!e.institution.trim()) err.institution = 'Required';
+      if (!e.degree.trim()) err.degree = 'Required';
+      const year = Number(e.graduationYear);
+      if (!e.graduationYear) err.graduationYear = 'Required';
+      else if (!Number.isInteger(year) || year < MIN_GRAD_YEAR || year > MAX_GRAD_YEAR) err.graduationYear = `Enter a year between ${MIN_GRAD_YEAR} and ${MAX_GRAD_YEAR}`;
+      return err;
+    });
     setEducationErrors(errors);
     return errors.every((e) => Object.keys(e).length === 0);
+  };
+
+  const validateSkills = () => {
+    if (skills.length === 0) {
+      setErrorMessage('Add at least one skill before continuing.');
+      return false;
+    }
+    return true;
+  };
+
+  const validateBasicInfo = () => {
+    const errors = {};
+    if (!basic.phone.trim()) errors.phone = 'Required';
+    else if (!PHONE_PATTERN.test(basic.phone.trim())) errors.phone = 'Enter a valid phone number';
+    if (!basic.city.trim()) errors.city = 'Required';
+    else if (!PLACE_PATTERN.test(basic.city.trim())) errors.city = 'Letters only, no digits';
+    if (basic.state.trim() && !PLACE_PATTERN.test(basic.state.trim())) errors.state = 'Letters only, no digits';
+    if (!basic.country.trim()) errors.country = 'Required';
+    else if (!PLACE_PATTERN.test(basic.country.trim())) errors.country = 'Letters only, no digits';
+    if (basic.linkedinUrl.trim() && !URL_PATTERN.test(basic.linkedinUrl.trim())) errors.linkedinUrl = 'Enter a full URL starting with https://';
+    if (basic.githubUrl.trim() && !URL_PATTERN.test(basic.githubUrl.trim())) errors.githubUrl = 'Enter a full URL starting with https://';
+    if (basic.portfolioUrl.trim() && !URL_PATTERN.test(basic.portfolioUrl.trim())) errors.portfolioUrl = 'Enter a full URL starting with https://';
+    setBasicErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const submitEducation = async () => {
@@ -213,6 +250,8 @@ export default function OnboardingPage() {
   const onContinue = async () => {
     setErrorMessage(null);
     if (step === 0 && !validateEducation()) return;
+    if (step === 1 && !validateSkills()) return;
+    if (step === 2 && !validateBasicInfo()) return;
 
     setIsSubmitting(true);
     try {
@@ -375,11 +414,11 @@ export default function OnboardingPage() {
                       </button>
                     )}
                   </div>
-                  <Field label="College or university" error={educationErrors[i]?.institution}>
+                  <Field label="College or university" required error={educationErrors[i]?.institution}>
                     <Input placeholder="RV College of Engineering" value={e.institution} onChange={(ev) => updateEducationField(i, 'institution', ev.target.value)} />
                   </Field>
                   <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
-                    <Field label="Degree">
+                    <Field label="Degree" required error={educationErrors[i]?.degree}>
                       <Input placeholder="B.E. Computer Science" value={e.degree} onChange={(ev) => updateEducationField(i, 'degree', ev.target.value)} />
                     </Field>
                     <Field label="Field of study">
@@ -387,8 +426,8 @@ export default function OnboardingPage() {
                     </Field>
                   </div>
                   <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
-                    <Field label="Graduation year">
-                      <Input type="number" placeholder="2026" value={e.graduationYear} onChange={(ev) => updateEducationField(i, 'graduationYear', ev.target.value)} />
+                    <Field label="Graduation year" required error={educationErrors[i]?.graduationYear}>
+                      <Input type="number" placeholder="2026" min={MIN_GRAD_YEAR} max={MAX_GRAD_YEAR} value={e.graduationYear} onChange={(ev) => updateEducationField(i, 'graduationYear', ev.target.value)} />
                     </Field>
                     <Field label="Grade / CGPA" hint="Optional">
                       <Input placeholder="8.4" value={e.grade} onChange={(ev) => updateEducationField(i, 'grade', ev.target.value)} />
@@ -429,16 +468,19 @@ export default function OnboardingPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                   {suggestions.map((name) => {
                     const selected = alreadySelected.has(name.toLowerCase());
+                    const capped = !selected && skills.length >= MAX_SKILLS;
                     return (
                       <button
                         key={name}
                         type="button"
+                        disabled={capped}
                         onClick={selected ? () => removeSkillEntry(name) : () => addSkillEntry(name, false)}
                         style={{
                           padding: '8px 16px', border: `1px solid ${selected ? 'var(--ink-900)' : 'var(--bone-400)'}`,
                           background: selected ? 'var(--ink-900)' : 'transparent',
                           color: selected ? 'var(--bone-50)' : 'var(--ink-800)',
-                          font: 'inherit', fontSize: 13, cursor: 'pointer', borderRadius: 'var(--radius-pill)',
+                          font: 'inherit', fontSize: 13, cursor: capped ? 'not-allowed' : 'pointer', borderRadius: 'var(--radius-pill)',
+                          opacity: capped ? 0.4 : 1,
                         }}
                       >
                         {name}
@@ -459,10 +501,12 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              {skills.length < MAX_SKILLS && (
+              {skills.length < MAX_SKILLS ? (
                 <Button size="sm" variant="secondary" iconAfter="plus" disabled={!skillInput.trim()} onClick={() => addSkillEntry(skillInput, !(suggestions || []).some((x) => x.toLowerCase() === skillInput.trim().toLowerCase()))} style={{ alignSelf: 'flex-start' }}>
                   Add a skill
                 </Button>
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--status-danger)' }}>Skill limit reached ({MAX_SKILLS}/{MAX_SKILLS}) — remove one to add another.</span>
               )}
               <span className="cb-num" style={{ fontSize: 12, color: 'var(--ink-300)' }}>{skills.length} of {MAX_SKILLS} skills added</span>
             </div>
@@ -479,31 +523,31 @@ export default function OnboardingPage() {
                 </Field>
               </div>
               <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
-                <Field label="Phone number">
+                <Field label="Phone number" required error={basicErrors.phone}>
                   <Input placeholder="+91 90000 00000" value={basic.phone} onChange={(ev) => updateBasicField('phone', ev.target.value)} />
                 </Field>
-                <Field label="City">
+                <Field label="City" required error={basicErrors.city}>
                   <Input placeholder="Bengaluru" value={basic.city} onChange={(ev) => updateBasicField('city', ev.target.value)} />
                 </Field>
               </div>
               <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
-                <Field label="State">
+                <Field label="State" error={basicErrors.state}>
                   <Input placeholder="Karnataka" value={basic.state} onChange={(ev) => updateBasicField('state', ev.target.value)} />
                 </Field>
-                <Field label="Country">
+                <Field label="Country" required error={basicErrors.country}>
                   <Input placeholder="India" value={basic.country} onChange={(ev) => updateBasicField('country', ev.target.value)} />
                 </Field>
               </div>
               <Field label="Bio" hint={`${(basic.bio || '').length} / 2000 characters max`}>
                 <Textarea rows={4} placeholder="What you're working toward, in your own words." value={basic.bio} onChange={(ev) => updateBasicField('bio', ev.target.value.slice(0, 2000))} />
               </Field>
-              <Field label="LinkedIn URL">
+              <Field label="LinkedIn URL" error={basicErrors.linkedinUrl}>
                 <Input placeholder="https://linkedin.com/in/you" value={basic.linkedinUrl} onChange={(ev) => updateBasicField('linkedinUrl', ev.target.value)} />
               </Field>
-              <Field label="GitHub URL">
+              <Field label="GitHub URL" error={basicErrors.githubUrl}>
                 <Input placeholder="https://github.com/you" value={basic.githubUrl} onChange={(ev) => updateBasicField('githubUrl', ev.target.value)} />
               </Field>
-              <Field label="Portfolio URL">
+              <Field label="Portfolio URL" error={basicErrors.portfolioUrl}>
                 <Input placeholder="https://you.dev" value={basic.portfolioUrl} onChange={(ev) => updateBasicField('portfolioUrl', ev.target.value)} />
               </Field>
               <div style={{ height: 1, background: 'var(--line-hairline)', margin: '4px 0' }} />
