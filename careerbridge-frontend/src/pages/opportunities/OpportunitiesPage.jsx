@@ -4,7 +4,7 @@ import {
   Alert, Badge, Button, Field, Icon, IconButton, Input, Logo, MatchScore, revealStyle, Skeleton,
   StatTile, Tag, Textarea,
 } from '../../components/ui';
-import { getJobs, getJobDetail, getMyApplications, applyToJob } from '../../api/recruiterApi';
+import { getJobs, getJobDetail, getMyApplications, applyToJob, uploadApplicationResume } from '../../api/recruiterApi';
 import { getMyProfile, getAvatarBlobUrl } from '../../api/studentApi';
 import { getMyResumes } from '../../api/resumeApi';
 import { getUnreadCount } from '../../api/notificationApi';
@@ -184,6 +184,7 @@ export default function OpportunitiesPage() {
   const [bookmarked, setBookmarked] = useState({});
 
   const [customResumeName, setCustomResumeName] = useState(null);
+  const [customResumeFile, setCustomResumeFile] = useState(null);
   const [resumeRemoved, setResumeRemoved] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -248,15 +249,26 @@ export default function OpportunitiesPage() {
     const job = jobs.find((j) => j.id === selectedId);
     setApplying(true);
     // Notes are the student's own scratch space, never sent as the coverLetter.
-    applyToJob(selectedId, null).then((application) => {
+    applyToJob(selectedId, null).then(async (application) => {
       setApplications((prev) => [application, ...prev]);
+      // The application exists now, so attach the résumé -- a failure here shouldn't undo the
+      // application itself, just tell the student their file didn't make it.
+      if (customResumeFile) {
+        try {
+          await uploadApplicationResume(application.id, customResumeFile);
+        } catch (err) {
+          showToast('Application sent, résumé failed', err.message, 'danger');
+          setApplying(false);
+          return;
+        }
+      }
       setApplying(false);
       showToast('Application sent', job ? `${job.title} at ${job.companyName}` : 'Application submitted', 'success');
     }).catch((err) => {
       setApplying(false);
       showToast('Could not apply', err.message, 'danger');
     });
-  }, [selectedId, applying, jobs, showToast]);
+  }, [selectedId, applying, jobs, customResumeFile, showToast]);
 
   const clearFilters = useCallback(() => {
     setQuery('');
@@ -272,6 +284,7 @@ export default function OpportunitiesPage() {
       return;
     }
     setCustomResumeName(file.name);
+    setCustomResumeFile(file);
     setResumeRemoved(false);
     setDragOver(false);
   }, [showToast]);
@@ -556,7 +569,7 @@ export default function OpportunitiesPage() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                               <span style={{ fontSize: 12, color: 'var(--ink-400)', minWidth: 0 }}>Recruiters can view this on your application.</span>
-                              <button type="button" onClick={() => { setCustomResumeName(null); setResumeRemoved(true); }} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--status-danger)', flexShrink: 0, whiteSpace: 'nowrap' }}>Delete</button>
+                              <button type="button" onClick={() => { setCustomResumeName(null); setCustomResumeFile(null); setResumeRemoved(true); }} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--status-danger)', flexShrink: 0, whiteSpace: 'nowrap' }}>Delete</button>
                             </div>
                           </div>
                         ) : (

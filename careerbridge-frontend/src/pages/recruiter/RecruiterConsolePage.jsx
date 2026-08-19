@@ -8,7 +8,7 @@ import {
   createJob, getMyJobs, updateJob, deactivateJob, deleteJob,
   getJobApplications, updateApplicationStatus, extendOffer,
   scheduleInterview, getMyInterviews, updateInterview,
-  getCandidates, getMyPlacementStats,
+  getCandidates, getMyPlacementStats, downloadApplicationResume,
 } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
@@ -618,6 +618,18 @@ export default function RecruiterConsolePage() {
                     <IconButton icon="x" label="Close" onClick={() => setSelectedAppId(null)} />
                   </div>
                   <Badge tone={STATUS_TONE[selectedApp.status]}>{selectedApp.status}</Badge>
+
+                  {selectedApp.hasResume && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon="file-text"
+                      onClick={() => downloadApplicationResume(selectedApp.id, `application-${selectedApp.id}-resume`).catch(() => {})}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      Download résumé
+                    </Button>
+                  )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <span className="cb-eyebrow">Move status</span>

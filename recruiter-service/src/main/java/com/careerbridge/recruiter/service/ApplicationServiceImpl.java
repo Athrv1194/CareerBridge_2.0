@@ -5,6 +5,7 @@ import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
 import com.careerbridge.recruiter.dto.OfferResponseRequest;
 import com.careerbridge.recruiter.dto.PrsLeaderboardEntryDto;
+import com.careerbridge.recruiter.dto.ResumeFileBlob;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
 import com.careerbridge.recruiter.event.PlacementCompletedEvent;
 import com.careerbridge.recruiter.exception.CustomException;
@@ -295,6 +296,67 @@ public class ApplicationServiceImpl implements ApplicationService {
         return toResponse(saved, job == null ? null : job.getTitle());
     }
 
+    private static final Set<String> ALLOWED_RESUME_CONTENT_TYPES = Set.of(
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+
+    @Override
+    @Transactional
+    public void uploadResume(String callerRole, Long studentId, Long applicationId,
+                             byte[] bytes, String contentType, String fileName) {
+        requireRole(callerRole, RecruiterRoles.STUDENT, "Only a STUDENT may attach a résumé");
+
+        if (bytes == null || bytes.length == 0) {
+            throw new CustomException("No file was uploaded", HttpStatus.BAD_REQUEST);
+        }
+        if (contentType == null || !ALLOWED_RESUME_CONTENT_TYPES.contains(contentType)) {
+            throw new CustomException("Only PDF or Word résumés are accepted", HttpStatus.BAD_REQUEST);
+        }
+
+        JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new CustomException("Application not found", HttpStatus.NOT_FOUND));
+
+        if (!Objects.equals(application.getStudentId(), studentId)) {
+            throw new CustomException("This application does not belong to you", HttpStatus.FORBIDDEN);
+        }
+
+        application.setResumeFile(bytes);
+        application.setResumeFileName(fileName);
+        application.setResumeFileContentType(contentType);
+        jobApplicationRepository.save(application);
+
+        log.info("applicationId={} received a custom résumé from studentId={}", applicationId, studentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ResumeFileBlob getResume(String callerRole, Long userId, Long applicationId) {
+        JobApplication application = jobApplicationRepository.findById(applicationId)
+                .orElseThrow(() -> new CustomException("Application not found", HttpStatus.NOT_FOUND));
+
+        boolean isOwner = RecruiterRoles.STUDENT.equals(callerRole)
+                && Objects.equals(application.getStudentId(), userId);
+        boolean isRecruiterOwner = RecruiterRoles.RECRUITER.equals(callerRole)
+                && jobRepository.findById(application.getJobId())
+                        .map(job -> Objects.equals(job.getRecruiterId(), userId))
+                        .orElse(false);
+        boolean isOrgViewer = ORG_VIEW_ROLES.contains(callerRole);
+
+        if (!isOwner && !isRecruiterOwner && !isOrgViewer) {
+            throw new CustomException("You may not view this résumé", HttpStatus.FORBIDDEN);
+        }
+        if (application.getResumeFile() == null) {
+            throw new CustomException("No résumé attached to this application", HttpStatus.NOT_FOUND);
+        }
+
+        return ResumeFileBlob.builder()
+                .bytes(application.getResumeFile())
+                .contentType(application.getResumeFileContentType())
+                .fileName(application.getResumeFileName())
+                .build();
+    }
+
     /**
      * Loads the job behind an application and asserts the caller owns it. Separate lookup plus
      * Objects.equals rather than a compound finder, deliberately: this returns 403 for someone
@@ -355,6 +417,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .offerOutcome(application.getOfferOutcome())
                 .appliedAt(application.getAppliedAt())
                 .updatedAt(application.getUpdatedAt())
+                .hasResume(application.getResumeFile() != null)
                 .build();
     }
 }
