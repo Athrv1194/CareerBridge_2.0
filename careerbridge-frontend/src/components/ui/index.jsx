@@ -292,10 +292,13 @@ export function Alert({ tone = 'info', title, message }) {
   );
 }
 
-export function Field({ label, hint, error, children }) {
+export function Field({ label, hint, error, required, children }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>
+        {label}
+        {required && <span style={{ color: 'var(--status-danger)' }}> *</span>}
+      </span>
       {children}
       {error ? (
         <span style={{ fontSize: 12, color: 'var(--status-danger)' }}>{error}</span>

@@ -1,6 +1,7 @@
 package com.careerbridge.student.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -23,21 +24,28 @@ public class StudentProfileRequest {
     @NotBlank(message = "Last name is required")
     private String lastName;
 
+    @Pattern(regexp = "^\\+?[0-9][0-9\\s-]{6,14}$", message = "Enter a valid phone number")
     private String phone;
 
     @Size(max = 2000, message = "Bio must be at most 2000 characters")
     private String bio;
 
+    @Pattern(regexp = "^[A-Za-z][A-Za-z\\s.'-]{1,49}$", message = "Letters only, no digits")
     private String city;
 
+    @Pattern(regexp = "^[A-Za-z][A-Za-z\\s.'-]{1,49}$", message = "Letters only, no digits")
     private String state;
 
+    @Pattern(regexp = "^[A-Za-z][A-Za-z\\s.'-]{1,49}$", message = "Letters only, no digits")
     private String country;
 
+    @Pattern(regexp = "^https?://.+\\..+$", message = "Enter a full URL starting with https://")
     private String linkedinUrl;
 
+    @Pattern(regexp = "^https?://.+\\..+$", message = "Enter a full URL starting with https://")
     private String githubUrl;
 
+    @Pattern(regexp = "^https?://.+\\..+$", message = "Enter a full URL starting with https://")
     private String portfolioUrl;
 
     private Boolean isPublic;
