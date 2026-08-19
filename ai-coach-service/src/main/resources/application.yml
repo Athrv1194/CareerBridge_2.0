@@ -89,7 +89,10 @@ groq:
   api:
     url: https://api.groq.com/openai/v1/chat/completions
     key: ${GROQ_API_KEY:}
-  model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+  # llama-3.3-70b-versatile was retired from this account's catalogue (Groq 404s "model_not_found").
+  # openai/gpt-oss-120b is the current closest-capability replacement -- verified against
+  # GET /openai/v1/models and a real chat completion before switching.
+  model: ${GROQ_MODEL:openai/gpt-oss-120b}
 
 tavily:
   api:
