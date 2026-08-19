@@ -306,7 +306,7 @@ export function Field({ label, hint, error, children }) {
   );
 }
 
-export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength, disabled = false }) {
+export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength, min, max, disabled = false }) {
   const [revealed, setRevealed] = useState(false);
   const isPassword = type === 'password';
   const inputStyle = {
@@ -317,7 +317,7 @@ export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, 
   };
 
   if (!isPassword) {
-    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} disabled={disabled} style={inputStyle} />;
+    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} min={min} max={max} disabled={disabled} style={inputStyle} />;
   }
 
   return (

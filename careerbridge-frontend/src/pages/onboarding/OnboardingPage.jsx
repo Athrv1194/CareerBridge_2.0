@@ -12,6 +12,8 @@ import './onboarding.css';
 const STEP_LABELS = ['Education', 'Skills', 'Basic info', 'Assessment'];
 const LEVELS = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED', 'EXPERT'];
 const MAX_EDUCATION = 3;
+const MIN_GRAD_YEAR = 1950;
+const MAX_GRAD_YEAR = new Date().getFullYear() + 10;
 const MAX_SKILLS = 15;
 const FALLBACK_SKILLS = [
   'Java', 'Python', 'JavaScript', 'TypeScript', 'C#', 'C++',
@@ -388,7 +390,7 @@ export default function OnboardingPage() {
                   </div>
                   <div className="cb-ob-field-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 16 }}>
                     <Field label="Graduation year">
-                      <Input type="number" placeholder="2026" value={e.graduationYear} onChange={(ev) => updateEducationField(i, 'graduationYear', ev.target.value)} />
+                      <Input type="number" placeholder="2026" min={MIN_GRAD_YEAR} max={MAX_GRAD_YEAR} value={e.graduationYear} onChange={(ev) => updateEducationField(i, 'graduationYear', ev.target.value)} />
                     </Field>
                     <Field label="Grade / CGPA" hint="Optional">
                       <Input placeholder="8.4" value={e.grade} onChange={(ev) => updateEducationField(i, 'grade', ev.target.value)} />
