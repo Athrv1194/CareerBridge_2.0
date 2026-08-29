@@ -2,6 +2,7 @@ package com.careerbridge.student.consumer;
 
 import com.careerbridge.student.config.RabbitMQConfig;
 import com.careerbridge.student.event.ResumeGeneratedEvent;
+import com.careerbridge.student.event.UserDepartmentUpdatedEvent;
 import com.careerbridge.student.event.StudentRegisteredEvent;
 import com.careerbridge.student.model.StudentProfile;
 import com.careerbridge.student.repository.StudentProfileRepository;
@@ -112,6 +113,42 @@ public class StudentEventConsumer {
             log.error("Failed to handle {} for studentId={}: {}",
                     RabbitMQConfig.RESUME_GENERATED_ROUTING_KEY,
                     event == null ? null : event.getStudentId(),
+                    ex.getMessage());
+        }
+    }
+
+    /**
+     * Keeps the local copy of auth-service's department current, which is what puts department on
+     * the public candidate profile recruiter-service filters on.
+     *
+     * A null department is APPLIED, not skipped: clearing a department is a real transition, and
+     * treating null as "nothing to do" would leave this service holding a value auth-service no
+     * longer has -- a recruiter would keep seeing a candidate under a department they were removed
+     * from. That is the opposite of the usual null-guard in the two consumers above, so only
+     * userId is guarded here.
+     *
+     * The event carries the absolute current value rather than a delta, so a redelivery re-applies
+     * the same assignment and is harmless -- same rule as prs-service's session-count consumer.
+     *
+     * Deliberately not @Transactional here, matching the two consumers above: the transaction lives
+     * inside updateDepartment, on the proxied StudentService bean.
+     */
+    @RabbitListener(queues = RabbitMQConfig.STUDENT_DEPARTMENT_QUEUE)
+    public void onUserDepartmentUpdated(UserDepartmentUpdatedEvent event) {
+        try {
+            if (event == null || event.getUserId() == null) {
+                log.warn("Ignoring {} with no userId",
+                        RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY);
+                return;
+            }
+
+            studentService.updateDepartment(event.getUserId(), event.getDepartment());
+
+            log.info("Set department={} for userId={}", event.getDepartment(), event.getUserId());
+        } catch (Exception ex) {
+            log.error("Failed to handle {} for userId={}: {}",
+                    RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY,
+                    event == null ? null : event.getUserId(),
                     ex.getMessage());
         }
     }

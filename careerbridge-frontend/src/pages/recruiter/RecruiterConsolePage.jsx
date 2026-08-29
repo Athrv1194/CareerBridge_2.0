@@ -8,7 +8,7 @@ import {
   createJob, getMyJobs, updateJob, deactivateJob, deleteJob,
   getJobApplications, updateApplicationStatus, extendOffer,
   scheduleInterview, getMyInterviews, updateInterview,
-  getCandidates, getMyPlacementStats,
+  getCandidates, getMyPlacementStats, downloadApplicationResume,
 } from '../../api/recruiterApi';
 import { getUnreadCount } from '../../api/notificationApi';
 import { getCandidateAvatarBlobUrl } from '../../api/studentApi';
@@ -153,6 +153,7 @@ export default function RecruiterConsolePage() {
   const [candQuery, setCandQuery] = useState('');
   const [candMin, setCandMin] = useState('');
   const [candMax, setCandMax] = useState('');
+  const [candDept, setCandDept] = useState('');
   const candTimer = useRef(null);
 
   const [interviews, setInterviews] = useState([]);
@@ -196,10 +197,10 @@ export default function RecruiterConsolePage() {
     getJobApplications(jobId).then((data) => setApps(data)).catch(() => setApps([])).finally(() => setAppsLoading(false));
   }, []);
 
-  const loadCandidates = useCallback((skillsStr, min, max) => {
+  const loadCandidates = useCallback((skillsStr, min, max, department) => {
     setCandLoading(true);
     setCandIn(false);
-    getCandidates({ skills: skillsStr, minScore: min, maxScore: max })
+    getCandidates({ skills: skillsStr, minScore: min, maxScore: max, department })
       .then((data) => setCandidates(data)).catch(() => setCandidates([]))
       .finally(() => { setCandLoading(false); setCandLoaded(true); setTimeout(() => setCandIn(true), 20); });
   }, []);
@@ -224,7 +225,7 @@ export default function RecruiterConsolePage() {
       if (!jobsLoaded) loadJobs();
       if (appsJobId) loadApps(appsJobId);
     }
-    if (tab === 'CANDIDATES' && !candLoaded) loadCandidates('', null, null);
+    if (tab === 'CANDIDATES' && !candLoaded) loadCandidates('', null, null, null);
     if (tab === 'INTERVIEWS' && !ivLoaded) loadInterviews();
   };
 
@@ -244,7 +245,7 @@ export default function RecruiterConsolePage() {
   const startCreateJob = () => { setJobDraft(emptyJobDraft); setJobEditingId(null); setJobError(''); setJobForm(true); };
   const startEditJob = (job) => {
     setJobDraft({
-      title: job.title, description: job.description || '', requiredSkills: job.requiredSkills || '',
+      title: job.title, description: job.description || '', requiredSkills: (job.requiredSkills || []).join(', '),
       location: job.location || '', workMode: job.workMode, jobType: job.jobType,
       salaryMin: job.salaryMin ?? '', salaryMax: job.salaryMax ?? '', applicationDeadline: job.applicationDeadline || '',
     });
@@ -296,10 +297,10 @@ export default function RecruiterConsolePage() {
   const onCandQueryChange = (e) => {
     setCandQuery(e.target.value);
     clearTimeout(candTimer.current);
-    candTimer.current = setTimeout(() => loadCandidates(e.target.value, candMin || null, candMax || null), 400);
+    candTimer.current = setTimeout(() => loadCandidates(e.target.value, candMin || null, candMax || null, candDept || null), 400);
   };
-  const searchCandidates = () => { clearTimeout(candTimer.current); loadCandidates(candQuery, candMin || null, candMax || null); };
-  const clearCandidateFilters = () => { setCandQuery(''); setCandMin(''); setCandMax(''); loadCandidates('', null, null); };
+  const searchCandidates = () => { clearTimeout(candTimer.current); loadCandidates(candQuery, candMin || null, candMax || null, candDept || null); };
+  const clearCandidateFilters = () => { setCandQuery(''); setCandMin(''); setCandMax(''); setCandDept(''); loadCandidates('', null, null, null); };
 
   // --- Interviews ---
   const openScheduleInterview = (applicationId) => {
@@ -618,6 +619,18 @@ export default function RecruiterConsolePage() {
                   </div>
                   <Badge tone={STATUS_TONE[selectedApp.status]}>{selectedApp.status}</Badge>
 
+                  {selectedApp.hasResume && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon="file-text"
+                      onClick={() => downloadApplicationResume(selectedApp.id, `application-${selectedApp.id}-resume`).catch(() => {})}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      Download résumé
+                    </Button>
+                  )}
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <span className="cb-eyebrow">Move status</span>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -658,8 +671,17 @@ export default function RecruiterConsolePage() {
             <div style={{ display: 'flex', alignItems: 'end', gap: 12, flexWrap: 'wrap' }}>
               <Field label="Min PRS score" hint="Excludes unscored candidates."><Input type="number" value={candMin} onChange={(e) => setCandMin(e.target.value)} placeholder="0" /></Field>
               <Field label="Max PRS score" hint="Keeps unscored candidates."><Input type="number" value={candMax} onChange={(e) => setCandMax(e.target.value)} placeholder="100" /></Field>
-              <Button variant="primary" size="sm" onClick={searchCandidates}>Search</Button>
-              <Button variant="ghost" size="sm" onClick={clearCandidateFilters}>Clear</Button>
+              <Field label="Department" hint="Exact match, excludes unassigned."><Input value={candDept} onChange={(e) => setCandDept(e.target.value)} placeholder="e.g. Computer Science" /></Field>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, visibility: 'hidden' }}>_</span>
+                <Button variant="primary" size="sm" onClick={searchCandidates}>Search</Button>
+                <span style={{ fontSize: 12, visibility: 'hidden' }}>_</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, visibility: 'hidden' }}>_</span>
+                <Button variant="ghost" size="sm" onClick={clearCandidateFilters}>Clear</Button>
+                <span style={{ fontSize: 12, visibility: 'hidden' }}>_</span>
+              </div>
             </div>
             <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Showing {candidates.length} candidate{candidates.length === 1 ? '' : 's'}</span>
 
@@ -692,6 +714,7 @@ export default function RecruiterConsolePage() {
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{c.firstName} {c.lastName}</div>
                           <div style={{ fontSize: 12, color: 'var(--ink-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>
+                          {c.department && <div style={{ fontSize: 11, color: 'var(--taupe-700)', marginTop: 2 }}>{c.department}</div>}
                         </div>
                       </div>
                       {unavailable ? (

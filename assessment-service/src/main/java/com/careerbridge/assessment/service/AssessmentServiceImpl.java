@@ -523,8 +523,8 @@ public class AssessmentServiceImpl implements AssessmentService {
     /**
      * Fail-soft: a broker outage must not cost the student their submitted assessment.
      *
-     * ponytail: publishes before the surrounding transaction commits, so a rollback after this
-     * point would leave a phantom event. Kept last in submitAttempt to shrink that window; move to
+     * Publishes before the surrounding transaction commits, so a rollback after this point would
+     * leave a phantom event. Kept last in submitAttempt to shrink that window; move to
      * @TransactionalEventListener(AFTER_COMMIT) if exactly-once delivery starts mattering.
      */
     private void publishCompleted(AssessmentResult identity, String categoryName,

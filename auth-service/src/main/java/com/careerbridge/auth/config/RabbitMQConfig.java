@@ -40,6 +40,20 @@ public class RabbitMQConfig {
     public static final String ORG_ADMIN_INVITED_ROUTING_KEY = "organization.admin.invited";
 
     /**
+     * Published whenever a user's department is set, changed or cleared. student-service owns the
+     * queue and keeps a local copy on StudentProfile, which is what puts department on the public
+     * candidate profile recruiter-service searches.
+     *
+     * An event rather than a synchronous read, and not by preference: auth-service is the only
+     * backend service with Spring Security on its classpath, and its chain ends in
+     * .anyRequest().authenticated() -- so a service-to-service GET carrying only gateway-style
+     * headers is answered 401, with no JWT to present. Nothing else in this system calls
+     * auth-service synchronously for exactly that reason. Same event-plus-local-copy shape as
+     * resume.generated -> StudentProfile.resumeUrl.
+     */
+    public static final String USER_DEPARTMENT_UPDATED_ROUTING_KEY = "user.department.updated";
+
+    /**
      * This service publishes student.registered and organization.admin.invited, and consumes
      * subscription.activated and organization.request.approved. It declares the exchange plus its
      * OWN queues and bindings for what it consumes -- the publishers of those events deliberately

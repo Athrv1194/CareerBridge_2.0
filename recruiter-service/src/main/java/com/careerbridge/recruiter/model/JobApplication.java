@@ -87,6 +87,16 @@ public class JobApplication {
     @Column(name = "offer_outcome")
     private OfferOutcome offerOutcome;
 
+    // Nullable, added to an already-populated table -- same reasoning as Certificate.credentialFile
+    // in student-service. A student may attach a résumé tailored to this specific application,
+    // separate from their generated CareerBridge résumé.
+    @Column(columnDefinition = "bytea")
+    private byte[] resumeFile;
+
+    private String resumeFileName;
+
+    private String resumeFileContentType;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime appliedAt;

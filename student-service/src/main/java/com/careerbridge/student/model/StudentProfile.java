@@ -58,6 +58,22 @@ public class StudentProfile {
      */
     private String role;
 
+    /**
+     * Local copy of the department auth-service holds on User, kept current by the
+     * user.department.updated consumer. Exists so the public candidate profile can carry it --
+     * recruiter-service filters on it, and cannot read auth-service synchronously (that service is
+     * the only one with Spring Security, and answers a header-only call 401).
+     *
+     * Nullable with no @Builder.Default, deliberately: this column is added to an already-populated
+     * table, and a NOT NULL column with no DEFAULT makes ddl-auto's ALTER fail against existing
+     * rows silently, as a WARN. Same rule as `role` above, and the same failure that has cost this
+     * project three incidents. Null means unassigned, which is correct for every pre-existing row.
+     *
+     * A denormalised copy, so it lags auth-service by broker delivery and can go stale if an event
+     * is lost -- auth-service's users.department stays the source of truth.
+     */
+    private String department;
+
     private String phone;
 
     // Free text well past the 255-char column default. TEXT, not @Lob: Hibernate's

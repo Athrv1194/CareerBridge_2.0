@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, ScoreRing, Skeleton, StatTile,
-  Textarea, useRevealOnMount,
+  Badge, Button, Field, Icon, IconButton, Input, Logo, revealStyle, ScoreRing, Select, Skeleton,
+  StatTile, Textarea, useRevealOnMount,
 } from '../../components/ui';
 import {
   getOrganization, listDepartments, createDepartment, updateOrganization,
   getPlatformStats, getLeaderboard, listUsers, deactivateUser, activateUser, getPlacementStats,
+  assignUserDepartment,
 } from '../../api/adminApi';
 import { listOrgJoinRequests, approveOrgJoinRequest, rejectOrgJoinRequest } from '../../api/orgJoinApi';
 import { getTokenPayload, getDisplayName, clearTokens } from '../../utils/tokenUtils';
@@ -101,8 +102,10 @@ export default function CollegeDashboardPage() {
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [studentQuery, setStudentQuery] = useState('');
   const [studentStatus, setStudentStatus] = useState('ALL');
+  const [studentDept, setStudentDept] = useState('ALL');
   const [confirmDeactivateId, setConfirmDeactivateId] = useState(null);
   const [busyStudentId, setBusyStudentId] = useState(null);
+  const [deptBusyId, setDeptBusyId] = useState(null);
 
   const [departments, setDepartments] = useState([]);
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
@@ -190,9 +193,26 @@ export default function CollegeDashboardPage() {
 
   const goToTab = (tab) => {
     setActiveTab(tab);
+    // Students needs the department list too -- it drives the per-row assignment dropdown, so
+    // without it a roster opened directly would offer no departments to assign.
     if (tab === 'STUDENTS' && !studentsLoaded) loadStudents();
-    if (tab === 'DEPARTMENTS' && !departmentsLoaded) loadDepartments();
+    if ((tab === 'STUDENTS' || tab === 'DEPARTMENTS') && !departmentsLoaded) loadDepartments();
+    // Departments shows a per-department headcount computed from the roster, so it needs students.
+    if (tab === 'DEPARTMENTS' && !studentsLoaded) loadStudents();
     if (tab === 'PLACEMENT' && !placementLoaded) loadPlacement();
+  };
+
+  const changeDepartment = (u, department) => {
+    setDeptBusyId(u.id);
+    const next = department || null;
+    assignUserDepartment(u.id, next)
+      .then(() => {
+        setStudents((prev) => prev.map((x) => (x.id === u.id ? { ...x, department: next } : x)));
+        showToast(next ? 'Department assigned' : 'Department cleared',
+          `${u.firstName} ${u.lastName}${next ? ` → ${next}` : ''}`, 'success');
+      })
+      .catch((e) => showToast('Could not update department', e.message, 'danger'))
+      .finally(() => setDeptBusyId(null));
   };
 
   const askDeactivate = (u) => setConfirmDeactivateId(u.id);
@@ -257,9 +277,23 @@ export default function CollegeDashboardPage() {
       if (q && !`${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(q)) return false;
       if (studentStatus === 'ACTIVE' && u.isDeleted) return false;
       if (studentStatus === 'DEACTIVATED' && !u.isDeleted) return false;
+      if (studentDept === 'UNASSIGNED' && u.department) return false;
+      if (studentDept !== 'ALL' && studentDept !== 'UNASSIGNED' && u.department !== studentDept) return false;
       return true;
     });
-  }, [students, studentQuery, studentStatus]);
+  }, [students, studentQuery, studentStatus, studentDept]);
+
+  // Headcount per department name, plus the unassigned tail. Computed from the roster already in
+  // memory rather than a new endpoint -- both lists are loaded for these two tabs anyway.
+  const deptCounts = useMemo(() => {
+    const counts = {};
+    let unassigned = 0;
+    students.forEach((u) => {
+      if (u.department) counts[u.department] = (counts[u.department] || 0) + 1;
+      else unassigned += 1;
+    });
+    return { counts, unassigned };
+  }, [students]);
   const studentsEmptyAll = studentsLoaded && students.length === 0;
   const studentsNoMatch = studentsLoaded && students.length > 0 && filteredStudents.length === 0;
 
@@ -415,6 +449,18 @@ export default function CollegeDashboardPage() {
               <div style={{ minWidth: 280, flex: 1 }}>
                 <Input placeholder="Search by name or email…" value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} />
               </div>
+              {departments.length > 0 && (
+                <Select
+                  value={studentDept}
+                  onChange={(e) => setStudentDept(e.target.value)}
+                  style={{ flexShrink: 0 }}
+                  options={[
+                    { value: 'ALL', label: 'All departments' },
+                    ...departments.map((d) => ({ value: d.name, label: d.name })),
+                    { value: 'UNASSIGNED', label: 'Unassigned' },
+                  ]}
+                />
+              )}
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                 <Button size="sm" variant={studentStatus === 'ALL' ? 'primary' : 'ghost'} onClick={() => setStudentStatus('ALL')}>All</Button>
                 <Button size="sm" variant={studentStatus === 'ACTIVE' ? 'primary' : 'ghost'} onClick={() => setStudentStatus('ACTIVE')}>Active</Button>
@@ -441,6 +487,7 @@ export default function CollegeDashboardPage() {
                     <th style={thStyle('left')}>Name</th>
                     <th style={thStyle('left')}>Email</th>
                     <th style={thStyle('left')}>Role</th>
+                    <th style={thStyle('left')}>Department</th>
                     <th style={thStyle('left')}>Plan</th>
                     <th style={thStyle('right')}>Joined</th>
                     <th style={thStyle('left')}>Status</th>
@@ -463,6 +510,28 @@ export default function CollegeDashboardPage() {
                           </td>
                           <td style={{ ...tdStyle('left'), color: 'var(--ink-500)' }}>{u.email}</td>
                           <td style={tdStyle('left')}><Badge tone="default">{u.role}</Badge></td>
+                          <td style={tdStyle('left')}>
+                            {departments.length === 0 ? (
+                              <span style={{ fontSize: 12, color: 'var(--ink-400)' }}>Add a department first</span>
+                            ) : (
+                              <Select
+                                value={u.department || ''}
+                                onChange={(e) => changeDepartment(u, e.target.value)}
+                                style={{ minWidth: 150, opacity: deptBusyId === u.id ? 0.5 : 1 }}
+                                options={[
+                                  { value: '', label: 'Unassigned' },
+                                  ...departments.map((d) => ({ value: d.name, label: d.name })),
+                                  // Department is free text, so a stored value can outlive the
+                                  // department it named (renamed, or created before this list).
+                                  // Without this the select falls back to blank and the row reads
+                                  // as unassigned while the database says otherwise.
+                                  ...(u.department && !departments.some((d) => d.name === u.department)
+                                    ? [{ value: u.department, label: `${u.department} (not in list)` }]
+                                    : []),
+                                ]}
+                              />
+                            )}
+                          </td>
                           <td style={tdStyle('left')}><Badge tone={plan.tone}>{plan.label}</Badge></td>
                           <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{fmtDate(u.createdAt)}</td>
                           <td style={tdStyle('left')}><Badge tone={u.isDeleted ? 'danger' : 'success'}>{u.isDeleted ? 'DEACTIVATED' : 'ACTIVE'}</Badge></td>
@@ -515,14 +584,34 @@ export default function CollegeDashboardPage() {
             )}
             {departments.length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }} className="cb-college-dept-grid">
-                {departments.map((dept) => (
-                  <div key={dept.id} style={{ background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{dept.name}</span>
-                    <span style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{dept.description || '—'}</span>
-                    <span className="cb-num" style={{ fontSize: 11, color: 'var(--ink-300)' }}>Dept #{dept.id}</span>
-                  </div>
-                ))}
+                {departments.map((dept) => {
+                  const headcount = deptCounts.counts[dept.name] || 0;
+                  return (
+                    <div key={dept.id} style={{ background: 'var(--bone-50)', border: '1px solid var(--line-hairline)', padding: 16, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{dept.name}</span>
+                        <Badge tone={headcount > 0 ? 'default' : 'warning'}>
+                          {headcount} {headcount === 1 ? 'student' : 'students'}
+                        </Badge>
+                      </div>
+                      <span style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{dept.description || '—'}</span>
+                      <button
+                        type="button"
+                        onClick={() => { setStudentDept(dept.name); goToTab('STUDENTS'); }}
+                        style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 12, fontFamily: 'var(--font-sans)', color: 'var(--taupe-700)' }}
+                      >
+                        View students →
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
+            )}
+            {departments.length > 0 && studentsLoaded && deptCounts.unassigned > 0 && (
+              <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>
+                {deptCounts.unassigned} {deptCounts.unassigned === 1 ? 'student is' : 'students are'} not
+                assigned to a department yet — assign them from the Students tab.
+              </span>
             )}
           </div>
         )}
@@ -570,6 +659,40 @@ export default function CollegeDashboardPage() {
                     </div>
                   ))}
                 </div>
+
+                {placement?.departmentBreakdown?.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <SectionHeader label="By department" />
+                    <div style={{ border: '1px solid var(--line-hairline)', background: 'var(--bone-50)', overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead><tr>
+                          <th style={thStyle('left')}>Department</th>
+                          <th style={thStyle('right')}>Students</th>
+                          <th style={thStyle('right')}>Applications</th>
+                          <th style={thStyle('right')}>Accepted</th>
+                          <th style={thStyle('right')}>Rate</th>
+                          <th style={thStyle('right')}>Avg CTC</th>
+                          <th style={thStyle('right')}>Highest CTC</th>
+                        </tr></thead>
+                        <tbody>
+                          {placement.departmentBreakdown.map((d) => (
+                            <tr key={d.department ?? 'unassigned'}>
+                              <td style={tdStyle('left')}>
+                                {d.department || <span style={{ color: 'var(--ink-400)', fontStyle: 'italic' }}>Unassigned</span>}
+                              </td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.studentsInScope}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.totalApplications}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.offersAccepted}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{d.placementRate}%</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{fmtCtc(d.averageCtc)}</td>
+                              <td style={{ ...tdStyle('right'), color: 'var(--ink-500)' }} className="cb-num">{fmtCtc(d.highestCtc)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

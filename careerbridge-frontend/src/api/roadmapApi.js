@@ -1,62 +1,41 @@
-import { getAccessToken } from '../utils/tokenUtils';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
-function authHeaders() {
-  return { Authorization: `Bearer ${getAccessToken()}` };
-}
+import { authedFetch } from './httpClient';
 
 // Safe to call again -- backend just returns the existing roadmap if one's already built.
-export async function buildRoadmap(careerName) {
-  const res = await fetch(`${API_BASE}/roadmap`, {
+export function buildRoadmap(careerName) {
+  return authedFetch('/roadmap', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ careerName }),
+    fallbackMessage: 'Could not build the roadmap.',
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not build the roadmap.');
-  }
-  return res.json();
 }
 
 // 404 just means no roadmap yet. Returns the active one -- whichever was built or activated most
 // recently -- not necessarily the newest by creation date.
 export async function getMyRoadmap() {
-  const res = await fetch(`${API_BASE}/roadmap/my`, { headers: authHeaders() });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error('Could not load your roadmap.');
-  return res.json();
+  try {
+    return await authedFetch('/roadmap/my', { fallbackMessage: 'Could not load your roadmap.' });
+  } catch (e) {
+    if (e.status === 404) return null;
+    throw e;
+  }
 }
 
 // Every roadmap the student has built, active one first. Backs the roadmap switcher.
-export async function getMyRoadmaps() {
-  const res = await fetch(`${API_BASE}/roadmap/my/all`, { headers: authHeaders() });
-  if (!res.ok) throw new Error('Could not load your roadmaps.');
-  return res.json();
+export function getMyRoadmaps() {
+  return authedFetch('/roadmap/my/all', { fallbackMessage: 'Could not load your roadmaps.' });
 }
 
 // Makes this roadmap the one getMyRoadmap returns, without resetting its progress.
-export async function activateRoadmap(roadmapId) {
-  const res = await fetch(`${API_BASE}/roadmap/${roadmapId}/activate`, {
+export function activateRoadmap(roadmapId) {
+  return authedFetch(`/roadmap/${roadmapId}/activate`, {
     method: 'PATCH',
-    headers: authHeaders(),
+    fallbackMessage: 'Could not switch roadmaps.',
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not switch roadmaps.');
-  }
-  return res.json();
 }
 
-export async function completeMilestone(milestoneId) {
-  const res = await fetch(`${API_BASE}/roadmap/milestone/${milestoneId}/complete`, {
+export function completeMilestone(milestoneId) {
+  return authedFetch(`/roadmap/milestone/${milestoneId}/complete`, {
     method: 'PATCH',
-    headers: authHeaders(),
+    fallbackMessage: 'Could not mark that milestone complete.',
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Could not mark that milestone complete.');
-  }
-  return res.json();
 }

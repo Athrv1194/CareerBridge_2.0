@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * -- Spring's @Async proxy only intercepts calls that arrive from OUTSIDE the bean; a self-invoked
  * call bypasses the proxy entirely and runs synchronously on the caller's thread (R4 in the plan).
  *
- * ponytail: the AtomicBoolean is a per-JVM guard, not a distributed lock -- fine for one container,
+ * The AtomicBoolean is a per-JVM guard, not a distributed lock -- fine for one container,
  * but two replicas could both pass tryStart() and both refresh concurrently. That costs wasted
  * quota, not correctness (the existsBy... skip check still prevents duplicate documents within a
  * single replica's run, and worst case across replicas is a handful of duplicate documents plus

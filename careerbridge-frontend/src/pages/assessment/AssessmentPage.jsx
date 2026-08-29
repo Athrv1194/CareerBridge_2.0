@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   AnimatedWords, Alert, Badge, Button, Icon, Logo, MatchScore, ProgressMeter, revealStyle,
   Skeleton, StatTile, useRevealOnMount,
@@ -245,9 +245,15 @@ export default function AssessmentPage() {
         <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 32px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
           <Logo size={36} />
           {(stage === 'intro' || stage === 'question') && (
-            <Link to="/" className="cb-ghost" style={{ color: 'var(--ink-600)', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase' }}>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="cb-ghost"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: 'var(--ink-600)', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', cursor: 'pointer', font: 'inherit' }}
+            >
+              <Icon name="arrow-left" size={13} />
               Save &amp; exit
-            </Link>
+            </button>
           )}
         </div>
       </header>

@@ -476,7 +476,10 @@ services:
       api-gateway:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:80/ || exit 1"]
+      # 127.0.0.1, not localhost: this image's nginx listens on 0.0.0.0 (IPv4) only, but this
+      # container resolves "localhost" to ::1 first -- wget then tries IPv6, gets connection
+      # refused, and the check fails forever even though the app is serving fine over IPv4.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30

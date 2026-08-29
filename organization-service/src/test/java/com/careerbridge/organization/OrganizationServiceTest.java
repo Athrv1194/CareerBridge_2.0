@@ -24,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -156,6 +157,38 @@ class OrganizationServiceTest {
 
         assertEquals(HttpStatus.CONFLICT, ex.getStatus());
         verify(departmentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("a STUDENT can list departments in their OWN organization -- looser than requireCanAccessOrganization")
+    void getDepartmentsByOrg_StudentOwnOrg_Returns200() {
+        when(organizationRepository.findByIdAndIsActiveTrue(5L))
+                .thenReturn(Optional.of(organization(5L, "COEP")));
+        when(departmentRepository.findByOrganizationIdAndIsActiveTrueOrderByNameAsc(5L))
+                .thenReturn(new ArrayList<>());
+
+        assertNotNull(organizationService.getDepartmentsByOrg(5L, "STUDENT", 5L));
+    }
+
+    @Test
+    @DisplayName("a STUDENT is refused another organization's department list")
+    void getDepartmentsByOrg_StudentOtherOrg_Throws403() {
+        CustomException ex = assertThrows(CustomException.class,
+                () -> organizationService.getDepartmentsByOrg(9L, "STUDENT", 5L));
+
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(organizationRepository, never()).findByIdAndIsActiveTrue(anyLong());
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN lists departments for any organization")
+    void getDepartmentsByOrg_SuperAdmin_AnyOrg_Returns200() {
+        when(organizationRepository.findByIdAndIsActiveTrue(9L))
+                .thenReturn(Optional.of(organization(9L, "Other College")));
+        when(departmentRepository.findByOrganizationIdAndIsActiveTrueOrderByNameAsc(9L))
+                .thenReturn(new ArrayList<>());
+
+        assertNotNull(organizationService.getDepartmentsByOrg(9L, SUPER_ADMIN, null));
     }
 
     @Test

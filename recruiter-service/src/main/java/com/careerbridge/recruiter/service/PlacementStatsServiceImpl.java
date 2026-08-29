@@ -1,8 +1,10 @@
 package com.careerbridge.recruiter.service;
 
 import com.careerbridge.recruiter.constants.RecruiterRoles;
+import com.careerbridge.recruiter.dto.DepartmentPlacementStatsDto;
 import com.careerbridge.recruiter.dto.PlacementStatsResponse;
 import com.careerbridge.recruiter.dto.PrsLeaderboardEntryDto;
+import com.careerbridge.recruiter.dto.StudentDepartmentDto;
 import com.careerbridge.recruiter.exception.CustomException;
 import com.careerbridge.recruiter.model.Company;
 import com.careerbridge.recruiter.model.Job;
@@ -21,6 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -39,8 +45,13 @@ import java.util.stream.Collectors;
  * Neither path is N+1. Both batch-load through findAllById exactly the way
  * ApplicationServiceImpl.withJobTitles already does:
  *
- *   org-scoped:       1 HTTP (prs roster) + 3 queries
+ *   org-scoped:       2 HTTP (prs roster, student departments) + 3 queries
  *   recruiter-scoped: 3 queries, zero HTTP
+ *
+ * The department breakdown adds ONE HTTP call to the org-scoped path and no queries at all -- it
+ * re-slices the application list already in memory. The recruiter-scoped path deliberately gets no
+ * breakdown, which is what preserves its zero-cross-service-call guarantee; see
+ * PlacementStatsResponse.departmentBreakdown.
  */
 @Service
 public class PlacementStatsServiceImpl implements PlacementStatsService {
@@ -56,15 +67,18 @@ public class PlacementStatsServiceImpl implements PlacementStatsService {
     private final JobRepository jobRepository;
     private final CompanyRepository companyRepository;
     private final PrsServiceClient prsServiceClient;
+    private final StudentServiceClient studentServiceClient;
 
     public PlacementStatsServiceImpl(JobApplicationRepository jobApplicationRepository,
                                      JobRepository jobRepository,
                                      CompanyRepository companyRepository,
-                                     PrsServiceClient prsServiceClient) {
+                                     PrsServiceClient prsServiceClient,
+                                     StudentServiceClient studentServiceClient) {
         this.jobApplicationRepository = jobApplicationRepository;
         this.jobRepository = jobRepository;
         this.companyRepository = companyRepository;
         this.prsServiceClient = prsServiceClient;
+        this.studentServiceClient = studentServiceClient;
     }
 
     @Override
@@ -96,7 +110,11 @@ public class PlacementStatsServiceImpl implements PlacementStatsService {
             return emptyStats();
         }
 
-        return aggregate(jobApplicationRepository.findByStudentIdIn(studentIds), studentIds.size());
+        List<JobApplication> applications = jobApplicationRepository.findByStudentIdIn(studentIds);
+
+        PlacementStatsResponse stats = aggregate(applications, studentIds.size());
+        stats.setDepartmentBreakdown(departmentBreakdown(callerRole, studentIds, applications));
+        return stats;
     }
 
     @Override
@@ -125,7 +143,11 @@ public class PlacementStatsServiceImpl implements PlacementStatsService {
                 .distinct()
                 .count();
 
-        return aggregate(applications, applicants);
+        PlacementStatsResponse stats = aggregate(applications, applicants);
+        // Explicitly empty, never null -- see PlacementStatsResponse.departmentBreakdown for why
+        // this path deliberately makes no cross-service call to populate it.
+        stats.setDepartmentBreakdown(List.of());
+        return stats;
     }
 
     /**
@@ -147,65 +169,169 @@ public class PlacementStatsServiceImpl implements PlacementStatsService {
                     .averageCtc(null)
                     .highestCtc(null)
                     .topCompanies(List.of())
+                    .departmentBreakdown(List.of())
                     .build();
         }
 
-        long offersExtended = applications.stream()
-                .filter(a -> a.getStatus() == ApplicationStatus.OFFERED)
-                .count();
-
-        List<JobApplication> accepted = applications.stream()
-                .filter(a -> a.getOfferOutcome() == OfferOutcome.ACCEPTED)
-                .toList();
-
-        long offersDeclined = applications.stream()
-                .filter(a -> a.getOfferOutcome() == OfferOutcome.DECLINED)
-                .count();
-
-        // Distinct STUDENTS on both sides. A student who applies to twenty jobs and accepts one is
-        // placed, and an application-level ratio would score that as 5%.
-        long distinctApplicants = applications.stream()
-                .map(JobApplication::getStudentId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
-
-        long distinctPlaced = accepted.stream()
-                .map(JobApplication::getStudentId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .count();
-
-        double placementRate = distinctApplicants == 0
-                ? 0.0
-                : BigDecimal.valueOf(distinctPlaced * 100.0 / distinctApplicants)
-                        .setScale(2, RoundingMode.HALF_UP)
-                        .doubleValue();
-
-        List<BigDecimal> acceptedCtcs = accepted.stream()
-                .map(JobApplication::getOfferedCtc)
-                .filter(Objects::nonNull)
-                .toList();
-
-        // Null rather than ZERO when nobody has accepted: an average of no offers is not zero
-        // rupees, it is "not applicable", and a 0.00 on a dashboard reads as a real salary.
-        BigDecimal averageCtc = acceptedCtcs.isEmpty() ? null
-                : acceptedCtcs.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
-                        .divide(BigDecimal.valueOf(acceptedCtcs.size()), 2, RoundingMode.HALF_UP);
-
-        BigDecimal highestCtc = acceptedCtcs.stream().max(BigDecimal::compareTo).orElse(null);
+        // Every figure below comes from the same helpers departmentBreakdown() uses, so a department
+        // row can never compute one of these differently from the total it belongs to.
+        List<JobApplication> accepted = acceptedOf(applications);
+        List<BigDecimal> ctcs = acceptedCtcs(accepted);
 
         return PlacementStatsResponse.builder()
                 .totalStudentsInScope(studentsInScope)
                 .totalApplications(applications.size())
-                .offersExtended(offersExtended)
+                .offersExtended(countOffered(applications))
                 .offersAccepted(accepted.size())
-                .offersDeclined(offersDeclined)
-                .placementRate(placementRate)
-                .averageCtc(averageCtc)
-                .highestCtc(highestCtc)
+                .offersDeclined(countDeclined(applications))
+                .placementRate(placementRate(applications, accepted))
+                .averageCtc(averageCtc(ctcs))
+                .highestCtc(highestCtc(ctcs))
                 .topCompanies(topCompanies(accepted))
                 .build();
+    }
+
+    /**
+     * The same figures as the top level, computed per department over disjoint slices of the same
+     * roster and the same application list -- so the department rows always sum to the totals.
+     *
+     * ZERO extra queries. It reuses the already-loaded application list and calls the same pure
+     * counting helpers aggregate() uses; the only new I/O is one HTTP call for the department names.
+     * Calling aggregate() itself per department would have been the obvious shape and is the trap:
+     * it invokes topCompanies(), which is two queries, so a college with eight departments would
+     * quietly become sixteen extra queries per dashboard load.
+     *
+     * Students with no department are kept as a single null-keyed row rather than dropped -- an
+     * unassigned cohort that silently vanished would make the rows stop summing to the total, which
+     * is exactly the kind of arithmetic a reader trusts without checking.
+     *
+     * Fail-soft: an unreachable student-service yields an empty breakdown while the top-level totals
+     * stay correct, since those need no department data at all.
+     */
+    private List<DepartmentPlacementStatsDto> departmentBreakdown(String callerRole,
+                                                                  List<Long> studentIds,
+                                                                  List<JobApplication> applications) {
+        List<StudentDepartmentDto> departments = studentServiceClient.fetchStudentDepartments(callerRole);
+        if (departments.isEmpty()) {
+            log.warn("No student departments available; returning stats with no department breakdown");
+            return List.of();
+        }
+
+        Set<Long> rosterIds = Set.copyOf(studentIds);
+
+        // Only students actually in the roster: the endpoint returns every student on the platform,
+        // and an ORG_ADMIN's numbers must not pick up another college's cohort.
+        Map<Long, String> departmentByStudentId = departments.stream()
+                .filter(d -> d.getStudentId() != null && rosterIds.contains(d.getStudentId()))
+                .collect(HashMap::new,
+                        (map, d) -> map.put(d.getStudentId(), d.getDepartment()),
+                        HashMap::putAll);
+
+        if (departmentByStudentId.isEmpty()) {
+            log.warn("No roster student matched a known department; returning no breakdown");
+            return List.of();
+        }
+
+        // Roster headcount per department, including the null-keyed unassigned cohort. A LinkedHashMap
+        // because HashMap permits a null key but Collectors.groupingBy does not.
+        Map<String, Long> studentsPerDepartment = new LinkedHashMap<>();
+        for (Long studentId : studentIds) {
+            String department = departmentByStudentId.get(studentId);
+            studentsPerDepartment.merge(department, 1L, Long::sum);
+        }
+
+        Map<String, List<JobApplication>> applicationsPerDepartment = new LinkedHashMap<>();
+        for (JobApplication application : applications) {
+            if (application.getStudentId() == null) {
+                continue;
+            }
+            String department = departmentByStudentId.get(application.getStudentId());
+            applicationsPerDepartment.computeIfAbsent(department, key -> new ArrayList<>())
+                    .add(application);
+        }
+
+        return studentsPerDepartment.entrySet().stream()
+                .map(entry -> {
+                    String department = entry.getKey();
+                    List<JobApplication> departmentApplications =
+                            applicationsPerDepartment.getOrDefault(department, List.of());
+                    List<JobApplication> accepted = acceptedOf(departmentApplications);
+                    List<BigDecimal> ctcs = acceptedCtcs(accepted);
+
+                    return DepartmentPlacementStatsDto.builder()
+                            .department(department)
+                            .studentsInScope(entry.getValue())
+                            .totalApplications(departmentApplications.size())
+                            .offersExtended(countOffered(departmentApplications))
+                            .offersAccepted(accepted.size())
+                            .offersDeclined(countDeclined(departmentApplications))
+                            .placementRate(placementRate(departmentApplications, accepted))
+                            .averageCtc(averageCtc(ctcs))
+                            .highestCtc(highestCtc(ctcs))
+                            .build();
+                })
+                .sorted(Comparator.comparingLong(DepartmentPlacementStatsDto::getOffersAccepted).reversed())
+                .toList();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Pure counting helpers -- no database access, shared by aggregate() and departmentBreakdown()
+    // so a department row can never compute a figure differently from the total it belongs to.
+    // ---------------------------------------------------------------------------------------------
+
+    private List<JobApplication> acceptedOf(List<JobApplication> applications) {
+        return applications.stream()
+                .filter(a -> a.getOfferOutcome() == OfferOutcome.ACCEPTED)
+                .toList();
+    }
+
+    private long countOffered(List<JobApplication> applications) {
+        return applications.stream().filter(a -> a.getStatus() == ApplicationStatus.OFFERED).count();
+    }
+
+    private long countDeclined(List<JobApplication> applications) {
+        return applications.stream()
+                .filter(a -> a.getOfferOutcome() == OfferOutcome.DECLINED)
+                .count();
+    }
+
+    private long distinctStudents(List<JobApplication> applications) {
+        return applications.stream()
+                .map(JobApplication::getStudentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+    }
+
+    /** Distinct STUDENTS on both sides -- see PlacementStatsResponse.placementRate. */
+    private double placementRate(List<JobApplication> applications, List<JobApplication> accepted) {
+        long applicants = distinctStudents(applications);
+        if (applicants == 0) {
+            return 0.0;
+        }
+        return BigDecimal.valueOf(distinctStudents(accepted) * 100.0 / applicants)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
+    }
+
+    private List<BigDecimal> acceptedCtcs(List<JobApplication> accepted) {
+        return accepted.stream()
+                .map(JobApplication::getOfferedCtc)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /** Null rather than ZERO when nobody has accepted -- see PlacementStatsResponse.averageCtc. */
+    private BigDecimal averageCtc(List<BigDecimal> acceptedCtcs) {
+        if (acceptedCtcs.isEmpty()) {
+            return null;
+        }
+        return acceptedCtcs.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(acceptedCtcs.size()), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal highestCtc(List<BigDecimal> acceptedCtcs) {
+        return acceptedCtcs.stream().max(BigDecimal::compareTo).orElse(null);
     }
 
     /**
@@ -258,6 +384,7 @@ public class PlacementStatsServiceImpl implements PlacementStatsService {
                 .averageCtc(null)
                 .highestCtc(null)
                 .topCompanies(List.of())
+                .departmentBreakdown(List.of())
                 .build();
     }
 }

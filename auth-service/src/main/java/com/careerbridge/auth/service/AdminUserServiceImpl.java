@@ -1,17 +1,21 @@
 package com.careerbridge.auth.service;
 
+import com.careerbridge.auth.config.RabbitMQConfig;
 import com.careerbridge.auth.dto.AdminStatsResponse;
 import com.careerbridge.auth.dto.UserSummaryResponse;
+import com.careerbridge.auth.event.UserDepartmentUpdatedEvent;
 import com.careerbridge.auth.exception.CustomException;
 import com.careerbridge.auth.model.Role;
 import com.careerbridge.auth.model.User;
 import com.careerbridge.auth.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -30,9 +34,11 @@ public class AdminUserServiceImpl implements AdminUserService {
             "Cannot perform this action - at least one active SUPER_ADMIN must remain.";
 
     private final UserRepository userRepository;
+    private final RabbitTemplate rabbitTemplate;
 
-    public AdminUserServiceImpl(UserRepository userRepository) {
+    public AdminUserServiceImpl(UserRepository userRepository, RabbitTemplate rabbitTemplate) {
         this.userRepository = userRepository;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -81,6 +87,16 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
 
         requireSameOrgIfOrgAdmin(callerRole, callerOrgId, user);
+
+        return toResponse(user);
+    }
+
+    /** Self-service: no requireAdmin -- a caller is always entitled to read their own record. */
+    @Override
+    @Transactional(readOnly = true)
+    public UserSummaryResponse getOwnProfile(Long callerId) {
+        User user = userRepository.findByIdAndIsDeletedFalse(callerId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
 
         return toResponse(user);
     }
@@ -236,6 +252,105 @@ public class AdminUserServiceImpl implements AdminUserService {
         return toResponse(saved);
     }
 
+    /**
+     * ORG_ADMIN or SUPER_ADMIN, scoped by requireSameOrgIfOrgAdmin exactly like deactivateUser --
+     * an ORG_ADMIN may organise their own college's people and no one else's.
+     *
+     * Blank normalises to null rather than being stored: "" and "   " would otherwise each become a
+     * distinct department key, grouping separately from genuinely unassigned users on any dashboard
+     * that groups by this field.
+     */
+    @Override
+    @Transactional
+    public UserSummaryResponse assignDepartment(String callerRole, Long callerOrgId,
+                                                Long targetUserId, String department) {
+        requireAdmin(callerRole);
+
+        User user = userRepository.findByIdAndIsDeletedFalse(targetUserId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        requireSameOrgIfOrgAdmin(callerRole, callerOrgId, user);
+
+        return applyDepartment(user, department, "admin " + callerRole);
+    }
+
+    /**
+     * Self-service counterpart to assignDepartment. No requireAdmin/requireSameOrgIfOrgAdmin -- a
+     * caller acting on their OWN record needs no authorization beyond being that record's owner,
+     * same reasoning as OrganizationJoinRequestService.submit needing no org check for the caller.
+     */
+    @Override
+    @Transactional
+    public UserSummaryResponse assignOwnDepartment(Long callerId, String department) {
+        User user = userRepository.findByIdAndIsDeletedFalse(callerId)
+                .orElseThrow(() -> new CustomException(USER_NOT_FOUND, HttpStatus.NOT_FOUND));
+
+        return applyDepartment(user, department, "self");
+    }
+
+    /**
+     * Shared by assignDepartment and assignOwnDepartment: the organizationId guard, blank-to-null
+     * normalisation and save are identical either way -- only who is allowed to call it differs.
+     *
+     * A department is a subdivision of an organization, so it cannot be set on someone who has none
+     * -- storing one would produce a user filed under a department no organization owns.
+     *
+     * Blank normalises to null rather than being stored: "" and "   " would otherwise each become a
+     * distinct department key, grouping separately from genuinely unassigned users on any dashboard
+     * that groups by this field.
+     */
+    private UserSummaryResponse applyDepartment(User user, String department, String actor) {
+        if (user.getOrganizationId() == null) {
+            throw new CustomException("User does not belong to an organization",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String normalised = (department == null || department.isBlank()) ? null : department.trim();
+
+        String previous = user.getDepartment();
+        user.setDepartment(normalised);
+        User saved = userRepository.save(user);
+
+        log.info("Department changed for userId={} from {} to {} (by {})",
+                user.getId(), previous, normalised, actor);
+
+        publishDepartmentUpdated(saved);
+
+        return toResponse(saved);
+    }
+
+    /**
+     * Tells student-service to update its local copy, which is what puts department on the public
+     * candidate profile recruiter-service searches. An event rather than student-service reading
+     * back from here -- see RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY for why a
+     * synchronous read into auth-service is not possible.
+     *
+     * Fail-soft, matching every other publisher in this service: the row is already saved, so
+     * rethrowing would report failure for work that actually happened. The cost of a lost event is
+     * a stale department on the candidate profile until the next assignment, not a lost assignment.
+     *
+     * Published inside the surrounding @Transactional, so a rollback after this point would leave a
+     * phantom event -- the same acknowledged trade-off as publishStudentRegistered, and acceptable
+     * for the same reason: the consumer SETs an absolute value, so a phantom is corrected by the
+     * next real event rather than compounding.
+     */
+    private void publishDepartmentUpdated(User user) {
+        try {
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.EXCHANGE,
+                    RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY,
+                    UserDepartmentUpdatedEvent.builder()
+                            .userId(user.getId())
+                            .department(user.getDepartment())
+                            .organizationId(user.getOrganizationId())
+                            .updatedAt(LocalDateTime.now())
+                            .build());
+        } catch (Exception ex) {
+            log.error("Failed to publish {} for userId={}: {}",
+                    RabbitMQConfig.USER_DEPARTMENT_UPDATED_ROUTING_KEY, user.getId(), ex.getMessage());
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Authorization
     // ---------------------------------------------------------------------------------------------
@@ -350,6 +465,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 // a wire contract.
                 .role(user.getRole() == null ? null : user.getRole().name())
                 .organizationId(user.getOrganizationId())
+                .department(user.getDepartment())
                 .subscriptionPlan(user.getSubscriptionPlan())
                 .isDeleted(user.getIsDeleted())
                 .createdAt(user.getCreatedAt())

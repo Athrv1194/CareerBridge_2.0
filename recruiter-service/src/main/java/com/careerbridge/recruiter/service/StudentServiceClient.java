@@ -1,6 +1,7 @@
 package com.careerbridge.recruiter.service;
 
 import com.careerbridge.recruiter.dto.PublicStudentProfileDto;
+import com.careerbridge.recruiter.dto.StudentDepartmentDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -24,6 +25,7 @@ public class StudentServiceClient {
 
     private static final String USER_ROLE_HEADER = "X-User-Role";
     private static final String PUBLIC_PROFILES_PATH = "/api/student/profiles/public";
+    private static final String STUDENT_DEPARTMENTS_PATH = "/api/student/profiles/departments";
 
     private final RestClient studentRestClient;
 
@@ -52,6 +54,33 @@ public class StudentServiceClient {
             return profiles == null ? List.of() : profiles;
         } catch (Exception ex) {
             log.warn("Failed to fetch public student profiles: {}", ex.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * studentId -> department for every student, backing the department breakdown on org-scoped
+     * placement stats.
+     *
+     * A different endpoint from fetchPublicProfiles above, not a reuse of it: that one filters
+     * isPublic=true, and a student who switched their profile to private would silently disappear
+     * from their department's placement numbers. It also carries name and email, which a headcount
+     * does not need.
+     *
+     * Never throws, same fail-soft contract as fetchPublicProfiles: a student-service outage costs
+     * the breakdown, not the whole stats response.
+     */
+    public List<StudentDepartmentDto> fetchStudentDepartments(String callerRole) {
+        try {
+            List<StudentDepartmentDto> departments = studentRestClient.get()
+                    .uri(STUDENT_DEPARTMENTS_PATH)
+                    .header(USER_ROLE_HEADER, callerRole)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<StudentDepartmentDto>>() {});
+
+            return departments == null ? List.of() : departments;
+        } catch (Exception ex) {
+            log.warn("Failed to fetch student departments: {}", ex.getMessage());
             return List.of();
         }
     }

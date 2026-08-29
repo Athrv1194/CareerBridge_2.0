@@ -3,6 +3,7 @@ package com.careerbridge.recruiter.service;
 import com.careerbridge.recruiter.dto.ExtendOfferRequest;
 import com.careerbridge.recruiter.dto.JobApplicationResponse;
 import com.careerbridge.recruiter.dto.OfferResponseRequest;
+import com.careerbridge.recruiter.dto.ResumeFileBlob;
 import com.careerbridge.recruiter.dto.UpdateApplicationStatusRequest;
 
 import java.util.List;
@@ -46,4 +47,15 @@ public interface ApplicationService {
      */
     JobApplicationResponse respondToOffer(String callerRole, Long studentId, Long applicationId,
                                           OfferResponseRequest request);
+
+    /** STUDENT only, and only for their own application. Replaces any résumé already attached. */
+    void uploadResume(String callerRole, Long studentId, Long applicationId,
+                      byte[] bytes, String contentType, String fileName);
+
+    /**
+     * The STUDENT who owns the application, the RECRUITER who owns its job, or a
+     * PLACEMENT_OFFICER/ORG_ADMIN/SUPER_ADMIN -- the same roles already entitled to view the
+     * application itself via getApplicationsForOrgStudents.
+     */
+    ResumeFileBlob getResume(String callerRole, Long userId, Long applicationId);
 }

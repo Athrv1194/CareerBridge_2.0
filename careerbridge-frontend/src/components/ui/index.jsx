@@ -292,10 +292,13 @@ export function Alert({ tone = 'info', title, message }) {
   );
 }
 
-export function Field({ label, hint, error, children }) {
+export function Field({ label, hint, error, required, children }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>
+        {label}
+        {required && <span style={{ color: 'var(--status-danger)' }}> *</span>}
+      </span>
       {children}
       {error ? (
         <span style={{ fontSize: 12, color: 'var(--status-danger)' }}>{error}</span>
@@ -306,7 +309,7 @@ export function Field({ label, hint, error, children }) {
   );
 }
 
-export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength, disabled = false }) {
+export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, error, maxLength, min, max, disabled = false }) {
   const [revealed, setRevealed] = useState(false);
   const isPassword = type === 'password';
   const inputStyle = {
@@ -317,7 +320,7 @@ export function Input({ type = 'text', placeholder, value, onChange, onKeyDown, 
   };
 
   if (!isPassword) {
-    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} disabled={disabled} style={inputStyle} />;
+    return <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} maxLength={maxLength} min={min} max={max} disabled={disabled} style={inputStyle} />;
   }
 
   return (
@@ -383,14 +386,15 @@ export function Select({ options, value, onChange, style }) {
       }}
     >
       {options.map((opt) => {
-        // Either a plain enum string ("REMOTE" -> "Remote") or a {value, label} pair
-        // when the option's display text isn't derivable from its value -- e.g. a job
-        // id, where there is no title-casing that turns "6" into a job's actual title.
+        // Either a plain enum string ("REMOTE" -> "Remote") or a {value, label} pair when the
+        // display text isn't derivable from the value by title-casing it -- e.g. free text like a
+        // department name ("CS and IT"), where lowercasing everything past the first letter would
+        // corrupt it.
         const isPair = typeof opt === 'object' && opt !== null;
-        const value = isPair ? opt.value : opt;
-        const label = isPair ? opt.label : value.charAt(0) + value.slice(1).toLowerCase();
+        const val = isPair ? opt.value : opt;
+        const label = isPair ? opt.label : val.charAt(0) + val.slice(1).toLowerCase();
         return (
-          <option key={value} value={value}>
+          <option key={val} value={val}>
             {label}
           </option>
         );

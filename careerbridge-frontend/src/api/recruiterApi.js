@@ -1,22 +1,7 @@
 import { getAccessToken } from '../utils/tokenUtils';
+import { authedFetch } from './httpClient';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
-async function authedFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getAccessToken()}`,
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Something went wrong. Please try again.');
-  }
-  return res.status === 204 ? null : res.json();
-}
 
 // Open to every role, but still needs a valid JWT to get past the gateway.
 export function getJobs() {
@@ -38,16 +23,50 @@ export function applyToJob(jobId, coverLetter) {
   });
 }
 
+// FormData needs the browser to set its own multipart Content-Type (with boundary), so this can't
+// go through authedFetch, which always forces application/json.
+export async function uploadApplicationResume(applicationId, file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}/recruiter/applications/${applicationId}/resume`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Could not upload that résumé.');
+  }
+}
+
+// A plain <a href> can't send the Bearer header, so fetch the file ourselves as a blob URL.
+export async function downloadApplicationResume(applicationId, fileName) {
+  const res = await fetch(`${API_BASE}/recruiter/applications/${applicationId}/resume`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+  });
+  if (!res.ok) throw new Error('Could not download that résumé.');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName || 'resume';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Placement officer / org admin only -- scoped to the caller's own organization by the gateway-injected X-User-Org-Id.
 export function getOrgApplications() {
   return authedFetch('/recruiter/applications/org');
 }
 
-export function getCandidates({ skills, minScore, maxScore } = {}) {
+export function getCandidates({ skills, minScore, maxScore, department } = {}) {
   const params = new URLSearchParams();
   if (skills) params.set('skills', skills);
   if (minScore !== null && minScore !== undefined && minScore !== '') params.set('minScore', minScore);
   if (maxScore !== null && maxScore !== undefined && maxScore !== '') params.set('maxScore', maxScore);
+  if (department) params.set('department', department);
   const qs = params.toString();
   return authedFetch(`/recruiter/candidates${qs ? `?${qs}` : ''}`);
 }

@@ -1,6 +1,7 @@
 package com.careerbridge.auth.controller;
 
 import com.careerbridge.auth.dto.AdminStatsResponse;
+import com.careerbridge.auth.dto.AssignDepartmentRequest;
 import com.careerbridge.auth.dto.ChangeRoleRequest;
 import com.careerbridge.auth.dto.LinkOrganizationRequest;
 import com.careerbridge.auth.dto.UserSummaryResponse;
@@ -125,6 +126,21 @@ public class AdminUserController {
             @RequestHeader(value = USER_ORG_ID_HEADER, required = false) Long callerOrgId,
             @PathVariable Long userId) {
         return ResponseEntity.ok(adminUserService.activateUser(callerRole, callerOrgId, userId));
+    }
+
+    /**
+     * ORG_ADMIN (own organization only) or SUPER_ADMIN -- unlike the organization endpoint above, an
+     * ORG_ADMIN is allowed here because a department sits inside the tenant they already administer.
+     * Body's department may be null or blank to unassign.
+     */
+    @PatchMapping("/users/{userId}/department")
+    public ResponseEntity<UserSummaryResponse> assignDepartment(
+            @RequestHeader(USER_ROLE_HEADER) String callerRole,
+            @RequestHeader(value = USER_ORG_ID_HEADER, required = false) Long callerOrgId,
+            @PathVariable Long userId,
+            @Valid @RequestBody AssignDepartmentRequest request) {
+        return ResponseEntity.ok(adminUserService.assignDepartment(
+                callerRole, callerOrgId, userId, request.getDepartment()));
     }
 
     @GetMapping("/stats")

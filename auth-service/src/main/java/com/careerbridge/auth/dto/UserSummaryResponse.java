@@ -39,6 +39,9 @@ public class UserSummaryResponse {
     /** Null for a SUPER_ADMIN, who belongs to no organization. */
     private Long organizationId;
 
+    /** The department within organizationId, or null when unassigned. Free text -- see User.department. */
+    private String department;
+
     private String subscriptionPlan;
 
     /**

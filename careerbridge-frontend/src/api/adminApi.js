@@ -1,22 +1,4 @@
-import { getAccessToken } from '../utils/tokenUtils';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
-
-async function authedFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getAccessToken()}`,
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || 'Something went wrong. Please try again.');
-  }
-  return res.status === 204 ? null : res.json();
-}
+import { authedFetch } from './httpClient';
 
 // ---- auth-service: platform users ----
 export function getPlatformStats() {
@@ -48,6 +30,27 @@ export function linkUserOrganization(userId, organizationId) {
   return authedFetch(`/auth/admin/users/${userId}/organization`, {
     method: 'PATCH',
     body: JSON.stringify({ organizationId }),
+  });
+}
+
+// department may be null or '' to unassign the user from their department.
+export function assignUserDepartment(userId, department) {
+  return authedFetch(`/auth/admin/users/${userId}/department`, {
+    method: 'PATCH',
+    body: JSON.stringify({ department }),
+  });
+}
+
+// ---- auth-service: self-service (the caller's own record) ----
+export function getMyAccount() {
+  return authedFetch('/auth/me');
+}
+
+// department may be null or '' to unassign. Requires the caller already have an organizationId.
+export function assignMyDepartment(department) {
+  return authedFetch('/auth/me/department', {
+    method: 'PATCH',
+    body: JSON.stringify({ department }),
   });
 }
 
